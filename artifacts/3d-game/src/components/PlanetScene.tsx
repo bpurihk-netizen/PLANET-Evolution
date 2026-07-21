@@ -1,56 +1,55 @@
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { GameState } from '../hooks/useGameState';
 import { Planet } from './Planet';
+import { PlanetInterior } from './PlanetInterior';
 import { StarField } from './StarField';
 import { Particles } from './Particles';
 
-interface PlanetSceneProps {
-  gameState: GameState;
-}
+const CameraController: React.FC<{ zoomLevel: number }> = ({ zoomLevel }) => {
+  useFrame((state) => {
+    const targetZ = zoomLevel === 1 ? 2.5 : (zoomLevel === 2 ? 6.0 : 8.0);
+    state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, targetZ, 0.05);
+  });
+  return null;
+};
 
 const LightController: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
 
   useFrame(() => {
-    const time = gameState.time;
+    const p = gameState.planets[gameState.activeIndex];
+    const time = p.time;
     if (!dirLightRef.current || !ambientLightRef.current) return;
 
-    // Adjust lighting based on phase
-    // Supernova: intense light
-    // Formation/Cooling: darker, lit by lava
-    // Water/Life/Civ: normal sun
-    // Crisis: harsh red light
-    // Collapse: dim
-
-    let intensity = 1.0;
-    let ambIntensity = 0.1;
+    let intensity = 1.5;
+    let ambIntensity = 0.2;
     let color = new THREE.Color(0xffffff);
 
     if (time < 5) {
-      intensity = 5.0 - (time); // Flash and fade
+      intensity = 5.0 - (time); 
       ambIntensity = 2.0;
     } else if (time >= 5 && time < 35) {
-      intensity = 0.5; // Dimmer during formation, planet glows itself
+      intensity = 0.5;
       ambIntensity = 0.1;
     } else if (time >= 35 && time < 90) {
-      intensity = 1.5; // Normal sun
+      intensity = 1.5;
       ambIntensity = 0.2;
     } else if (time >= 90 && time < 100) {
       intensity = 2.0;
       ambIntensity = 0.3;
-      color.setHex(0xffaa88); // Reddish/Orange harsh light
+      color.setHex(0xffaa88);
     } else if (time >= 100) {
-      intensity = Math.max(0, 1.5 - (time - 100) * 0.2); // Fading out
+      intensity = Math.max(0, 1.5 - (time - 100) * 0.2);
       ambIntensity = Math.max(0.01, 0.2 - (time - 100) * 0.05);
     }
 
-    dirLightRef.current.intensity = intensity;
-    dirLightRef.current.color.copy(color);
-    ambientLightRef.current.intensity = ambIntensity;
+    dirLightRef.current.intensity = THREE.MathUtils.lerp(dirLightRef.current.intensity, intensity, 0.1);
+    dirLightRef.current.color.lerp(color, 0.1);
+    ambientLightRef.current.intensity = THREE.MathUtils.lerp(ambientLightRef.current.intensity, ambIntensity, 0.1);
   });
 
   return (
@@ -66,26 +65,46 @@ const LightController: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   );
 };
 
-export const PlanetScene: React.FC<PlanetSceneProps> = ({ gameState }) => {
+export const PlanetScene: React.FC<{ gameState: GameState }> = ({ gameState }) => {
+  // Clipping plane that cuts off the front hemisphere (z > 0)
+  const clippingPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), []);
+
   return (
     <Canvas
       camera={{ position: [0, 0, 8], fov: 45 }}
-      gl={{ antialias: true, alpha: false, toneMapping: THREE.ACESFilmicToneMapping }}
+      gl={{ antialias: true, alpha: false, toneMapping: THREE.ACESFilmicToneMapping, localClippingEnabled: true }}
     >
-      <color attach="background" args={['#010008']} />
+      <color attach="background" args={['#030014']} />
       
+      <CameraController zoomLevel={gameState.zoomLevel} />
       <LightController gameState={gameState} />
       
       <StarField gameState={gameState} />
-      <Planet gameState={gameState} />
+      
+      {/* 
+        Update the clipping plane distance directly in useFrame.
+        At zoomLevel=2, distance=0 to cut the planet in half. 
+        Otherwise distance=100 (no cut).
+      */}
+      <mesh>
+        <meshBasicMaterial visible={false} />
+      </mesh>
+
+      <group>
+        <Planet gameState={gameState} clippingPlane={clippingPlane} />
+        {gameState.zoomLevel === 2 && (
+          <PlanetInterior gameState={gameState} clippingPlane={clippingPlane} />
+        )}
+      </group>
+      
       <Particles gameState={gameState} />
 
       <OrbitControls 
         enablePan={false} 
-        enableZoom={true} 
-        minDistance={3} 
+        enableZoom={false} // Managed via scroll events on the parent wrapper
+        minDistance={2} 
         maxDistance={15}
-        autoRotate={false} // We handle rotation on the planet itself
+        autoRotate={false}
       />
     </Canvas>
   );

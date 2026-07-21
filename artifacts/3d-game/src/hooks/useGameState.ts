@@ -1,28 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import { PlanetParams, PlanetType, calculatePlanetType, calculateStats } from './usePlanetParams';
 
-export type Phase = 
-  | 'SUPERNOVA'
-  | 'FORMATION'
-  | 'COOLING'
-  | 'WATER'
-  | 'LIFE'
-  | 'CIVILIZATION'
-  | 'CRISIS'
-  | 'COLLAPSE';
+export type Phase = 'SUPERNOVA' | 'FORMATION' | 'COOLING' | 'WATER' | 'LIFE' | 'CIVILIZATION' | 'CRISIS' | 'COLLAPSE';
 
-export interface GameState {
-  time: number; // 0 to 108
-  phase: Phase;
-  phaseProgress: number; // 0 to 1 within the current phase
-  timeToNext: number; // seconds
-  ageBillionYears: number;
-  lifeProgress: number; // 0 to 100
-  civProgress: number; // 0 to 100
-  speedMultiplier: number;
-  setSpeedMultiplier: (val: number) => void;
-}
+export const CYCLE_DURATION = 108;
 
-const PHASE_TIMINGS = [
+export const PHASE_TIMINGS = [
   { name: 'SUPERNOVA', start: 0, end: 5 },
   { name: 'FORMATION', start: 5, end: 20 },
   { name: 'COOLING', start: 20, end: 35 },
@@ -33,11 +16,74 @@ const PHASE_TIMINGS = [
   { name: 'COLLAPSE', start: 100, end: 108 },
 ] as const;
 
-export const CYCLE_DURATION = 108;
+export const getPhaseInfo = (time: number) => {
+  let current = PHASE_TIMINGS[0];
+  for (const p of PHASE_TIMINGS) {
+    if (time >= p.start && time < p.end) {
+      current = p; break;
+    }
+  }
+  return current;
+};
 
-export function useGameState() {
-  const [speedMultiplier, setSpeedMultiplier] = useState(1);
-  const [time, setTime] = useState(0);
+export interface PlanetState {
+  id: number;
+  name: string;
+  params: PlanetParams;
+  time: number;
+  isPaused: boolean;
+  type: PlanetType;
+  stats: ReturnType<typeof calculateStats>;
+  prevType: PlanetType;
+  typeBlend: number;
+}
+
+export interface GameState {
+  planets: PlanetState[];
+  activeIndex: number;
+  globalSpeed: number;
+  zoomLevel: 0 | 1 | 2;
+  setZoomLevel: (z: 0|1|2) => void;
+  setGlobalSpeed: (s: number) => void;
+  setActiveIndex: (i: number) => void;
+  updatePlanetParams: (index: number, params: Partial<PlanetParams>) => void;
+  updatePlanetName: (index: number, name: string) => void;
+  togglePause: (index: number) => void;
+  resetPlanet: (index: number) => void;
+}
+
+const defaultParams: PlanetParams = {
+  temperature: 50,
+  waterAmount: 50,
+  nitrogen: 60,
+  oxygen: 20,
+  co2: 20,
+  distance: 50,
+  size: 50,
+  species: 'None',
+  formationSpeed: 1.0,
+};
+
+const createPlanet = (id: number): PlanetState => {
+  const type = calculatePlanetType(defaultParams);
+  return {
+    id,
+    name: `Planet 0${id + 1}`,
+    params: { ...defaultParams },
+    time: id * 20, // Offset initial times so they look distinct
+    isPaused: false,
+    type,
+    stats: calculateStats(defaultParams),
+    prevType: type,
+    typeBlend: 1.0,
+  };
+};
+
+export function useGameState(): GameState {
+  const [planets, setPlanets] = useState<PlanetState[]>([createPlanet(0), createPlanet(1), createPlanet(2)]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [globalSpeed, setGlobalSpeed] = useState(1);
+  const [zoomLevel, setZoomLevel] = useState<0|1|2>(0);
 
   const lastUpdateRef = useRef<number>(performance.now());
   const frameRef = useRef<number>(0);
@@ -45,72 +91,95 @@ export function useGameState() {
   useEffect(() => {
     const loop = () => {
       const now = performance.now();
-      const deltaMs = now - lastUpdateRef.current;
+      const dt = (now - lastUpdateRef.current) / 1000;
       lastUpdateRef.current = now;
 
-      const deltaSec = (deltaMs / 1000) * speedMultiplier;
-
-      setTime((prevTime) => {
-        let newTime = prevTime + deltaSec;
-        if (newTime >= CYCLE_DURATION) {
-          newTime = newTime % CYCLE_DURATION;
+      setPlanets(prev => prev.map(p => {
+        let newBlend = p.typeBlend;
+        if (newBlend < 1.0) {
+          newBlend = Math.min(1.0, newBlend + dt * 2.0); // blend over 0.5s
         }
-        return newTime;
-      });
 
+        if (p.isPaused) {
+          return { ...p, typeBlend: newBlend };
+        }
+        
+        let newTime = p.time + dt * p.params.formationSpeed * globalSpeed;
+        if (newTime >= CYCLE_DURATION) newTime = newTime % CYCLE_DURATION;
+        return { ...p, time: newTime, typeBlend: newBlend };
+      }));
+      
       frameRef.current = requestAnimationFrame(loop);
     };
-
+    
     lastUpdateRef.current = performance.now();
     frameRef.current = requestAnimationFrame(loop);
-
+    
     return () => cancelAnimationFrame(frameRef.current);
-  }, [speedMultiplier]);
+  }, [globalSpeed]);
 
-  let currentPhaseInfo: typeof PHASE_TIMINGS[number] = PHASE_TIMINGS[0];
-  for (const p of PHASE_TIMINGS) {
-    if (time >= p.start && time < p.end) {
-      currentPhaseInfo = p;
-      break;
-    }
-  }
+  const updatePlanetParams = (index: number, newParams: Partial<PlanetParams>) => {
+    setPlanets(prev => {
+      const p = [...prev];
+      const nextParams = { ...p[index].params, ...newParams };
+      const newType = calculatePlanetType(nextParams);
+      const newStats = calculateStats(nextParams);
+      
+      let prevType = p[index].type;
+      let blend = p[index].typeBlend;
+      
+      if (newType !== prevType) {
+        prevType = p[index].type;
+        blend = 0.0;
+      }
 
-  const phaseDuration = currentPhaseInfo.end - currentPhaseInfo.start;
-  const phaseTime = time - currentPhaseInfo.start;
-  const phaseProgress = phaseTime / phaseDuration;
-  const timeToNext = currentPhaseInfo.end - time;
+      p[index] = { 
+        ...p[index], 
+        params: nextParams, 
+        type: newType, 
+        stats: newStats,
+        prevType,
+        typeBlend: blend
+      };
+      return p;
+    });
+  };
 
-  // Derive age
-  // From 0 to 108 represents 0 to ~14 billion years
-  const ageBillionYears = (time / CYCLE_DURATION) * 14.2;
+  const updatePlanetName = (index: number, name: string) => {
+    setPlanets(prev => {
+       const p = [...prev];
+       p[index] = { ...p[index], name };
+       return p;
+    });
+  };
 
-  // Derive life progress
-  let lifeProgress = 0;
-  if (time >= 50 && time < 70) {
-    lifeProgress = ((time - 50) / 20) * 100; // 0 to 100
-  } else if (time >= 70 && time < 90) {
-    lifeProgress = 100;
-  } else if (time >= 90 && time < 100) {
-    lifeProgress = 100 - ((time - 90) / 10) * 100; // 100 to 0
-  }
+  const togglePause = (index: number) => {
+    setPlanets(prev => {
+       const p = [...prev];
+       p[index] = { ...p[index], isPaused: !p[index].isPaused };
+       return p;
+    });
+  };
 
-  // Derive civ progress
-  let civProgress = 0;
-  if (time >= 70 && time < 90) {
-    civProgress = ((time - 70) / 20) * 100;
-  } else if (time >= 90 && time < 100) {
-    civProgress = 100 - ((time - 90) / 10) * 100;
-  }
+  const resetPlanet = (index: number) => {
+    setPlanets(prev => {
+       const p = [...prev];
+       p[index] = createPlanet(index);
+       return p;
+    });
+  };
 
   return {
-    time,
-    phase: currentPhaseInfo.name as Phase,
-    phaseProgress,
-    timeToNext,
-    ageBillionYears,
-    lifeProgress,
-    civProgress,
-    speedMultiplier,
-    setSpeedMultiplier,
+    planets,
+    activeIndex,
+    globalSpeed,
+    zoomLevel,
+    setZoomLevel,
+    setGlobalSpeed,
+    setActiveIndex,
+    updatePlanetParams,
+    updatePlanetName,
+    togglePause,
+    resetPlanet
   };
 }
