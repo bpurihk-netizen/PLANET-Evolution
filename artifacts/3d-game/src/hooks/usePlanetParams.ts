@@ -1,11 +1,13 @@
+import { transformations, FAILURE_TRANSFORMATIONS, Transformation } from '../data/transformations';
+
 export type Species = 'Aquatic' | 'Plant' | 'Insect' | 'Mammal' | 'Crystal' | 'Machine' | 'None';
 
 export interface PlanetParams {
-  temperature: number; // 0-100
+  temperature: number; // -100 to 100
   waterAmount: number; // 0-100
-  nitrogen: number; // 0-80
-  oxygen: number; // 0-40
-  co2: number; // 0-80
+  nitrogen: number; // 0-80 -> 0-100 (Adjusted to total gas calculations)
+  oxygen: number; // 0-40 -> 0-100
+  co2: number; // 0-80 -> 0-100
   distance: number; // 0-100
   size: number; // 0-100
   species: Species;
@@ -54,23 +56,24 @@ export const SPECIES_JA: Record<Species, string> = {
 
 export const calculatePlanetType = (params: PlanetParams): PlanetType => {
   const { temperature, waterAmount, size, co2, oxygen, distance } = params;
-  if (size > 95 && temperature < 10) return 'BLACK HOLE';
-  if (temperature > 90 && distance < 10) return 'STAR/SUN';
+  if (size > 95 && temperature < -80) return 'BLACK HOLE';
+  if (temperature > 80 && distance < 10) return 'STAR/SUN';
   if (size > 80) return 'GAS GIANT';
-  if (temperature > 75) return 'FIRE PLANET';
+  if (temperature > 60) return 'FIRE PLANET';
   if (co2 > 60 && waterAmount < 10) return 'CRYSTAL PLANET';
-  if (temperature < 20) return 'ICE WORLD';
-  if (waterAmount > 70 && temperature >= 30 && temperature <= 70) return 'WATER WORLD';
-  if (waterAmount >= 30 && waterAmount <= 70 && temperature >= 40 && temperature <= 65 && oxygen > 15) return 'GREEN PLANET';
+  if (temperature < -20) return 'ICE WORLD';
+  if (waterAmount > 70 && temperature >= -10 && temperature <= 50) return 'WATER WORLD';
+  if (waterAmount >= 30 && waterAmount <= 70 && temperature >= -20 && temperature <= 40 && oxygen > 15) return 'GREEN PLANET';
   if (oxygen > 35) return 'GLOWING PLANET';
-  if (waterAmount < 20 && temperature >= 40 && temperature <= 70) return 'DESERT PLANET';
+  if (waterAmount < 20 && temperature >= -20 && temperature <= 50) return 'DESERT PLANET';
   return 'HABITABLE';
 };
 
-export const calculateStats = (params: PlanetParams) => {
+export const calculateStats = (params: PlanetParams, time: number) => {
   const { temperature, waterAmount, nitrogen, oxygen, co2, size } = params;
   
-  const tempScore = 100 - Math.abs(temperature - 50) * 2;
+  // Adjusted for -100 to +100 temperature scale, 20 is optimal
+  const tempScore = Math.max(0, 100 - Math.abs(temperature - 20) * 1.5);
   const waterScore = 100 - Math.abs(waterAmount - 50) * 2;
   const habitability = Math.max(0, Math.min(100, (tempScore + waterScore) / 2));
 
@@ -81,7 +84,16 @@ export const calculateStats = (params: PlanetParams) => {
   
   const gravity = size * 0.15;
 
-  return { habitability, lifeProb, atmStability, gravity };
+  let biomass = 0;
+  if (time >= 320 && time < 500) biomass = (time - 320) / 180;
+  else if (time >= 500 && time < 820) biomass = 1;
+  else if (time >= 820 && time < 900) biomass = Math.max(0, 1 - (time - 820) / 80);
+
+  let civLevel = 0;
+  if (time >= 500 && time < 680) civLevel = (time - 500) / 180;
+  else if (time >= 680 && time < 820) civLevel = Math.max(0, 1 - (time - 680) / 140);
+
+  return { habitability, lifeProb, atmStability, gravity, biomass, civLevel };
 };
 
 export const getTypeColor = (type: PlanetType) => {
@@ -98,4 +110,39 @@ export const getTypeColor = (type: PlanetType) => {
     case 'STAR/SUN': return '#ffff00';
     default: return '#4488ff';
   }
+};
+
+export const detectTransformation = (
+  params: PlanetParams,
+  phase: string,
+  stats: ReturnType<typeof calculateStats>,
+  failureType: string | null
+): { transformationId: string, transformation: Transformation } => {
+  if (failureType) {
+    const t = FAILURE_TRANSFORMATIONS.find(t => t.failureType === failureType);
+    if (t) return { transformationId: t.id, transformation: t };
+  }
+
+  const priorityOrder = ['flower', 'whitehole', 'ark', 'angel'];
+  for (const id of priorityOrder) {
+    const t = transformations.find(t => t.id === id);
+    if (t && t.trigger(params, phase, stats)) return { transformationId: id, transformation: t };
+  }
+
+  const speciesOrder = ['cyber', 'hive', 'spore', 'comic'];
+  for (const id of speciesOrder) {
+    const t = transformations.find(t => t.id === id);
+    if (t && t.trigger(params, phase, stats)) return { transformationId: id, transformation: t };
+  }
+
+  for (const t of transformations) {
+    if (![...priorityOrder, ...speciesOrder, 'green'].includes(t.id)) {
+      if (t.trigger(params, phase, stats)) return { transformationId: t.id, transformation: t };
+    }
+  }
+
+  const green = transformations.find(t => t.id === 'green')!;
+  if (green.trigger(params, phase, stats)) return { transformationId: 'green', transformation: green };
+
+  return { transformationId: 'green', transformation: green };
 };

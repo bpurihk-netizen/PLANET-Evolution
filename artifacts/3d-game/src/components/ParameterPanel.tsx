@@ -1,6 +1,7 @@
 import React from 'react';
 import { GameState } from '../hooks/useGameState';
 import { PLANET_TYPE_JA, SPECIES_JA } from '../hooks/usePlanetParams';
+import { transformations, FAILURE_TRANSFORMATIONS, EMOJI_MAP } from '../data/transformations';
 
 export const ParameterPanel: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const p = gameState.planets[gameState.activeIndex];
@@ -8,6 +9,9 @@ export const ParameterPanel: React.FC<{ gameState: GameState }> = ({ gameState }
   const update = (key: string, val: number | string) => {
     gameState.updatePlanetParams(gameState.activeIndex, { [key]: val });
   };
+
+  const currentT = transformations.find(t => t.id === p.transformation) || FAILURE_TRANSFORMATIONS.find(t => t.id === p.transformation);
+  const tEmoji = EMOJI_MAP[p.transformation] || '🌍';
 
   const Slider = ({ label, value, min, max, keyName, step = 1 }: any) => (
     <div className="flex flex-col gap-2 mb-4">
@@ -32,13 +36,18 @@ export const ParameterPanel: React.FC<{ gameState: GameState }> = ({ gameState }
         onChange={(e) => gameState.updatePlanetName(gameState.activeIndex, e.target.value)}
         className="bg-transparent text-2xl font-bold text-white/90 w-full outline-none mb-2 border-b border-transparent focus:border-white/30 transition-colors"
       />
-      <div className="text-sm text-white/50 mb-6 font-mono tracking-widest">{PLANET_TYPE_JA[p.type] || p.type}</div>
+      <div className="text-sm text-white/50 mb-4 font-mono tracking-widest">{PLANET_TYPE_JA[p.type] || p.type}</div>
       
-      <Slider label="温度 (Temperature)" value={p.params.temperature} min={0} max={100} keyName="temperature" />
+      <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
+        <div className="text-lg font-bold text-white/90 mb-1">{tEmoji} {currentT?.name}</div>
+        <div className="text-sm text-white/70 leading-relaxed">{currentT?.description}</div>
+      </div>
+
+      <Slider label="温度 (Temperature)" value={p.params.temperature} min={-100} max={100} keyName="temperature" />
       <Slider label="水の量 (Water Amount)" value={p.params.waterAmount} min={0} max={100} keyName="waterAmount" />
-      <Slider label="窒素% (Nitrogen)" value={p.params.nitrogen} min={0} max={80} keyName="nitrogen" />
-      <Slider label="酸素% (Oxygen)" value={p.params.oxygen} min={0} max={40} keyName="oxygen" />
-      <Slider label="二酸化炭素% (CO2)" value={p.params.co2} min={0} max={80} keyName="co2" />
+      <Slider label="窒素% (Nitrogen)" value={p.params.nitrogen} min={0} max={100} keyName="nitrogen" />
+      <Slider label="酸素% (Oxygen)" value={p.params.oxygen} min={0} max={100} keyName="oxygen" />
+      <Slider label="二酸化炭素% (CO2)" value={p.params.co2} min={0} max={100} keyName="co2" />
       <Slider label="恒星からの距離 (Distance)" value={p.params.distance} min={0} max={100} keyName="distance" />
       <Slider label="惑星の大きさ (Size)" value={p.params.size} min={0} max={100} keyName="size" />
       <Slider label="進化速度 (Evo Speed)" value={p.params.formationSpeed} min={0.5} max={10} step={0.5} keyName="formationSpeed" />

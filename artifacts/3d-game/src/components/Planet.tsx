@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { GameState, PlanetState } from '../hooks/useGameState';
 import { PLANET_TYPE_IDS } from '../hooks/usePlanetParams';
 import { SurfaceAnimations, SurfaceLabels } from './SurfaceAnimations';
+import { transformations, FAILURE_TRANSFORMATIONS } from '../data/transformations';
 
 interface PlanetProps {
   planetState: PlanetState;
@@ -12,6 +13,10 @@ interface PlanetProps {
   index: number;
   isActive: boolean;
 }
+
+const EFFECT_IDS: Record<string, number> = {
+  retro: 1, ink: 2, cyber: 3, ghost: 4, angel: 5, fractal: 6, flower: 7, whitehole: 8, cracked: 9
+};
 
 const planetVertexShader = `
 varying vec2 vUv;
@@ -91,6 +96,11 @@ uniform float phaseTime; // 0 to 108
 uniform int currentType;
 uniform int prevType;
 uniform float blendFactor;
+
+uniform vec3 uTransformColor;
+uniform vec3 uTransformGlow;
+uniform float uTransformBlend;
+uniform int uTransformType;
 
 vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
 vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
@@ -230,13 +240,62 @@ void main() {
   float diff = max(dot(vNormal, lightDir), 0.0);
   float ambient = 0.1;
   vec3 finalColor = currentCol * (diff + ambient) + currentEm;
+
+  vec3 baseColor = finalColor;
+  vec3 tColor = uTransformColor;
+  vec3 tGlow = uTransformGlow;
+
+  if (uTransformBlend > 0.01) {
+    if (uTransformType == 1) { // retro
+      baseColor = floor(baseColor * 8.0) / 8.0;
+      tColor = floor(tColor * 8.0) / 8.0;
+    } else if (uTransformType == 2) { // ink
+      float gray = dot(baseColor, vec3(0.299, 0.587, 0.114));
+      float edge = smoothstep(0.4, 0.5, n1);
+      baseColor = vec3(gray) * (1.0 - edge);
+    } else if (uTransformType == 3) { // cyber
+      if (mod(vUv.y * 100.0, 2.0) < 1.0) {
+        baseColor *= 0.8;
+        tColor *= 0.8;
+      }
+    } else if (uTransformType == 4) { // ghost
+      baseColor = baseColor + vec3(0.3, 0.3, 0.6) * 0.5;
+    } else if (uTransformType == 6) { // fractal
+      baseColor *= fbm(vPosition * 10.0);
+    } else if (uTransformType == 8) { // whitehole
+      float d = length(vPosition.xy);
+      tColor = mix(vec3(1.0), vec3(0.0), smoothstep(0.0, 1.5, d));
+      tGlow = vec3(2.0) * (1.0 - d);
+    } else if (uTransformType == 9) { // cracked
+      float crack = smoothstep(0.0, 0.05, abs(fbm(vPosition * 20.0)));
+      baseColor *= crack;
+      tColor *= crack;
+    }
+
+    vec3 mixColor = mix(baseColor, tColor, uTransformBlend);
+
+    if (uTransformType == 5) { // angel
+       mixColor += vec3(1.0) * uTransformBlend; 
+    } else if (uTransformType == 7) { // flower
+       float c = cos(time);
+       float s = sin(time);
+       mat3 hueRot = mat3(
+         0.213 + 0.787*c - 0.213*s, 0.715 - 0.715*c - 0.715*s, 0.072 - 0.072*c + 0.928*s,
+         0.213 - 0.213*c + 0.143*s, 0.715 + 0.285*c + 0.140*s, 0.072 - 0.072*c - 0.283*s,
+         0.213 - 0.213*c - 0.787*s, 0.715 - 0.715*c + 0.715*s, 0.072 + 0.928*c + 0.072*s
+       );
+       mixColor = mixColor * hueRot;
+    }
+
+    mixColor += tGlow * uTransformBlend * 0.5;
+    finalColor = mixColor;
+  }
   
   finalColor *= (1.0 - hidePlanetW);
 
   gl_FragColor = vec4(finalColor, 1.0 - hidePlanetW);
 }
 `;
-
 
 const atmosphereVertexShader = `
 varying vec3 vNormal;
@@ -364,6 +423,10 @@ export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clipp
     currentType: { value: 0 },
     prevType: { value: 0 },
     blendFactor: { value: 1.0 },
+    uTransformColor: { value: new THREE.Color(1, 1, 1) },
+    uTransformGlow: { value: new THREE.Color(0, 0, 0) },
+    uTransformBlend: { value: 0.0 },
+    uTransformType: { value: 0 }
   }), []);
 
   const atmosUniforms = useMemo(() => ({
@@ -377,12 +440,22 @@ export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clipp
     const elapsed = state.clock.getElapsedTime();
     const currentP = gameState.planets[index];
 
+    const t = transformations.find(t => t.id === currentP.transformation) || FAILURE_TRANSFORMATIONS.find(t => t.id === currentP.transformation);
+    const tColor = t ? t.color : [1, 1, 1];
+    const tGlow = t ? t.glowColor : [0, 0, 0];
+    const effId = EFFECT_IDS[currentP.transformation] || 0;
+
     if (planetMaterialRef.current) {
       planetMaterialRef.current.uniforms.time.value = elapsed;
       planetMaterialRef.current.uniforms.phaseTime.value = currentP.time;
       planetMaterialRef.current.uniforms.currentType.value = PLANET_TYPE_IDS[currentP.type];
       planetMaterialRef.current.uniforms.prevType.value = PLANET_TYPE_IDS[currentP.prevType];
       planetMaterialRef.current.uniforms.blendFactor.value = currentP.typeBlend;
+      
+      planetMaterialRef.current.uniforms.uTransformColor.value.setRGB(tColor[0], tColor[1], tColor[2]);
+      planetMaterialRef.current.uniforms.uTransformGlow.value.setRGB(tGlow[0], tGlow[1], tGlow[2]);
+      planetMaterialRef.current.uniforms.uTransformBlend.value = currentP.transformationBlend;
+      planetMaterialRef.current.uniforms.uTransformType.value = effId;
     }
     
     if (atmosMaterialRef.current) {
@@ -397,17 +470,16 @@ export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clipp
     }
 
     if (groupRef.current) {
-      // Lerp positions and scales
       let targetPos = new THREE.Vector3();
       let targetScale = 1.0;
       
       if (isActive) {
         targetPos.set(0, 0, 0);
-        targetScale = 1.2 / 2.0; // Base sphere is radius 2, so scale 0.6 = radius 1.2
+        targetScale = 1.2 / 2.0;
       } else {
         const isRight = (gameState.activeIndex + 1) % 3 === index;
         targetPos.set(isRight ? 3.5 : -3.5, -0.5, -5);
-        targetScale = 0.55 / 2.0; // scale 0.275 = radius 0.55
+        targetScale = 0.55 / 2.0;
       }
 
       groupRef.current.position.lerp(targetPos, 0.1);

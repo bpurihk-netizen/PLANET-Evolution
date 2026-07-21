@@ -1,30 +1,81 @@
-import React, { useState } from 'react';
-import { GameState, getPhaseInfo, CYCLE_DURATION } from '../hooks/useGameState';
+import React, { useState, useEffect } from 'react';
+import { GameState, getPhaseInfo } from '../hooks/useGameState';
 import { ParameterPanel } from './ParameterPanel';
 import { Pause, Play, Settings, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PLANET_TYPE_JA, SPECIES_JA } from '../hooks/usePlanetParams';
+import { SPECIES_JA } from '../hooks/usePlanetParams';
+import { transformations, FAILURE_TRANSFORMATIONS, EMOJI_MAP } from '../data/transformations';
 
 export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const p = gameState.planets[gameState.activeIndex];
   const phaseInfo = getPhaseInfo(p.time);
-  const ageBillionYears = p.time * 0.1; // 1s = 0.1B years
+  const ageBillionYears = p.time * 0.1;
   const timeRemaining = Math.max(0, phaseInfo.end - p.time);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
-  // LIFE phase: 320 - 500
-  let lifeProgress = 0;
-  if (p.time >= 320 && p.time < 500) lifeProgress = ((p.time - 320) / 180) * 100;
-  else if (p.time >= 500 && p.time < 820) lifeProgress = 100;
-  else if (p.time >= 820 && p.time < 900) lifeProgress = 100 - ((p.time - 820) / 80) * 100;
+  useEffect(() => {
+    const i = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, []);
 
-  // CIV phase: 500 - 680
-  let civProgress = 0;
-  if (p.time >= 500 && p.time < 680) civProgress = ((p.time - 500) / 180) * 100;
-  else if (p.time >= 680 && p.time < 820) civProgress = 100 - ((p.time - 680) / 140) * 100;
+  let lifeProgress = p.stats.biomass * 100;
+  let civProgress = p.stats.civLevel * 100;
 
   const isCrisis = p.time >= 680 && p.time < 820;
+  const isCollapse = p.time >= 820 && p.failureType;
+  const isVictory = isCrisis && p.time >= 819 && ['flower', 'whitehole', 'ark', 'angel'].includes(p.transformation);
+
+  const currentT = transformations.find(t => t.id === p.transformation) || FAILURE_TRANSFORMATIONS.find(t => t.id === p.transformation);
+  const tName = currentT ? currentT.name : '未知の形態';
+  const tEmoji = EMOJI_MAP[p.transformation] || '🌍';
+
+  const nuclearIdle = (now - p.lastParamChange) / 1000;
+
+  if (isCollapse) {
+    let msg = '';
+    if (p.failureType === 'venus') msg = '🔥 金星化崩壊 - 温室効果が制御不能になった';
+    if (p.failureType === 'ecosystem') msg = '☠️ 生態系崩壊 - 文明の暴走が生命を滅ぼした';
+    if (p.failureType === 'nuclear') msg = '☢️ 核戦争崩壊 - 誰も止めなかった。文明は自らを滅ぼした';
+    if (p.failureType === 'freeze') msg = '❄️ 熱的死 - 熱エネルギーが尽き、全ての活動が永遠に止まった';
+    if (p.failureType === 'gravity') msg = '🕳️ 重力崩壊 - 自らの重力に潰された';
+  
+    return (
+      <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 pointer-events-auto">
+        <h2 className="text-4xl text-red-500 font-bold mb-4 animate-pulse">COLLAPSE</h2>
+        <p className="text-xl text-red-200 mb-8 max-w-lg text-center leading-relaxed">{msg}</p>
+        <button 
+          onClick={() => gameState.resetPlanet(gameState.activeIndex)}
+          className="px-8 py-3 bg-red-900/50 hover:bg-red-800 border border-red-500 rounded-full text-white font-bold transition-colors"
+        >
+          もう一度育てる
+        </button>
+      </div>
+    );
+  }
+  
+  if (isVictory) {
+    let msg = '';
+    if (p.transformation === 'flower') msg = '🌸 ギャラクシー・フラワー - 輪廻の花が咲いた。完璧な育成！';
+    if (p.transformation === 'whitehole') msg = '☀️ ホワイトホール・コア - 宇宙に解放された。偉大な結末！';
+    if (p.transformation === 'ark') msg = '🚀 ノアの箱舟 - 文明は新天地へ旅立った。新たな輪廻の始まり！';
+    if (p.transformation === 'angel') msg = '👼 エンジェル・ヘイロー - 精神文明の極致。至高の平和！';
+  
+    return (
+      <div className="absolute inset-0 bg-white/10 backdrop-blur-sm flex flex-col items-center justify-center z-50 pointer-events-auto">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-yellow-500/10 to-yellow-500/30 animate-pulse mix-blend-overlay" />
+        <h2 className="text-5xl text-yellow-300 font-bold mb-6 drop-shadow-[0_0_20px_rgba(253,224,71,0.8)]">TRANSCENDENCE</h2>
+        <p className="text-2xl text-white mb-10 max-w-lg text-center leading-relaxed drop-shadow-md">{msg}</p>
+        <button 
+          onClick={() => gameState.resetPlanet(gameState.activeIndex)}
+          className="px-8 py-3 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-300 rounded-full text-white font-bold transition-colors z-10"
+        >
+          次の輪廻へ
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between">
@@ -43,21 +94,50 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
         </button>
       </div>
 
-      {/* Center Phase Info (Just below planets) */}
-      <div className="absolute top-[45%] left-0 right-0 flex flex-col items-center pointer-events-none drop-shadow-md">
+      {/* CRISIS Warnings */}
+      {isCrisis && (
+        <div className="absolute top-24 left-4 right-4 flex flex-col gap-2 pointer-events-none z-20">
+          {p.venusTimer > 50 && (
+            <div className="bg-red-900/80 border border-red-500 p-2 rounded text-red-100 text-sm animate-pulse flex items-center gap-2">
+              <span>⚠️</span> <span>金星化危機: あと{(90 - p.venusTimer).toFixed(0)}秒で崩壊</span>
+            </div>
+          )}
+          {p.ecoTimer > 30 && (
+             <div className="bg-yellow-900/80 border border-yellow-500 p-2 rounded text-yellow-100 text-sm animate-pulse flex items-center gap-2">
+              <span>⚠️</span> <span>生態系崩壊警告: あと{(60 - p.ecoTimer).toFixed(0)}秒で崩壊</span>
+            </div>
+          )}
+          {p.freezeTimer > 80 && (
+             <div className="bg-blue-900/80 border border-blue-500 p-2 rounded text-blue-100 text-sm animate-pulse flex items-center gap-2">
+              <span>⚠️</span> <span>凍結警告: あと{(120 - p.freezeTimer).toFixed(0)}秒で崩壊</span>
+            </div>
+          )}
+          {nuclearIdle > 80 && (
+             <div className="bg-gray-900/80 border border-gray-500 p-2 rounded text-gray-100 text-sm animate-pulse flex items-center gap-2">
+              <span>💀</span> <span>放置警告: あと{(120 - nuclearIdle).toFixed(0)}秒で核戦争崩壊</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Center Phase Info */}
+      <div className="absolute top-[40%] left-0 right-0 flex flex-col items-center pointer-events-none drop-shadow-md">
         <h2 
           key={phaseInfo.name}
           className="text-3xl font-light tracking-[0.2em] text-white/90 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] animate-in fade-in zoom-in-95 duration-1000"
         >
           {phaseInfo.name}
         </h2>
-        <div className="text-white/60 font-mono mt-1 text-sm bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
+        <div className="mt-3 text-lg font-bold text-white/90 bg-black/40 px-4 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">
+          {tEmoji} {tName}
+        </div>
+        <div className="text-white/60 font-mono mt-2 text-sm bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
           次のイベントまで: {timeRemaining.toFixed(0)}s
         </div>
       </div>
 
       {/* Bottom Area */}
-      <div className="flex flex-col gap-3 p-4 pb-8 bg-gradient-to-t from-black/90 via-black/60 to-transparent pointer-events-auto">
+      <div className="flex flex-col gap-3 p-4 pb-8 bg-gradient-to-t from-black/90 via-black/60 to-transparent pointer-events-auto mt-auto">
         
         {/* Stats Row */}
         <div className="flex justify-between items-end mb-2">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { PlanetParams, PlanetType, calculatePlanetType, calculateStats } from './usePlanetParams';
+import { PlanetParams, PlanetType, calculatePlanetType, calculateStats, detectTransformation } from './usePlanetParams';
 
 export type Phase = 'SUPERNOVA' | 'FORMATION' | 'COOLING' | 'WATER' | 'LIFE' | 'CIVILIZATION' | 'CRISIS' | 'COLLAPSE';
 
@@ -16,8 +16,8 @@ export const PHASE_TIMINGS = [
   { name: '崩壊', start: 820, end: 900 },
 ] as const;
 
-export const getPhaseInfo = (time: number) => {
-  let current = PHASE_TIMINGS[0];
+export const getPhaseInfo = (time: number): typeof PHASE_TIMINGS[number] => {
+  let current: typeof PHASE_TIMINGS[number] = PHASE_TIMINGS[0];
   for (const p of PHASE_TIMINGS) {
     if (time >= p.start && time < p.end) {
       current = p; break;
@@ -36,6 +36,14 @@ export interface PlanetState {
   stats: ReturnType<typeof calculateStats>;
   prevType: PlanetType;
   typeBlend: number;
+  transformation: string;
+  transformationBlend: number;
+  failureType: string | null;
+  venusTimer: number;
+  ecoTimer: number;
+  lastParamChange: number;
+  freezeTimer: number;
+  gravityTimer: number;
 }
 
 export interface GameState {
@@ -53,7 +61,7 @@ export interface GameState {
 }
 
 const defaultParams: PlanetParams = {
-  temperature: 50,
+  temperature: 20,
   waterAmount: 50,
   nitrogen: 60,
   oxygen: 20,
@@ -65,17 +73,27 @@ const defaultParams: PlanetParams = {
 };
 
 const createPlanet = (id: number): PlanetState => {
+  const time = id * 200; // Offset initial times so they look distinct
   const type = calculatePlanetType(defaultParams);
+  const stats = calculateStats(defaultParams, time);
   return {
     id,
     name: `惑星0${id + 1}`,
     params: { ...defaultParams },
-    time: id * 200, // Offset initial times so they look distinct
+    time,
     isPaused: false,
     type,
-    stats: calculateStats(defaultParams),
+    stats,
     prevType: type,
     typeBlend: 1.0,
+    transformation: 'green',
+    transformationBlend: 1.0,
+    failureType: null,
+    venusTimer: 0,
+    ecoTimer: 0,
+    lastParamChange: Date.now(),
+    freezeTimer: 0,
+    gravityTimer: 0,
   };
 };
 
@@ -95,18 +113,78 @@ export function useGameState(): GameState {
       lastUpdateRef.current = now;
 
       setPlanets(prev => prev.map(p => {
-        let newBlend = p.typeBlend;
-        if (newBlend < 1.0) {
-          newBlend = Math.min(1.0, newBlend + dt * 2.0); // blend over 0.5s
+        let newTime = p.time;
+        if (!p.isPaused) {
+          newTime += dt * p.params.formationSpeed * globalSpeed;
         }
 
-        if (p.isPaused) {
-          return { ...p, typeBlend: newBlend };
-        }
+        const phaseInfo = getPhaseInfo(newTime);
         
-        let newTime = p.time + dt * p.params.formationSpeed * globalSpeed;
+        // Time stop for waiting user interaction if crisis phase ends without failure
+        if (phaseInfo.name === '危機の時代' && newTime >= 819 && !p.failureType) {
+          newTime = 819;
+        }
         if (newTime >= CYCLE_DURATION) newTime = newTime % CYCLE_DURATION;
-        return { ...p, time: newTime, typeBlend: newBlend };
+
+        const newStats = calculateStats(p.params, newTime);
+
+        let newFailure = p.failureType;
+        let newVenusTimer = p.venusTimer;
+        let newEcoTimer = p.ecoTimer;
+        let newFreezeTimer = p.freezeTimer;
+        let newGravityTimer = p.gravityTimer;
+
+        if (!newFailure) {
+          if (p.params.co2 > 85 && p.params.temperature > 80) newVenusTimer += dt; else newVenusTimer = 0;
+          if (newVenusTimer > 90) newFailure = 'venus';
+
+          if (newTime >= 500 && p.params.oxygen < 8 && newStats.biomass < 0.05) newEcoTimer += dt; else newEcoTimer = 0;
+          if (newEcoTimer > 60) newFailure = 'ecosystem';
+
+          const idleTime = (Date.now() - p.lastParamChange) / 1000;
+          if (newTime >= 680 && idleTime > 120) newFailure = 'nuclear';
+
+          if (newTime >= 320 && p.params.temperature < -60 && p.params.distance > 85) newFreezeTimer += dt; else newFreezeTimer = 0;
+          if (newFreezeTimer > 120) newFailure = 'freeze';
+
+          if (newTime <= 180 && p.params.size > 88) newGravityTimer += dt; else newGravityTimer = 0;
+          if (newGravityTimer > 60) newFailure = 'gravity';
+
+          if (newFailure && newTime < 820) {
+            newTime = 820; // jump to collapse
+          }
+        }
+
+        const { transformationId } = detectTransformation(p.params, getPhaseInfo(newTime).name, newStats, newFailure);
+        
+        let newTransformation = p.transformation;
+        let newTransformationBlend = p.transformationBlend;
+
+        if (newTransformation !== transformationId) {
+          newTransformation = transformationId;
+          newTransformationBlend = 0.0;
+        } else if (newTransformationBlend < 1.0) {
+          newTransformationBlend = Math.min(1.0, newTransformationBlend + dt * 0.5); // 2s transition
+        }
+
+        let newBlend = p.typeBlend;
+        if (newBlend < 1.0) {
+          newBlend = Math.min(1.0, newBlend + dt * 2.0); // 0.5s transition
+        }
+
+        return { 
+          ...p, 
+          time: newTime, 
+          stats: newStats,
+          typeBlend: newBlend,
+          failureType: newFailure,
+          venusTimer: newVenusTimer,
+          ecoTimer: newEcoTimer,
+          freezeTimer: newFreezeTimer,
+          gravityTimer: newGravityTimer,
+          transformation: newTransformation,
+          transformationBlend: newTransformationBlend
+        };
       }));
       
       frameRef.current = requestAnimationFrame(loop);
@@ -123,7 +201,7 @@ export function useGameState(): GameState {
       const p = [...prev];
       const nextParams = { ...p[index].params, ...newParams };
       const newType = calculatePlanetType(nextParams);
-      const newStats = calculateStats(nextParams);
+      const newStats = calculateStats(nextParams, p[index].time);
       
       let prevType = p[index].type;
       let blend = p[index].typeBlend;
@@ -139,7 +217,8 @@ export function useGameState(): GameState {
         type: newType, 
         stats: newStats,
         prevType,
-        typeBlend: blend
+        typeBlend: blend,
+        lastParamChange: Date.now()
       };
       return p;
     });

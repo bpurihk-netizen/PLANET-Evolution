@@ -43,8 +43,8 @@ export const StarField: React.FC<{ gameState: GameState }> = ({ gameState }) => 
 
   useFrame((state, delta) => {
     if (pointsRef.current) {
-      pointsRef.current.rotation.y += delta * 0.02 * gameState.speedMultiplier;
-      pointsRef.current.rotation.z += delta * 0.01 * gameState.speedMultiplier;
+      pointsRef.current.rotation.y += delta * 0.02 * gameState.globalSpeed;
+      pointsRef.current.rotation.z += delta * 0.01 * gameState.globalSpeed;
     }
   });
 

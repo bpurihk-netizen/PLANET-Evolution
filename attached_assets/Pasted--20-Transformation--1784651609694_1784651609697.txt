@@ -1,0 +1,105 @@
+【最重要：惑星育成ゲーム『輪廻』システムの大幅拡張と完全実装】
+
+現在の惑星育成シミュレーションに対し、20種類の劇的な物理的・次元的形態変化（Transformation）を実装し、それぞれに固有のゲームプレイ・経済システム・UI・トリガー条件を定義してください。
+
+### 1. システムの全体像（概念定義）
+- **形態状態（`planetState`）:** 惑星は常に20種類のいずれかの状態にあります。基本は「緑の惑星」ですが、環境パラメータの極端な値やイベントにより遷移します。
+- **トリガー:** 現在のUIにあるスライダー（温度、水、酸素、窒素、CO2、距離、大きさ、重力）および文明レベル・支配種族がトリガーとなります。
+- **ゲーム性の変化:** 形態が変わると、BGM、UIの質感（シェーダー）、資源の獲得方法、イベント内容が劇的に変化します。
+
+### 2. 全20形態・詳細データ定義（`TransformationRegistry`）
+
+以下のJSON構造で全20形態をシステムに登録してください。各形態には、遷移条件（`trigger`）と、適用される永続効果（`effects`）を定義します。
+
+```javascript
+const TransformationRegistry = {
+  "緑の惑星": { type: "base", triggers: {}, effects: { bio_speed: 1.0, tech_speed: 1.0 } },
+
+  // --- 物理的にありえない形態（重力・物質操作系） ---
+  "中空惑星（ダイソンシェル）": {
+    triggers: { tech_level: "MAX", temperature: [50, 60], resources: ["鉄", "鉱物"] }, // 鉄・鉱物が枯渇しつつある状態
+    effects: { energy_prod: 5.0, bio_growth: 0, ui_theme: "industrial" } // エネルギー生産5倍、生命成長停止
+  },
+  "フラクタル結晶惑星": {
+    triggers: { gravity: [0.1, 0.5], temperature: [-273, -200] }, // 極低温・低重力
+    effects: { mine_yield: 3.0, time_speed: 0.5, ui_theme: "geometric" } // 採掘量3倍、時間経過半分
+  },
+  "メビウスの輪惑星": {
+    triggers: { gravity: 20.0, tech_level: "HIGH" }, // 極端な高重力下での次元実験
+    effects: { dark_matter_gen: 1.0, time_warp: true, ui_theme: "abstract" } // 時間がループし、独自資源生成
+  },
+  "流体スライム惑星": {
+    triggers: { temperature: [85, 100], water: [90, 100] }, // 沸騰する海
+    effects: { bio_evolve_speed: 2.0, structure_stability: 0, ui_theme: "liquid" } // 生命進化2倍、建造物崩壊
+  },
+  "サンドアート惑星": {
+    triggers: { water: 0, atmosphere: [0, 10], distance: [80, 100] }, // 真空・極乾燥・太陽風直撃
+    effects: { resource_leak: true, solar_power: 3.0, ui_theme: "dust" } // 毎秒資源が宇宙へ流出、太陽光発電最強
+  },
+
+  // --- 時間・次元干渉系 ---
+  "レトロゲーム惑星": {
+    triggers: { data_anomaly: true, evo_speed_manipulation: "HIGH" }, // 意図的な時間操作によるバグ
+    effects: { tap_power: 10.0, tech_speed: 0.1, ui_theme: "8bit" } // タップ収入10倍、科学発展ほぼ停止
+  },
+  "アメコミ・ポップアート惑星": {
+    triggers: { dominant_species: "芸術家ギルド", bio_biomass: "HIGH" },
+    effects: { culture_prod: 5.0, event_dramatic: true, ui_theme: "comic" } // 文化力5倍、イベントが派手になる
+  },
+  "水墨画・和紙惑星": {
+    triggers: { tech_level: "ZERO", pollution: 0, bio_biomass: "MED" }, // 完全な自然調和
+    effects: { zen_point_gen: 1.0, disaster_immunity: true, ui_theme: "ink" } // 特殊資源生成、災害無効
+  },
+  "ゴースト惑星（位相ズーム）": {
+    triggers: { tech_level: "HIGH", disaster_nuclear_war: true }, // 核戦争後の次元位相ズレ
+    effects: { stealth_mode: true, ghost_tech_access: true, ui_theme: "phase" } // 敵から見えない、特殊技術アクセス
+  },
+  "スチームパンク・歯車惑星": {
+    triggers: { resources: ["石炭", "鉄"], atmosphere: [70, 90], tech_level: "INDUSTRIAL_AGE" },
+    effects: { steam_power: 2.0, pollution_penalty: 2.0, ui_theme: "gear" } // 石炭効率2倍、公害激化
+  },
+
+  // --- 生態系・支配種族暴走系 ---
+  "巨大菌糸類・胞子惑星": {
+    triggers: { water: [80, 100], temperature: [20, 40], dominant_species: "菌類" },
+    effects: { bio_spread: 3.0, tech_speed: 0.5, ui_theme: "spore" } // バイオマス爆増、科学停止
+  },
+  "サイバーグリッド惑星": {
+    triggers: { dominant_species: "機械文明", co2: [80, 100], oxygen: [0, 10] },
+    effects: { tech_ai_speed: 5.0, atmosphere_degrade: true, ui_theme: "cyber" } // AI技術爆速、大気が急速に悪化
+  },
+  "インセクト・ハイヴ惑星": {
+    triggers: { bio_biomass: "MAX", temperature: [30, 50], dominant_species: "巨大昆虫" },
+    effects: { resource_scavenge: 2.0, food_consumption: 2.0, ui_theme: "hive" } // 資源収集2倍、食料消費2倍
+  },
+  "食虫植物の楽園惑星": {
+    triggers: { water: [70, 90], temperature: [40, 60], bio_biomass: "MED" },
+    effects: { bio_trap_power: 2.0, civilization_risk: true, ui_theme: "jungle" } // 動植物・文明を捕食する
+  },
+  "エンジェル・ヘイロー惑星": {
+    triggers: { tech_level: "MAX", peace_index: 100, religion_influence: "MAX" },
+    effects: { enlightenment_prod: 10.0, no_conflict: true, ui_theme: "light" } // 精神文明の極致、ポイント生産膨大
+  },
+
+  // --- 終焉と再生のドラマ ---
+  "砕けかけのパズル惑星": {
+    triggers: { tectonic_instability: "MAX", disaster_meteor_impact: true },
+    effects: { unstable_yield: "RANDOM", core_exposure: true, ui_theme: "cracked" } // 毎秒資源がランダム、コアから直接エネルギー
+  },
+  "ホワイトホール・コア": {
+    triggers: { super_nova_imminent: true, internal_pressure: "MAX" }, // 爆発直前のホワイトホール化
+    effects: { energy_burst: 100.0, rebirth_imminent: true, ui_theme: "whitehole" } // 爆発まで全生産力100倍
+  },
+  "ノアの箱舟惑星": {
+    triggers: { planet_lifespan: "END", tech_level: "MAX", energy_reserves: "MAX" },
+    effects: { mobility: true, slow_resource_gen: 0.1, ui_theme: "ship" } // 惑星が移動可能になる、生産力低下
+  },
+  "凍てつく氷晶惑星": {
+    triggers: { temperature: [-100, -50], water: [0, 20] },
+    effects: { preservation_mode: true, slow_evolution: 0.1, ui_theme: "ice" } // 文明・生命が凍結保存される
+  },
+  "ギャラクシー・フラワー惑星": {
+    triggers: { bio_biomass: "MAX", life_cycle_end: true, cosmic_alignment: true },
+    effects: { beauty_point: 100.0, final_bloom: true, ui_theme: "flower" } // 輪廻直前の究極の美
+  }
+};
