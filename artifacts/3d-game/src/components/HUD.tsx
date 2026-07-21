@@ -25,7 +25,6 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
 
   const isCrisis = p.time >= 680 && p.time < 820;
   const isCollapse = p.time >= 820 && p.failureType;
-  const isVictory = isCrisis && p.time >= 819 && ['flower', 'whitehole', 'ark', 'angel'].includes(p.transformation);
 
   const currentT = transformations.find(t => t.id === p.transformation) || FAILURE_TRANSFORMATIONS.find(t => t.id === p.transformation);
   const tName = currentT ? currentT.name : '未知の形態';
@@ -45,36 +44,53 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
       <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 pointer-events-auto">
         <h2 className="text-4xl text-red-500 font-bold mb-4 animate-pulse">COLLAPSE</h2>
         <p className="text-xl text-red-200 mb-8 max-w-lg text-center leading-relaxed">{msg}</p>
-        <button 
-          onClick={() => gameState.resetPlanet(gameState.activeIndex)}
-          className="px-8 py-3 bg-red-900/50 hover:bg-red-800 border border-red-500 rounded-full text-white font-bold transition-colors"
-        >
-          もう一度育てる
-        </button>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => gameState.resetPlanet(gameState.activeIndex)}
+            className="px-8 py-3 bg-red-900/50 hover:bg-red-800 border border-red-500 rounded-full text-white font-bold transition-colors"
+          >
+            もう一度育てる
+          </button>
+          <button 
+            onClick={() => gameState.resetAllPlanets()}
+            className="px-8 py-3 bg-gray-900/50 hover:bg-gray-800 border border-gray-500 rounded-full text-white font-bold transition-colors"
+          >
+            全てリセット
+          </button>
+        </div>
       </div>
     );
   }
   
-  if (isVictory) {
-    let msg = '';
-    if (p.transformation === 'flower') msg = '🌸 ギャラクシー・フラワー - 輪廻の花が咲いた。完璧な育成！';
-    if (p.transformation === 'whitehole') msg = '☀️ ホワイトホール・コア - 宇宙に解放された。偉大な結末！';
-    if (p.transformation === 'ark') msg = '🚀 ノアの箱舟 - 文明は新天地へ旅立った。新たな輪廻の始まり！';
-    if (p.transformation === 'angel') msg = '👼 エンジェル・ヘイロー - 精神文明の極致。至高の平和！';
-  
+  if (p.succeeded && !p.acknowledgedSuccess) {
     return (
       <div className="absolute inset-0 bg-white/10 backdrop-blur-sm flex flex-col items-center justify-center z-50 pointer-events-auto">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-yellow-500/10 to-yellow-500/30 animate-pulse mix-blend-overlay" />
-        <h2 className="text-5xl text-yellow-300 font-bold mb-6 drop-shadow-[0_0_20px_rgba(253,224,71,0.8)]">TRANSCENDENCE</h2>
-        <p className="text-2xl text-white mb-10 max-w-lg text-center leading-relaxed drop-shadow-md">{msg}</p>
+        <h2 className="text-5xl text-yellow-300 font-bold mb-6 drop-shadow-[0_0_20px_rgba(253,224,71,0.8)]">✨ 惑星が安定した！ ✨</h2>
+        <p className="text-2xl text-white mb-2 max-w-lg text-center leading-relaxed drop-shadow-md">
+          {p.name} は成熟した惑星として継続します
+        </p>
+        <p className="text-xl text-green-300 mb-6 drop-shadow-md">
+          🌱 {p.name}の子孫 が誕生しました！
+        </p>
+        <p className="text-sm text-white/70 mb-10">（惑星カードに新惑星が表示されます）</p>
         <button 
-          onClick={() => gameState.resetPlanet(gameState.activeIndex)}
+          onClick={() => gameState.dismissSuccessOverlay(gameState.activeIndex)}
           className="px-8 py-3 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-300 rounded-full text-white font-bold transition-colors z-10"
         >
-          次の輪廻へ
+          次へ
         </button>
       </div>
     );
+  }
+
+  let timeRemainingDisplay = '';
+  if (p.time >= 820) {
+    timeRemainingDisplay = '崩壊中';
+  } else if (p.time === 819) {
+    timeRemainingDisplay = '🔒 最終安定ライン確認中';
+  } else {
+    timeRemainingDisplay = `次のイベントまで: ${timeRemaining.toFixed(0)}s`;
   }
 
   return (
@@ -84,14 +100,39 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
       )}
       
       {/* Top Bar */}
-      <div className="flex justify-between items-center p-4 pointer-events-auto bg-gradient-to-b from-black/80 to-transparent">
-        <h1 className="text-xl font-bold tracking-widest text-white/90">惑星育成ゲーム</h1>
-        <button 
-          onClick={() => setIsSettingsOpen(true)}
-          className="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full backdrop-blur-md border border-white/20 text-white/80 active:bg-white/20 transition-colors"
-        >
-          <Settings size={24} />
-        </button>
+      <div className="flex flex-col w-full pointer-events-auto bg-gradient-to-b from-black/80 to-transparent">
+        <div className="flex justify-between items-center p-4">
+          <h1 className="text-xl font-bold tracking-widest text-white/90">惑星育成ゲーム</h1>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full backdrop-blur-md border border-white/20 text-white/80 active:bg-white/20 transition-colors"
+          >
+            <Settings size={24} />
+          </button>
+        </div>
+        
+        {/* Milestone Bar */}
+        <div className="flex justify-center items-center gap-2 px-4 pb-4">
+          <div className={cn("flex flex-col items-center transition-all", p.milestones.ocean ? "opacity-100 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" : "opacity-30", p.time >= 180 && p.time < 320 ? "animate-pulse" : "")}>
+            <span className="text-xl">🌊</span>
+            <span className="text-[10px] text-white/70 mt-1">(320s)</span>
+          </div>
+          <div className="h-0.5 w-8 bg-white/20 mx-1" />
+          <div className={cn("flex flex-col items-center transition-all", p.milestones.life ? "opacity-100 drop-shadow-[0_0_8px_rgba(34,197,94,0.8)]" : "opacity-30", p.time >= 320 && p.time < 500 ? "animate-pulse" : "")}>
+            <span className="text-xl">🌱</span>
+            <span className="text-[10px] text-white/70 mt-1">(500s)</span>
+          </div>
+          <div className="h-0.5 w-8 bg-white/20 mx-1" />
+          <div className={cn("flex flex-col items-center transition-all", p.milestones.civilization ? "opacity-100 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" : "opacity-30", p.time >= 500 && p.time < 680 ? "animate-pulse" : "")}>
+            <span className="text-xl">🏙️</span>
+            <span className="text-[10px] text-white/70 mt-1">(680s)</span>
+          </div>
+          <div className="h-0.5 w-8 bg-white/20 mx-1" />
+          <div className={cn("flex flex-col items-center transition-all", p.milestones.stable ? "opacity-100 drop-shadow-[0_0_8px_rgba(253,224,71,0.8)]" : "opacity-30", p.time >= 680 && p.time <= 819 ? "animate-pulse" : "")}>
+            <span className="text-xl">✨</span>
+            <span className="text-[10px] text-white/70 mt-1">(819s)</span>
+          </div>
+        </div>
       </div>
 
       {/* CRISIS Warnings */}
@@ -132,8 +173,21 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
           {tEmoji} {tName}
         </div>
         <div className="text-white/60 font-mono mt-2 text-sm bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
-          次のイベントまで: {timeRemaining.toFixed(0)}s
+          {timeRemainingDisplay}
         </div>
+        
+        {/* 最終安定ライン確認リスト */}
+        {p.time === 819 && !p.succeeded && !p.failureType && (
+          <div className="mt-4 p-4 bg-black/60 rounded-xl border border-white/20 backdrop-blur-md shadow-2xl flex flex-col gap-2 pointer-events-auto">
+             <h3 className="text-amber-400 font-bold text-center mb-2 animate-pulse">🔒 最終安定ライン確認中...</h3>
+             <div className="text-sm font-mono space-y-1">
+               <div className="flex gap-2"><span>{p.stats.habitability > 65 ? '✅' : '❌'}</span> <span className="text-white/90">居住適性 &gt; 65% (現在: {p.stats.habitability.toFixed(0)}%)</span></div>
+               <div className="flex gap-2"><span>{p.stats.biomass > 0.50 ? '✅' : '❌'}</span> <span className="text-white/90">バイオマス &gt; 50% (現在: {(p.stats.biomass * 100).toFixed(0)}%)</span></div>
+               <div className="flex gap-2"><span>{p.stats.atmStability > 60 ? '✅' : '❌'}</span> <span className="text-white/90">大気安定性 &gt; 60% (現在: {p.stats.atmStability.toFixed(0)}%)</span></div>
+               <div className="flex gap-2"><span>{p.stats.civLevel > 0.50 ? '✅' : '❌'}</span> <span className="text-white/90">文明レベル &gt; 50% (現在: {(p.stats.civLevel * 100).toFixed(0)}%)</span></div>
+             </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Area */}

@@ -44,6 +44,15 @@ export interface PlanetState {
   lastParamChange: number;
   freezeTimer: number;
   gravityTimer: number;
+  milestones: {
+    ocean: boolean;
+    life: boolean;
+    civilization: boolean;
+    stable: boolean;
+  };
+  succeeded: boolean;
+  spawnSeed: boolean;
+  acknowledgedSuccess: boolean;
 }
 
 export interface GameState {
@@ -58,7 +67,31 @@ export interface GameState {
   updatePlanetName: (index: number, name: string) => void;
   togglePause: (index: number) => void;
   resetPlanet: (index: number) => void;
+  resetAllPlanets: () => void;
+  dismissSuccessOverlay: (index: number) => void;
 }
+
+const SAVE_KEY = 'planet_evolution_save_v1';
+
+type SaveData = {
+  planets: Array<Omit<PlanetState, never>>;
+  activeIndex: number;
+  globalSpeed: number;
+  zoomLevel: 0 | 1 | 2;
+  savedAt: number;
+};
+
+const loadSave = (): SaveData | null => {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as SaveData;
+    if (!Array.isArray(data.planets) || data.planets.length !== 3) return null;
+    return data;
+  } catch {
+    return null;
+  }
+};
 
 const defaultParams: PlanetParams = {
   temperature: 20,
@@ -94,17 +127,50 @@ const createPlanet = (id: number): PlanetState => {
     lastParamChange: Date.now(),
     freezeTimer: 0,
     gravityTimer: 0,
+    milestones: {
+      ocean: false,
+      life: false,
+      civilization: false,
+      stable: false,
+    },
+    succeeded: false,
+    spawnSeed: false,
+    acknowledgedSuccess: false,
   };
 };
 
 export function useGameState(): GameState {
-  const [planets, setPlanets] = useState<PlanetState[]>([createPlanet(0), createPlanet(1), createPlanet(2)]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [globalSpeed, setGlobalSpeed] = useState(1);
-  const [zoomLevel, setZoomLevel] = useState<0|1|2>(0);
+  const initialSave = useRef(loadSave());
+
+  const [planets, setPlanets] = useState<PlanetState[]>(() => {
+    const save = initialSave.current;
+    if (save) {
+      return save.planets.map(p => ({ ...p, lastParamChange: Date.now() }));
+    }
+    return [createPlanet(0), createPlanet(1), createPlanet(2)];
+  });
+  const [activeIndex, setActiveIndex] = useState(() => initialSave.current?.activeIndex ?? 0);
+  const [globalSpeed, setGlobalSpeed] = useState(() => initialSave.current?.globalSpeed ?? 1);
+  const [zoomLevel, setZoomLevel] = useState<0|1|2>(() => (initialSave.current?.zoomLevel as 0|1|2) ?? 0);
 
   const lastUpdateRef = useRef<number>(performance.now());
   const frameRef = useRef<number>(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const data: SaveData = {
+        planets,
+        activeIndex,
+        globalSpeed,
+        zoomLevel,
+        savedAt: Date.now(),
+      };
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      } catch (e) {}
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [planets, activeIndex, globalSpeed, zoomLevel]);
 
   useEffect(() => {
     const loop = () => {
@@ -112,80 +178,161 @@ export function useGameState(): GameState {
       const dt = (now - lastUpdateRef.current) / 1000;
       lastUpdateRef.current = now;
 
-      setPlanets(prev => prev.map(p => {
-        let newTime = p.time;
-        if (!p.isPaused) {
-          newTime += dt * p.params.formationSpeed * globalSpeed;
-        }
-
-        const phaseInfo = getPhaseInfo(newTime);
+      setPlanets(prev => {
+        let spawnedParents: PlanetState[] = [];
         
-        // Time stop for waiting user interaction if crisis phase ends without failure
-        if (phaseInfo.name === '危機の時代' && newTime >= 819 && !p.failureType) {
-          newTime = 819;
-        }
-        if (newTime >= CYCLE_DURATION) newTime = newTime % CYCLE_DURATION;
+        const nextPlanets = prev.map(p => {
+          let newTime = p.time;
+          if (!p.isPaused) {
+            newTime += dt * p.params.formationSpeed * globalSpeed;
+          }
 
-        const newStats = calculateStats(p.params, newTime);
+          const phaseInfo = getPhaseInfo(newTime);
+          
+          if (phaseInfo.name === '危機の時代' && newTime >= 819 && !p.failureType) {
+            newTime = 819;
+          }
 
-        let newFailure = p.failureType;
-        let newVenusTimer = p.venusTimer;
-        let newEcoTimer = p.ecoTimer;
-        let newFreezeTimer = p.freezeTimer;
-        let newGravityTimer = p.gravityTimer;
+          const newStats = calculateStats(p.params, newTime);
 
-        if (!newFailure) {
-          if (p.params.co2 > 85 && p.params.temperature > 80) newVenusTimer += dt; else newVenusTimer = 0;
-          if (newVenusTimer > 90) newFailure = 'venus';
+          let newFailure = p.failureType;
+          let newVenusTimer = p.venusTimer;
+          let newEcoTimer = p.ecoTimer;
+          let newFreezeTimer = p.freezeTimer;
+          let newGravityTimer = p.gravityTimer;
 
-          if (newTime >= 500 && p.params.oxygen < 8 && newStats.biomass < 0.05) newEcoTimer += dt; else newEcoTimer = 0;
-          if (newEcoTimer > 60) newFailure = 'ecosystem';
+          if (!newFailure) {
+            if (p.params.co2 > 85 && p.params.temperature > 80) newVenusTimer += dt; else newVenusTimer = 0;
+            if (newVenusTimer > 90) newFailure = 'venus';
 
-          const idleTime = (Date.now() - p.lastParamChange) / 1000;
-          if (newTime >= 680 && idleTime > 120) newFailure = 'nuclear';
+            if (newTime >= 500 && p.params.oxygen < 8 && newStats.biomass < 0.05) newEcoTimer += dt; else newEcoTimer = 0;
+            if (newEcoTimer > 60) newFailure = 'ecosystem';
 
-          if (newTime >= 320 && p.params.temperature < -60 && p.params.distance > 85) newFreezeTimer += dt; else newFreezeTimer = 0;
-          if (newFreezeTimer > 120) newFailure = 'freeze';
+            const idleTime = (Date.now() - p.lastParamChange) / 1000;
+            if (newTime >= 680 && idleTime > 120) newFailure = 'nuclear';
 
-          if (newTime <= 180 && p.params.size > 88) newGravityTimer += dt; else newGravityTimer = 0;
-          if (newGravityTimer > 60) newFailure = 'gravity';
+            if (newTime >= 320 && p.params.temperature < -60 && p.params.distance > 85) newFreezeTimer += dt; else newFreezeTimer = 0;
+            if (newFreezeTimer > 120) newFailure = 'freeze';
 
-          if (newFailure && newTime < 820) {
-            newTime = 820; // jump to collapse
+            if (newTime <= 180 && p.params.size > 88) newGravityTimer += dt; else newGravityTimer = 0;
+            if (newGravityTimer > 60) newFailure = 'gravity';
+
+            if (newFailure && newTime < 820) {
+              newTime = 820; // jump to collapse
+            }
+          }
+
+          let newMilestones = { ...p.milestones };
+          let newSucceeded = p.succeeded;
+          let newSpawnSeed = p.spawnSeed;
+
+          if (p.time < 320 && newTime >= 320) {
+            newMilestones.ocean = p.params.waterAmount > 30;
+          }
+          if (p.time < 500 && newTime >= 500) {
+            newMilestones.life = newStats.lifeProb > 50 && newStats.biomass > 0.20;
+          }
+          if (p.time < 680 && newTime >= 680) {
+            newMilestones.civilization = newStats.civLevel > 0.40 && newStats.habitability > 55;
+          }
+
+          if (newTime === 819) {
+            const finalStable = (
+              newStats.habitability > 65 &&
+              newStats.biomass > 0.50 &&
+              newStats.atmStability > 60 &&
+              newStats.civLevel > 0.50
+            );
+            if (finalStable && !newSucceeded) {
+              newSucceeded = true;
+              newMilestones.stable = true;
+              newSpawnSeed = true;
+            }
+          }
+
+          const { transformationId } = detectTransformation(p.params, getPhaseInfo(newTime).name, newStats, newFailure);
+          
+          let newTransformation = p.transformation;
+          let newTransformationBlend = p.transformationBlend;
+
+          if (newTransformation !== transformationId) {
+            newTransformation = transformationId;
+            newTransformationBlend = 0.0;
+          } else if (newTransformationBlend < 1.0) {
+            newTransformationBlend = Math.min(1.0, newTransformationBlend + dt * 0.5); // 2s transition
+          }
+
+          let newBlend = p.typeBlend;
+          if (newBlend < 1.0) {
+            newBlend = Math.min(1.0, newBlend + dt * 2.0); // 0.5s transition
+          }
+
+          const updatedP = { 
+            ...p, 
+            time: newTime, 
+            stats: newStats,
+            typeBlend: newBlend,
+            failureType: newFailure,
+            venusTimer: newVenusTimer,
+            ecoTimer: newEcoTimer,
+            freezeTimer: newFreezeTimer,
+            gravityTimer: newGravityTimer,
+            transformation: newTransformation,
+            transformationBlend: newTransformationBlend,
+            milestones: newMilestones,
+            succeeded: newSucceeded,
+            spawnSeed: newSpawnSeed
+          };
+
+          if (newSpawnSeed) {
+            spawnedParents.push(updatedP);
+            updatedP.spawnSeed = false;
+          }
+
+          return updatedP;
+        });
+
+        if (spawnedParents.length > 0) {
+          for (const parent of spawnedParents) {
+            let targetIndex = nextPlanets.findIndex(p => p.id !== parent.id && (p.succeeded || p.failureType !== null));
+            if (targetIndex === -1) {
+              let oldestTime = -1;
+              let oldestIndex = -1;
+              for (let i = 0; i < nextPlanets.length; i++) {
+                if (nextPlanets[i].id !== parent.id && nextPlanets[i].time > oldestTime) {
+                  oldestTime = nextPlanets[i].time;
+                  oldestIndex = i;
+                }
+              }
+              targetIndex = oldestIndex;
+            }
+            
+            if (targetIndex !== -1) {
+              const offset = () => Math.floor(Math.random() * 31) - 15;
+              const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+              const newParams: PlanetParams = {
+                ...parent.params,
+                waterAmount: clamp(parent.params.waterAmount + offset(), 0, 100),
+                temperature: clamp(parent.params.temperature + offset(), -100, 100),
+                nitrogen: clamp(parent.params.nitrogen + offset(), 0, 100),
+                oxygen: clamp(parent.params.oxygen + offset(), 0, 100),
+                co2: clamp(parent.params.co2 + offset(), 0, 100),
+                distance: clamp(parent.params.distance + offset(), 0, 100),
+                size: clamp(parent.params.size + offset(), 0, 100),
+              };
+              
+              const newPlanet = createPlanet(nextPlanets[targetIndex].id);
+              newPlanet.params = newParams;
+              newPlanet.name = `${parent.name}の子孫 🌱`;
+              newPlanet.time = 0;
+              
+              nextPlanets[targetIndex] = newPlanet;
+            }
           }
         }
 
-        const { transformationId } = detectTransformation(p.params, getPhaseInfo(newTime).name, newStats, newFailure);
-        
-        let newTransformation = p.transformation;
-        let newTransformationBlend = p.transformationBlend;
-
-        if (newTransformation !== transformationId) {
-          newTransformation = transformationId;
-          newTransformationBlend = 0.0;
-        } else if (newTransformationBlend < 1.0) {
-          newTransformationBlend = Math.min(1.0, newTransformationBlend + dt * 0.5); // 2s transition
-        }
-
-        let newBlend = p.typeBlend;
-        if (newBlend < 1.0) {
-          newBlend = Math.min(1.0, newBlend + dt * 2.0); // 0.5s transition
-        }
-
-        return { 
-          ...p, 
-          time: newTime, 
-          stats: newStats,
-          typeBlend: newBlend,
-          failureType: newFailure,
-          venusTimer: newVenusTimer,
-          ecoTimer: newEcoTimer,
-          freezeTimer: newFreezeTimer,
-          gravityTimer: newGravityTimer,
-          transformation: newTransformation,
-          transformationBlend: newTransformationBlend
-        };
-      }));
+        return nextPlanets;
+      });
       
       frameRef.current = requestAnimationFrame(loop);
     };
@@ -248,6 +395,24 @@ export function useGameState(): GameState {
     });
   };
 
+  const resetAllPlanets = () => {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch (e) {}
+    setPlanets([createPlanet(0), createPlanet(1), createPlanet(2)]);
+    setActiveIndex(0);
+    setGlobalSpeed(1);
+    setZoomLevel(0);
+  };
+
+  const dismissSuccessOverlay = (index: number) => {
+    setPlanets(prev => {
+      const p = [...prev];
+      p[index] = { ...p[index], acknowledgedSuccess: true };
+      return p;
+    });
+  };
+
   return {
     planets,
     activeIndex,
@@ -259,6 +424,8 @@ export function useGameState(): GameState {
     updatePlanetParams,
     updatePlanetName,
     togglePause,
-    resetPlanet
+    resetPlanet,
+    resetAllPlanets,
+    dismissSuccessOverlay
   };
 }
