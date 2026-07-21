@@ -110,14 +110,14 @@ export const Particles: React.FC<{ gameState: GameState }> = ({ gameState }) => 
       }
 
       const mat = supernovaPointsRef.current.material as THREE.PointsMaterial;
-      if (time < 5) {
+      if (time < 15) {
         for (let i = 0; i < SUPERNOVA_COUNT; i++) {
           positions[i * 3] += snVelocities[i * 3] * dt;
           positions[i * 3 + 1] += snVelocities[i * 3 + 1] * dt;
           positions[i * 3 + 2] += snVelocities[i * 3 + 2] * dt;
         }
-        mat.opacity = 1.0 - (time / 5.0);
-      } else if (time >= 5 && time < 20) {
+        mat.opacity = 1.0 - (time / 15.0);
+      } else if (time >= 15 && time < 80) {
         const suckSpeed = 10;
         for (let i = 0; i < SUPERNOVA_COUNT; i++) {
           const px = positions[i * 3];
@@ -130,7 +130,7 @@ export const Particles: React.FC<{ gameState: GameState }> = ({ gameState }) => 
             positions[i * 3 + 2] -= (pz / dist) * suckSpeed * dt;
           }
         }
-        mat.opacity = 1.0 - ((time - 5) / 15.0);
+        mat.opacity = 1.0 - ((time - 15) / 65.0);
       } else {
         mat.opacity = 0;
       }
@@ -140,8 +140,8 @@ export const Particles: React.FC<{ gameState: GameState }> = ({ gameState }) => 
     // Rain
     if (rainPointsRef.current) {
       const mat = rainPointsRef.current.material as THREE.PointsMaterial;
-      if (time >= 30 && time < 50 && p.type !== 'STAR/SUN' && p.type !== 'BLACK HOLE') {
-        mat.opacity = (time > 35 && time < 45) ? 0.6 : 0.2; 
+      if (time >= 180 && time < 320 && p.type !== 'STAR/SUN' && p.type !== 'BLACK HOLE') {
+        mat.opacity = (time > 200 && time < 300) ? 0.6 : 0.2; 
         const positions = rainPointsRef.current.geometry.attributes.position.array as Float32Array;
         for (let i = 0; i < RAIN_COUNT; i++) {
           const px = positions[i * 3];

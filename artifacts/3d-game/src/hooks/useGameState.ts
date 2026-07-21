@@ -3,17 +3,17 @@ import { PlanetParams, PlanetType, calculatePlanetType, calculateStats } from '.
 
 export type Phase = 'SUPERNOVA' | 'FORMATION' | 'COOLING' | 'WATER' | 'LIFE' | 'CIVILIZATION' | 'CRISIS' | 'COLLAPSE';
 
-export const CYCLE_DURATION = 108;
+export const CYCLE_DURATION = 900;
 
 export const PHASE_TIMINGS = [
-  { name: 'SUPERNOVA', start: 0, end: 5 },
-  { name: 'FORMATION', start: 5, end: 20 },
-  { name: 'COOLING', start: 20, end: 35 },
-  { name: 'WATER', start: 35, end: 50 },
-  { name: 'LIFE', start: 50, end: 70 },
-  { name: 'CIVILIZATION', start: 70, end: 90 },
-  { name: 'CRISIS', start: 90, end: 100 },
-  { name: 'COLLAPSE', start: 100, end: 108 },
+  { name: '超新星爆発', start: 0, end: 15 },
+  { name: '惑星形成', start: 15, end: 80 },
+  { name: '冷却期', start: 80, end: 180 },
+  { name: '大海洋の誕生', start: 180, end: 320 },
+  { name: '生命の誕生', start: 320, end: 500 },
+  { name: '文明の時代', start: 500, end: 680 },
+  { name: '危機の時代', start: 680, end: 820 },
+  { name: '崩壊', start: 820, end: 900 },
 ] as const;
 
 export const getPhaseInfo = (time: number) => {
@@ -68,9 +68,9 @@ const createPlanet = (id: number): PlanetState => {
   const type = calculatePlanetType(defaultParams);
   return {
     id,
-    name: `Planet 0${id + 1}`,
+    name: `惑星0${id + 1}`,
     params: { ...defaultParams },
-    time: id * 20, // Offset initial times so they look distinct
+    time: id * 200, // Offset initial times so they look distinct
     isPaused: false,
     type,
     stats: calculateStats(defaultParams),

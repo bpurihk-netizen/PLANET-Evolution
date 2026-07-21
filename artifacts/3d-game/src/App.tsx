@@ -10,22 +10,12 @@ const queryClient = new QueryClient();
 function GameView() {
   const gameState = useGameState();
 
-  const handleWheel = (e: React.WheelEvent) => {
-    if (e.deltaY > 0) { // scroll down = zoom out
-      if (gameState.zoomLevel === 2) gameState.setZoomLevel(1);
-      else if (gameState.zoomLevel === 1) gameState.setZoomLevel(0);
-    } else { // scroll up = zoom in
-      if (gameState.zoomLevel === 0) gameState.setZoomLevel(1);
-      else if (gameState.zoomLevel === 1) gameState.setZoomLevel(2);
-    }
-  };
-
   return (
-    <div className="w-full h-[100dvh] bg-[#030014] overflow-hidden relative" onWheel={handleWheel}>
+    <div className="w-full h-[100dvh] bg-[#030014] overflow-hidden relative">
       <div className="absolute inset-0 z-0">
         <PlanetScene gameState={gameState} />
       </div>
-      <div className="absolute inset-0 z-10">
+      <div className="absolute inset-0 z-10 pointer-events-none">
         <HUD gameState={gameState} />
       </div>
     </div>

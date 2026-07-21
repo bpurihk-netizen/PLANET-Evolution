@@ -1,12 +1,16 @@
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { GameState } from '../hooks/useGameState';
+import { GameState, PlanetState } from '../hooks/useGameState';
 import { PLANET_TYPE_IDS } from '../hooks/usePlanetParams';
+import { SurfaceAnimations, SurfaceLabels } from './SurfaceAnimations';
 
 interface PlanetProps {
+  planetState: PlanetState;
   gameState: GameState;
   clippingPlane: THREE.Plane;
+  index: number;
+  isActive: boolean;
 }
 
 const planetVertexShader = `
@@ -68,7 +72,7 @@ void main() {
   vec3 pos = position;
   float n = snoise(pos * 2.0 + time * 0.2);
   
-  float formPhase = smoothstep(5.0, 10.0, phaseTime) * (1.0 - smoothstep(15.0, 25.0, phaseTime));
+  float formPhase = smoothstep(15.0, 30.0, phaseTime) * (1.0 - smoothstep(60.0, 80.0, phaseTime));
   float disp = n * 0.2 * formPhase;
   
   pos += normal * disp;
@@ -155,7 +159,8 @@ void getPlanetAppearance(int type, vec3 pos, float n1, float n2, float terrain, 
     float crack = smoothstep(0.4, 0.45, abs(fbm(pos * 15.0)));
     col = mix(vec3(0.8, 0.9, 1.0), vec3(0.4, 0.6, 0.9), crack);
   } else if (type == 2) { // WATER
-    col = mix(vec3(0.0, 0.1, 0.3), vec3(0.1, 0.4, 0.8), terrain);
+    float wave = fbm(pos * 15.0 + time * 1.5);
+    col = mix(vec3(0.0, 0.1, 0.3), vec3(0.2, 0.5, 0.9), terrain + wave * 0.3);
   } else if (type == 3) { // GREEN
     float land = smoothstep(0.2, 0.3, terrain);
     col = mix(vec3(0.1, 0.5, 0.7), vec3(0.1, 0.8, 0.3), land);
@@ -198,11 +203,11 @@ void main() {
   vec3 targetCol = mix(col1, col2, blendFactor);
   vec3 targetEm = mix(em1, em2, blendFactor);
 
-  float earlyLava = smoothstep(5.0, 15.0, phaseTime) * (1.0 - smoothstep(30.0, 40.0, phaseTime));
-  float matureW = smoothstep(35.0, 45.0, phaseTime);
-  float hidePlanetW = 1.0 - smoothstep(0.0, 5.0, phaseTime);
-  float collapseW = smoothstep(100.0, 108.0, phaseTime);
-  float crisisW = smoothstep(90.0, 95.0, phaseTime) * (1.0 - smoothstep(100.0, 108.0, phaseTime));
+  float earlyLava = smoothstep(15.0, 40.0, phaseTime) * (1.0 - smoothstep(150.0, 180.0, phaseTime));
+  float matureW = smoothstep(150.0, 180.0, phaseTime);
+  float hidePlanetW = 1.0 - smoothstep(0.0, 15.0, phaseTime);
+  float collapseW = smoothstep(820.0, 900.0, phaseTime);
+  float crisisW = smoothstep(680.0, 750.0, phaseTime) * (1.0 - smoothstep(820.0, 900.0, phaseTime));
 
   if (currentType >= 9 || prevType >= 9) {
       matureW = 1.0; 
@@ -235,18 +240,76 @@ void main() {
 
 const atmosphereVertexShader = `
 varying vec3 vNormal;
+varying vec3 vPosition;
 void main() {
   vNormal = normalize(normalMatrix * normal);
+  vPosition = position;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
 const atmosphereFragmentShader = `
 varying vec3 vNormal;
+varying vec3 vPosition;
 uniform float phaseTime;
 uniform int currentType;
 uniform int prevType;
 uniform float blendFactor;
+
+// Simplex 3D Noise 
+vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+float snoise(vec3 v){ 
+  const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+  const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy) );
+  vec3 x0 = v - i + dot(i, C.xxx) ;
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min( g.xyz, l.zxy );
+  vec3 i2 = max( g.xyz, l.zxy );
+  vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+  vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+  vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+  i = mod(i, 289.0 ); 
+  vec4 p = permute( permute( permute( i.z + vec4(0.0, i1.z, i2.z, 1.0 )) + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+  float n_ = 1.0/7.0; 
+  vec3  ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z *ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_ );
+  vec4 x = x_ *ns.x + ns.yyyy;
+  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4( x.xy, y.xy );
+  vec4 b1 = vec4( x.zw, y.zw );
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+  vec3 p0 = vec3(a0.xy,h.x);
+  vec3 p1 = vec3(a0.zw,h.y);
+  vec3 p2 = vec3(a1.xy,h.z);
+  vec3 p3 = vec3(a1.zw,h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+}
+
+float fbm(vec3 x) {
+  float v = 0.0;
+  float a = 0.5;
+  vec3 shift = vec3(100);
+  for (int i = 0; i < 5; ++i) {
+    v += a * snoise(x);
+    x = x * 2.0 + shift;
+    a *= 0.5;
+  }
+  return v;
+}
 
 vec3 getAtmColor(int type) {
   if (type == 1) return vec3(0.8, 0.9, 1.0); // ICE
@@ -267,15 +330,18 @@ void main() {
   vec3 col2 = getAtmColor(currentType);
   vec3 atmColor = mix(col1, col2, blendFactor);
   
-  float matureW = smoothstep(35.0, 45.0, phaseTime) * (1.0 - smoothstep(100.0, 105.0, phaseTime));
-  float crisisW = smoothstep(90.0, 95.0, phaseTime) * (1.0 - smoothstep(100.0, 108.0, phaseTime));
+  float matureW = smoothstep(150.0, 180.0, phaseTime) * (1.0 - smoothstep(820.0, 850.0, phaseTime));
+  float crisisW = smoothstep(680.0, 750.0, phaseTime) * (1.0 - smoothstep(820.0, 900.0, phaseTime));
   
   atmColor = mix(vec3(0.5, 0.5, 0.5), atmColor, matureW);
   atmColor = mix(atmColor, vec3(0.4, 0.3, 0.1), crisisW);
   
+  float clouds = fbm(vPosition * 3.0 + phaseTime * 0.05);
+  atmColor = mix(atmColor, vec3(1.0), smoothstep(0.4, 0.7, clouds) * 0.5);
+  
   float alpha = intensity * (matureW * 0.8 + 0.2); 
   
-  float hide = (1.0 - smoothstep(5.0, 10.0, phaseTime)) + smoothstep(100.0, 108.0, phaseTime);
+  float hide = (1.0 - smoothstep(15.0, 30.0, phaseTime)) + smoothstep(820.0, 900.0, phaseTime);
   alpha *= (1.0 - hide);
 
   if (currentType >= 9 || prevType >= 9) {
@@ -286,7 +352,8 @@ void main() {
 }
 `;
 
-export const Planet: React.FC<PlanetProps> = ({ gameState, clippingPlane }) => {
+export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clippingPlane, index, isActive }) => {
+  const groupRef = useRef<THREE.Group>(null);
   const planetMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const atmosMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -308,32 +375,53 @@ export const Planet: React.FC<PlanetProps> = ({ gameState, clippingPlane }) => {
 
   useFrame((state, delta) => {
     const elapsed = state.clock.getElapsedTime();
-    const p = gameState.planets[gameState.activeIndex];
+    const currentP = gameState.planets[index];
 
     if (planetMaterialRef.current) {
       planetMaterialRef.current.uniforms.time.value = elapsed;
-      planetMaterialRef.current.uniforms.phaseTime.value = p.time;
-      planetMaterialRef.current.uniforms.currentType.value = PLANET_TYPE_IDS[p.type];
-      planetMaterialRef.current.uniforms.prevType.value = PLANET_TYPE_IDS[p.prevType];
-      planetMaterialRef.current.uniforms.blendFactor.value = p.typeBlend;
+      planetMaterialRef.current.uniforms.phaseTime.value = currentP.time;
+      planetMaterialRef.current.uniforms.currentType.value = PLANET_TYPE_IDS[currentP.type];
+      planetMaterialRef.current.uniforms.prevType.value = PLANET_TYPE_IDS[currentP.prevType];
+      planetMaterialRef.current.uniforms.blendFactor.value = currentP.typeBlend;
     }
     
     if (atmosMaterialRef.current) {
-      atmosMaterialRef.current.uniforms.phaseTime.value = p.time;
-      atmosMaterialRef.current.uniforms.currentType.value = PLANET_TYPE_IDS[p.type];
-      atmosMaterialRef.current.uniforms.prevType.value = PLANET_TYPE_IDS[p.prevType];
-      atmosMaterialRef.current.uniforms.blendFactor.value = p.typeBlend;
+      atmosMaterialRef.current.uniforms.phaseTime.value = currentP.time;
+      atmosMaterialRef.current.uniforms.currentType.value = PLANET_TYPE_IDS[currentP.type];
+      atmosMaterialRef.current.uniforms.prevType.value = PLANET_TYPE_IDS[currentP.prevType];
+      atmosMaterialRef.current.uniforms.blendFactor.value = currentP.typeBlend;
     }
     
-    if (meshRef.current && !p.isPaused) {
-      meshRef.current.rotation.y += delta * 0.1 * p.params.formationSpeed * gameState.globalSpeed;
+    if (meshRef.current && !currentP.isPaused) {
+      meshRef.current.rotation.y += delta * 0.1 * currentP.params.formationSpeed * gameState.globalSpeed;
+    }
+
+    if (groupRef.current) {
+      // Lerp positions and scales
+      let targetPos = new THREE.Vector3();
+      let targetScale = 1.0;
+      
+      if (isActive) {
+        targetPos.set(0, 0, 0);
+        targetScale = 1.2 / 2.0; // Base sphere is radius 2, so scale 0.6 = radius 1.2
+      } else {
+        const isRight = (gameState.activeIndex + 1) % 3 === index;
+        targetPos.set(isRight ? 3.5 : -3.5, -0.5, -5);
+        targetScale = 0.55 / 2.0; // scale 0.275 = radius 0.55
+      }
+
+      groupRef.current.position.lerp(targetPos, 0.1);
+      
+      const currentScale = groupRef.current.scale.x;
+      const newScale = THREE.MathUtils.lerp(currentScale, targetScale, 0.1);
+      groupRef.current.scale.setScalar(newScale);
     }
   });
 
   return (
-    <group>
+    <group ref={groupRef} onClick={() => !isActive && gameState.setActiveIndex(index)}>
       <mesh ref={meshRef}>
-        <sphereGeometry args={[2, 128, 128]} />
+        <sphereGeometry args={[2, isActive ? 128 : 64, isActive ? 128 : 64]} />
         <shaderMaterial
           ref={planetMaterialRef}
           vertexShader={planetVertexShader}
@@ -343,10 +431,11 @@ export const Planet: React.FC<PlanetProps> = ({ gameState, clippingPlane }) => {
           clipping={true}
           clippingPlanes={[clippingPlane]}
         />
+        {isActive && gameState.zoomLevel === 1 && <SurfaceAnimations p={p} />}
       </mesh>
 
       <mesh>
-        <sphereGeometry args={[2.08, 64, 64]} />
+        <sphereGeometry args={[2.08, isActive ? 64 : 32, isActive ? 64 : 32]} />
         <shaderMaterial
           ref={atmosMaterialRef}
           vertexShader={atmosphereVertexShader}
@@ -360,6 +449,22 @@ export const Planet: React.FC<PlanetProps> = ({ gameState, clippingPlane }) => {
           clippingPlanes={[clippingPlane]}
         />
       </mesh>
+      
+      {isActive && gameState.zoomLevel === 1 && <SurfaceLabels p={p} />}
+
+      {isActive && (
+        <mesh>
+          <sphereGeometry args={[2.15, 64, 64]} />
+          <meshBasicMaterial 
+            color="#ffffff" 
+            transparent 
+            opacity={0.05} 
+            side={THREE.BackSide}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
     </group>
   );
 };

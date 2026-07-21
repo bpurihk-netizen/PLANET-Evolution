@@ -10,7 +10,11 @@ import { Particles } from './Particles';
 
 const CameraController: React.FC<{ zoomLevel: number }> = ({ zoomLevel }) => {
   useFrame((state) => {
-    const targetZ = zoomLevel === 1 ? 2.5 : (zoomLevel === 2 ? 6.0 : 8.0);
+    // Active planet radius is 1.2
+    // zoom=0 (Space): 5.0
+    // zoom=1 (Surface): 1.6
+    // zoom=2 (Interior): 3.0
+    const targetZ = zoomLevel === 1 ? 1.6 : (zoomLevel === 2 ? 3.0 : 5.0);
     state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, targetZ, 0.05);
   });
   return null;
@@ -29,22 +33,22 @@ const LightController: React.FC<{ gameState: GameState }> = ({ gameState }) => {
     let ambIntensity = 0.2;
     let color = new THREE.Color(0xffffff);
 
-    if (time < 5) {
-      intensity = 5.0 - (time); 
+    if (time < 15) {
+      intensity = 5.0 - (time / 3); 
       ambIntensity = 2.0;
-    } else if (time >= 5 && time < 35) {
+    } else if (time >= 15 && time < 180) {
       intensity = 0.5;
       ambIntensity = 0.1;
-    } else if (time >= 35 && time < 90) {
+    } else if (time >= 180 && time < 680) {
       intensity = 1.5;
       ambIntensity = 0.2;
-    } else if (time >= 90 && time < 100) {
+    } else if (time >= 680 && time < 820) {
       intensity = 2.0;
       ambIntensity = 0.3;
       color.setHex(0xffaa88);
-    } else if (time >= 100) {
-      intensity = Math.max(0, 1.5 - (time - 100) * 0.2);
-      ambIntensity = Math.max(0.01, 0.2 - (time - 100) * 0.05);
+    } else if (time >= 820) {
+      intensity = Math.max(0, 1.5 - (time - 820) * 0.05);
+      ambIntensity = Math.max(0.01, 0.2 - (time - 820) * 0.01);
     }
 
     dirLightRef.current.intensity = THREE.MathUtils.lerp(dirLightRef.current.intensity, intensity, 0.1);
@@ -66,7 +70,6 @@ const LightController: React.FC<{ gameState: GameState }> = ({ gameState }) => {
 };
 
 export const PlanetScene: React.FC<{ gameState: GameState }> = ({ gameState }) => {
-  // Clipping plane that cuts off the front hemisphere (z > 0)
   const clippingPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), []);
 
   return (
@@ -80,29 +83,38 @@ export const PlanetScene: React.FC<{ gameState: GameState }> = ({ gameState }) =
       <LightController gameState={gameState} />
       
       <StarField gameState={gameState} />
-      
-      {/* 
-        Update the clipping plane distance directly in useFrame.
-        At zoomLevel=2, distance=0 to cut the planet in half. 
-        Otherwise distance=100 (no cut).
-      */}
-      <mesh>
-        <meshBasicMaterial visible={false} />
-      </mesh>
 
       <group>
-        <Planet gameState={gameState} clippingPlane={clippingPlane} />
+        {gameState.planets.map((p, index) => {
+          const isActive = index === gameState.activeIndex;
+          return (
+            <Planet 
+              key={p.id}
+              planetState={p}
+              gameState={gameState} 
+              clippingPlane={clippingPlane}
+              index={index}
+              isActive={isActive}
+            />
+          );
+        })}
         {gameState.zoomLevel === 2 && (
-          <PlanetInterior gameState={gameState} clippingPlane={clippingPlane} />
+          <group scale={1.2 / 2.0}>
+            <PlanetInterior gameState={gameState} clippingPlane={clippingPlane} />
+          </group>
         )}
       </group>
       
-      <Particles gameState={gameState} />
+      <group scale={1.2 / 2.0}>
+        <Particles gameState={gameState} />
+      </group>
 
       <OrbitControls 
         enablePan={false} 
-        enableZoom={false} // Managed via scroll events on the parent wrapper
-        minDistance={2} 
+        enableZoom={false}
+        enableDamping={true}
+        touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
+        minDistance={1} 
         maxDistance={15}
         autoRotate={false}
       />

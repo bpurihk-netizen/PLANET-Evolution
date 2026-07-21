@@ -28,6 +28,30 @@ export const PLANET_TYPE_IDS: Record<PlanetType, number> = {
   'STAR/SUN': 10,
 };
 
+export const PLANET_TYPE_JA: Record<PlanetType, string> = {
+  'HABITABLE': '居住可能惑星',
+  'ICE WORLD': '氷の惑星',
+  'WATER WORLD': '水の惑星',
+  'GREEN PLANET': '緑の惑星',
+  'DESERT PLANET': '砂漠の惑星',
+  'FIRE PLANET': '火の惑星',
+  'GAS GIANT': 'ガス惑星',
+  'CRYSTAL PLANET': '水晶惑星',
+  'GLOWING PLANET': '発光惑星',
+  'BLACK HOLE': 'ブラックホール',
+  'STAR/SUN': '恒星',
+};
+
+export const SPECIES_JA: Record<Species, string> = {
+  'None': 'なし',
+  'Aquatic': '水生生物',
+  'Plant': '植物',
+  'Insect': '昆虫',
+  'Mammal': '哺乳類',
+  'Crystal': '水晶生命体',
+  'Machine': '機械文明',
+};
+
 export const calculatePlanetType = (params: PlanetParams): PlanetType => {
   const { temperature, waterAmount, size, co2, oxygen, distance } = params;
   if (size > 95 && temperature < 10) return 'BLACK HOLE';
