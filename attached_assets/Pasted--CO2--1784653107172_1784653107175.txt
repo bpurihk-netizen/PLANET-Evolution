@@ -1,0 +1,37 @@
+【最重要：惑星育成ゲーム『拡張パラメータ・システム』の大幅実装】
+
+既存の基本パラメータ（温度、水、窒素、酸素、CO2、距離、大きさ、進化速度、支配種族）に加え、新たに「地質・内核」「宇宙環境」「大気海洋の深化」「文明・生態系」に関する20個の新しい設定値を追加し、それらがシミュレーションの計算式やイベントに深く連動するシステムを構築してください。
+
+### 1. 新規パラメータのデータ構造（`ExtendedParameters.js`）
+以下の20個の新しい設定値をスライダー（または数値入力）として設定画面に追加し、それぞれ 0〜100（または固有の範囲）の初期値を持たせてください。
+
+```javascript
+const ExtendedParameters = {
+  // A. 地質・内核パラメータ
+  tectonicActivity: { name: "地殻活動指数", value: 50, effect: "mountains_and_volcanoes" },
+  coreRotationSpeed: { name: "内核の回転速度", value: 50, effect: "magnetic_field_strength" },
+  metallicCoreRatio: { name: "金属核の比率", value: 50, effect: "resource_base_yield" },
+  mantleViscosity: { name: "マントルの粘性", value: 50, effect: "continental_drift_speed" },
+  initialVolatiles: { name: "初期揮発性物質量", value: 50, effect: "base_water_gas_pool" },
+
+  // B. 宇宙環境・軌道パラメータ
+  orbitalEccentricity: { name: "軌道離心率", value: 10, effect: "seasonal_climate_extremes" },
+  axialTilt: { name: "自転軸の傾き", value: 23, effect: "climate_zones" },
+  binaryStarInfluence: { name: "連星系の影響", value: 0, effect: "radiation_and_light_fluctuation" },
+  satelliteSystem: { name: "衛星の数と大きさ", value: 1, effect: "tidal_heating_and_gravity" },
+  asteroidBeltDensity: { name: "小惑星帯の密度", value: 20, effect: "meteor_event_frequency" },
+
+  // C. 大気・海洋組成の深化
+  methaneConcentration: { name: "メタン濃度", value: 10, effect: "potent_greenhouse_effect" },
+  ozoneLayerThickness: { name: "オゾン層の厚さ", value: 50, effect: "uv_shield_and_mutation" },
+  sulfurCompounds: { name: "硫黄化合物濃度", value: 5, effect: "acid_rain_and_cooling" },
+  oceanSalinity: { name: "海洋の塩分濃度", value: 35, effect: "marine_ecosystem_stability" },
+  cloudAlbedo: { name: "雲のアルベド（反射率)", value: 30, effect: "solar_reflection_feedback" },
+
+  // D. 文明・生態系パラメータ
+  averageIntelligence: { name: "平均知的指数", value: 50, effect: "tech_progress_vs_conflict" },
+  societalOrientation: { name: "社会システム指向", value: 50, effect: "cooperation_vs_competition" },
+  biomeDiversity: { name: "バイオームの多様性", value: 50, effect: "environmental_resilience" },
+  energyEfficiency: { name: "エネルギー利用効率", value: 30, effect: "resource_consumption_rate" },
+  spiritualityCulture: { name: "精神性・文化度", value: 20, effect: "peace_and_relic_generation" }
+};

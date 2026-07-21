@@ -7,6 +7,7 @@ import { Planet } from './Planet';
 import { PlanetInterior } from './PlanetInterior';
 import { StarField } from './StarField';
 import { Particles } from './Particles';
+import { Sun } from './Sun';
 
 const CameraController: React.FC<{ zoomLevel: number }> = ({ zoomLevel }) => {
   useFrame((state) => {
@@ -71,6 +72,7 @@ const LightController: React.FC<{ gameState: GameState }> = ({ gameState }) => {
 
 export const PlanetScene: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const clippingPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), []);
+  const activePlanet = gameState.planets[gameState.activeIndex];
 
   return (
     <Canvas
@@ -83,6 +85,11 @@ export const PlanetScene: React.FC<{ gameState: GameState }> = ({ gameState }) =
       <LightController gameState={gameState} />
       
       <StarField gameState={gameState} />
+      
+      <Sun 
+        distanceParam={activePlanet.params.distance} 
+        binaryStarInfluence={activePlanet.params.binaryStarInfluence} 
+      />
 
       <group>
         {gameState.planets.map((p, index) => {

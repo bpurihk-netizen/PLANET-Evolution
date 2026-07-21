@@ -5,13 +5,38 @@ export type Species = 'Aquatic' | 'Plant' | 'Insect' | 'Mammal' | 'Crystal' | 'M
 export interface PlanetParams {
   temperature: number; // -100 to 100
   waterAmount: number; // 0-100
-  nitrogen: number; // 0-80 -> 0-100 (Adjusted to total gas calculations)
-  oxygen: number; // 0-40 -> 0-100
-  co2: number; // 0-80 -> 0-100
+  nitrogen: number; // 0-100
+  oxygen: number; // 0-100
+  co2: number; // 0-100
   distance: number; // 0-100
   size: number; // 0-100
   species: Species;
   formationSpeed: number; // 0.5-10
+  
+  // A. 地質・内核
+  tectonicActivity: number;     // 0-100
+  coreRotationSpeed: number;    // 0-100
+  metallicCoreRatio: number;    // 0-100
+  mantleViscosity: number;      // 0-100
+  initialVolatiles: number;     // 0-100
+  // B. 宇宙環境・軌道
+  orbitalEccentricity: number;  // 0-100
+  axialTilt: number;            // 0-90
+  binaryStarInfluence: number;  // 0-100
+  satelliteCount: number;       // 0-5
+  asteroidBeltDensity: number;  // 0-100
+  // C. 大気・海洋
+  methaneConcentration: number; // 0-100
+  ozoneLayerThickness: number;  // 0-100
+  sulfurCompounds: number;      // 0-100
+  oceanSalinity: number;        // 0-100
+  cloudAlbedo: number;          // 0-100
+  // D. 文明・生態系
+  averageIntelligence: number;  // 0-100
+  societalOrientation: number;  // 0-100
+  biomeDiversity: number;       // 0-100
+  energyEfficiency: number;     // 0-100
+  spiritualityCulture: number;  // 0-100
 }
 
 export type PlanetType = 'HABITABLE' | 'ICE WORLD' | 'WATER WORLD' | 'GREEN PLANET' | 'DESERT PLANET' | 'FIRE PLANET' | 'GAS GIANT' | 'CRYSTAL PLANET' | 'GLOWING PLANET' | 'BLACK HOLE' | 'STAR/SUN';
@@ -69,18 +94,45 @@ export const calculatePlanetType = (params: PlanetParams): PlanetType => {
   return 'HABITABLE';
 };
 
-export const calculateStats = (params: PlanetParams, time: number) => {
-  const { temperature, waterAmount, nitrogen, oxygen, co2, size } = params;
+export const calculateStats = (params: PlanetParams, time: number, asteroidStrikes: number = 0) => {
+  const { 
+    temperature, waterAmount, nitrogen, oxygen, co2, size,
+    ozoneLayerThickness, cloudAlbedo, oceanSalinity, biomeDiversity, orbitalEccentricity,
+    tectonicActivity, initialVolatiles, sulfurCompounds, methaneConcentration, asteroidBeltDensity,
+    coreRotationSpeed, binaryStarInfluence, mantleViscosity,
+    averageIntelligence, societalOrientation, energyEfficiency, spiritualityCulture
+  } = params;
   
-  // Adjusted for -100 to +100 temperature scale, 20 is optimal
-  const tempScore = Math.max(0, 100 - Math.abs(temperature - 20) * 1.5);
-  const waterScore = 100 - Math.abs(waterAmount - 50) * 2;
-  const habitability = Math.max(0, Math.min(100, (tempScore + waterScore) / 2));
+  // Habitability
+  let tempScore = Math.max(0, 100 - Math.abs(temperature - 20) * 1.5);
+  let waterScore = 100 - Math.abs(waterAmount - 50) * 2;
+  let habitability = Math.max(0, Math.min(100, (tempScore + waterScore) / 2));
+  
+  habitability += (ozoneLayerThickness - 50) * 0.2;
+  habitability -= Math.abs(cloudAlbedo - 30) * 0.1;
+  habitability -= Math.abs(oceanSalinity - 35) * 0.05;
+  habitability += biomeDiversity * 0.1;
+  habitability -= orbitalEccentricity * 0.2;
+  habitability = Math.max(0, Math.min(100, habitability));
 
-  const lifeProb = Math.max(0, Math.min(100, habitability * (oxygen / 20)));
+  // Life Prob
+  let lifeProb = Math.max(0, Math.min(100, habitability * (oxygen / 20)));
+  lifeProb -= Math.abs(tectonicActivity - 45) * 0.15;
+  lifeProb += initialVolatiles * 0.1;
+  lifeProb -= sulfurCompounds * 0.3;
+  lifeProb += methaneConcentration < 30 ? methaneConcentration * 0.2 : -(methaneConcentration - 30) * 0.5;
+  lifeProb -= asteroidBeltDensity * 0.15;
+  lifeProb = Math.max(0, Math.min(100, lifeProb));
   
+  // ATM Stability
   const totalGas = nitrogen + oxygen + co2;
-  const atmStability = Math.max(0, Math.min(100, 100 - Math.abs(totalGas - 100)));
+  let atmStability = Math.max(0, Math.min(100, 100 - Math.abs(totalGas - 100)));
+  atmStability -= Math.abs(coreRotationSpeed - 45) * 0.2;
+  if (coreRotationSpeed < 15 || coreRotationSpeed > 85) atmStability -= 15;
+  atmStability -= sulfurCompounds * 0.4;
+  atmStability -= binaryStarInfluence * 0.3;
+  atmStability -= Math.abs(mantleViscosity - 50) * 0.1;
+  atmStability = Math.max(0, Math.min(100, atmStability));
   
   const gravity = size * 0.15;
 
@@ -89,9 +141,23 @@ export const calculateStats = (params: PlanetParams, time: number) => {
   else if (time >= 500 && time < 820) biomass = 1;
   else if (time >= 820 && time < 900) biomass = Math.max(0, 1 - (time - 820) / 80);
 
+  // Apply asteroid damage continuously (only if biomass exists)
+  if (biomass > 0) {
+    biomass -= asteroidStrikes * 0.05;
+    biomass = Math.max(0, biomass);
+  }
+
   let civLevel = 0;
   if (time >= 500 && time < 680) civLevel = (time - 500) / 180;
   else if (time >= 680 && time < 820) civLevel = Math.max(0, 1 - (time - 680) / 140);
+
+  if (civLevel > 0) {
+    civLevel += averageIntelligence * 0.003;
+    civLevel += societalOrientation * 0.002;
+    civLevel += energyEfficiency * 0.002;
+    civLevel += spiritualityCulture * 0.001;
+    civLevel = Math.max(0, Math.min(1, civLevel));
+  }
 
   return { habitability, lifeProb, atmStability, gravity, biomass, civLevel };
 };

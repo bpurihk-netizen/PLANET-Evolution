@@ -44,6 +44,9 @@ export interface PlanetState {
   lastParamChange: number;
   freezeTimer: number;
   gravityTimer: number;
+  nuclearTimer: number;
+  asteroidTimer: number;
+  asteroidStrikes: number;
   milestones: {
     ocean: boolean;
     life: boolean;
@@ -71,7 +74,7 @@ export interface GameState {
   dismissSuccessOverlay: (index: number) => void;
 }
 
-const SAVE_KEY = 'planet_evolution_save_v1';
+const SAVE_KEY = 'planet_evolution_save_v2';
 
 type SaveData = {
   planets: Array<Omit<PlanetState, never>>;
@@ -103,16 +106,138 @@ const defaultParams: PlanetParams = {
   size: 50,
   species: 'None',
   formationSpeed: 1.0,
+  tectonicActivity: 50,
+  coreRotationSpeed: 50,
+  metallicCoreRatio: 50,
+  mantleViscosity: 50,
+  initialVolatiles: 50,
+  orbitalEccentricity: 10,
+  axialTilt: 23,
+  binaryStarInfluence: 0,
+  satelliteCount: 1,
+  asteroidBeltDensity: 20,
+  methaneConcentration: 10,
+  ozoneLayerThickness: 50,
+  sulfurCompounds: 5,
+  oceanSalinity: 35,
+  cloudAlbedo: 30,
+  averageIntelligence: 50,
+  societalOrientation: 50,
+  biomeDiversity: 50,
+  energyEfficiency: 30,
+  spiritualityCulture: 20,
 };
 
-const createPlanet = (id: number): PlanetState => {
+const createPlanet = (id: number, useRandom: boolean = false): PlanetState => {
   const time = id * 200; // Offset initial times so they look distinct
-  const type = calculatePlanetType(defaultParams);
-  const stats = calculateStats(defaultParams, time);
+  
+  let params: PlanetParams = { ...defaultParams };
+
+  if (useRandom) {
+    const failureBias = Math.floor(Math.random() * 5); // 0-4
+    
+    // First, completely randomize everything to give an unstable starting point
+    params = {
+      ...params,
+      temperature: -50 + Math.random() * 120,
+      waterAmount: Math.random() * 100,
+      nitrogen: Math.random() * 100,
+      oxygen: Math.random() * 50,
+      co2: Math.random() * 100,
+      distance: 10 + Math.random() * 80,
+      size: 20 + Math.random() * 60,
+      tectonicActivity: Math.random() * 100,
+      coreRotationSpeed: Math.random() * 100,
+      metallicCoreRatio: Math.random() * 100,
+      mantleViscosity: Math.random() * 100,
+      initialVolatiles: Math.random() * 100,
+      orbitalEccentricity: Math.random() * 100,
+      axialTilt: Math.random() * 90,
+      binaryStarInfluence: Math.random() * 100,
+      satelliteCount: Math.floor(Math.random() * 6),
+      asteroidBeltDensity: Math.random() * 100,
+      methaneConcentration: Math.random() * 100,
+      ozoneLayerThickness: Math.random() * 100,
+      sulfurCompounds: Math.random() * 100,
+      oceanSalinity: Math.random() * 100,
+      cloudAlbedo: Math.random() * 100,
+      averageIntelligence: Math.random() * 100,
+      societalOrientation: Math.random() * 100,
+      biomeDiversity: Math.random() * 100,
+      energyEfficiency: Math.random() * 100,
+      spiritualityCulture: Math.random() * 100,
+    };
+
+    switch (failureBias) {
+      case 0: // Venus Collapse
+        params.temperature = 65 + Math.random() * 25;
+        params.waterAmount = Math.random() * 30;
+        params.nitrogen = 20 + Math.random() * 40;
+        params.oxygen = Math.random() * 10;
+        params.co2 = 70 + Math.random() * 25;
+        params.distance = 15 + Math.random() * 20;
+        params.size = 30 + Math.random() * 60;
+        params.methaneConcentration = 40 + Math.random() * 40;
+        params.cloudAlbedo = Math.random() * 20;
+        break;
+      case 1: // Ecosystem Collapse
+        params.temperature = 40 + Math.random() * 30;
+        params.waterAmount = 30 + Math.random() * 40;
+        params.nitrogen = 40 + Math.random() * 30;
+        params.oxygen = Math.random() * 8;
+        params.co2 = 50 + Math.random() * 40;
+        params.distance = 40 + Math.random() * 30;
+        params.size = 40 + Math.random() * 40;
+        params.ozoneLayerThickness = Math.random() * 15;
+        params.sulfurCompounds = 50 + Math.random() * 40;
+        params.biomeDiversity = Math.random() * 20;
+        break;
+      case 2: // Nuclear Collapse (Induces neglect)
+        params.temperature = 10 + Math.random() * 40;
+        params.waterAmount = 30 + Math.random() * 40;
+        params.nitrogen = 50 + Math.random() * 30;
+        params.oxygen = 15 + Math.random() * 20;
+        params.co2 = 20 + Math.random() * 30;
+        params.distance = 40 + Math.random() * 20;
+        params.size = 40 + Math.random() * 40;
+        params.averageIntelligence = 70 + Math.random() * 28;
+        params.societalOrientation = Math.random() * 20;
+        params.asteroidBeltDensity = 50 + Math.random() * 40;
+        break;
+      case 3: // Thermal Death (Freeze)
+        params.temperature = -90 + Math.random() * 30;
+        params.waterAmount = Math.random() * 15;
+        params.nitrogen = 30 + Math.random() * 50;
+        params.oxygen = Math.random() * 15;
+        params.co2 = Math.random() * 20;
+        params.distance = 75 + Math.random() * 20;
+        params.size = 20 + Math.random() * 50;
+        params.methaneConcentration = Math.random() * 10;
+        params.cloudAlbedo = 60 + Math.random() * 35;
+        params.binaryStarInfluence = Math.random() * 15;
+        break;
+      case 4: // Gravity Collapse
+        params.temperature = -20 + Math.random() * 60;
+        params.waterAmount = 10 + Math.random() * 40;
+        params.nitrogen = 20 + Math.random() * 50;
+        params.oxygen = Math.random() * 20;
+        params.co2 = 10 + Math.random() * 50;
+        params.distance = 30 + Math.random() * 40;
+        params.size = 85 + Math.random() * 13;
+        params.metallicCoreRatio = 70 + Math.random() * 28;
+        params.tectonicActivity = 70 + Math.random() * 28;
+        params.mantleViscosity = 10 + Math.random() * 20;
+        break;
+    }
+  }
+
+  const type = calculatePlanetType(params);
+  const stats = calculateStats(params, time, 0);
+
   return {
     id,
     name: `惑星0${id + 1}`,
-    params: { ...defaultParams },
+    params,
     time,
     isPaused: false,
     type,
@@ -124,9 +249,12 @@ const createPlanet = (id: number): PlanetState => {
     failureType: null,
     venusTimer: 0,
     ecoTimer: 0,
-    lastParamChange: Date.now(),
     freezeTimer: 0,
     gravityTimer: 0,
+    nuclearTimer: 0,
+    asteroidTimer: 0,
+    asteroidStrikes: 0,
+    lastParamChange: Date.now(),
     milestones: {
       ocean: false,
       life: false,
@@ -147,8 +275,10 @@ export function useGameState(): GameState {
     if (save) {
       return save.planets.map(p => ({ ...p, lastParamChange: Date.now() }));
     }
-    return [createPlanet(0), createPlanet(1), createPlanet(2)];
+    // No save data -> first boot -> create random unstable planets
+    return [createPlanet(0, true), createPlanet(1, true), createPlanet(2, true)];
   });
+  
   const [activeIndex, setActiveIndex] = useState(() => initialSave.current?.activeIndex ?? 0);
   const [globalSpeed, setGlobalSpeed] = useState(() => initialSave.current?.globalSpeed ?? 1);
   const [zoomLevel, setZoomLevel] = useState<0|1|2>(() => (initialSave.current?.zoomLevel as 0|1|2) ?? 0);
@@ -193,29 +323,46 @@ export function useGameState(): GameState {
             newTime = 819;
           }
 
-          const newStats = calculateStats(p.params, newTime);
+          const newStats = calculateStats(p.params, newTime, p.asteroidStrikes);
 
           let newFailure = p.failureType;
           let newVenusTimer = p.venusTimer;
           let newEcoTimer = p.ecoTimer;
           let newFreezeTimer = p.freezeTimer;
           let newGravityTimer = p.gravityTimer;
+          let newNuclearTimer = p.nuclearTimer || 0;
+          let newAsteroidTimer = p.asteroidTimer || 0;
+          let newAsteroidStrikes = p.asteroidStrikes || 0;
 
           if (!newFailure) {
-            if (p.params.co2 > 85 && p.params.temperature > 80) newVenusTimer += dt; else newVenusTimer = 0;
+            let venusSpeed = p.params.methaneConcentration > 50 ? 1.5 : 1.0;
+            if (p.params.co2 > 85 && p.params.temperature > 80) newVenusTimer += dt * venusSpeed; else newVenusTimer = 0;
             if (newVenusTimer > 90) newFailure = 'venus';
 
             if (newTime >= 500 && p.params.oxygen < 8 && newStats.biomass < 0.05) newEcoTimer += dt; else newEcoTimer = 0;
             if (newEcoTimer > 60) newFailure = 'ecosystem';
 
-            const idleTime = (Date.now() - p.lastParamChange) / 1000;
-            if (newTime >= 680 && idleTime > 120) newFailure = 'nuclear';
+            if (newTime >= 680) {
+              let nuclearSpeed = (p.params.societalOrientation < 25 && p.params.averageIntelligence > 70) ? 1.5 : 1.0;
+              newNuclearTimer += dt * nuclearSpeed;
+              if (newNuclearTimer > 120) newFailure = 'nuclear';
+            } else {
+              newNuclearTimer = 0;
+            }
 
             if (newTime >= 320 && p.params.temperature < -60 && p.params.distance > 85) newFreezeTimer += dt; else newFreezeTimer = 0;
             if (newFreezeTimer > 120) newFailure = 'freeze';
 
             if (newTime <= 180 && p.params.size > 88) newGravityTimer += dt; else newGravityTimer = 0;
             if (newGravityTimer > 60) newFailure = 'gravity';
+
+            if (p.params.asteroidBeltDensity > 60 && newTime >= 320) {
+              newAsteroidTimer += dt;
+              if (newAsteroidTimer > 200) { // On average 1 strike every 200 real-time seconds = 0.5% per sec
+                 newAsteroidTimer = 0;
+                 newAsteroidStrikes += 1;
+              }
+            }
 
             if (newFailure && newTime < 820) {
               newTime = 820; // jump to collapse
@@ -277,6 +424,9 @@ export function useGameState(): GameState {
             ecoTimer: newEcoTimer,
             freezeTimer: newFreezeTimer,
             gravityTimer: newGravityTimer,
+            nuclearTimer: newNuclearTimer,
+            asteroidTimer: newAsteroidTimer,
+            asteroidStrikes: newAsteroidStrikes,
             transformation: newTransformation,
             transformationBlend: newTransformationBlend,
             milestones: newMilestones,
@@ -321,7 +471,7 @@ export function useGameState(): GameState {
                 size: clamp(parent.params.size + offset(), 0, 100),
               };
               
-              const newPlanet = createPlanet(nextPlanets[targetIndex].id);
+              const newPlanet = createPlanet(nextPlanets[targetIndex].id, false); // No random failure bias for offspring
               newPlanet.params = newParams;
               newPlanet.name = `${parent.name}の子孫 🌱`;
               newPlanet.time = 0;
@@ -348,7 +498,7 @@ export function useGameState(): GameState {
       const p = [...prev];
       const nextParams = { ...p[index].params, ...newParams };
       const newType = calculatePlanetType(nextParams);
-      const newStats = calculateStats(nextParams, p[index].time);
+      const newStats = calculateStats(nextParams, p[index].time, p[index].asteroidStrikes);
       
       let prevType = p[index].type;
       let blend = p[index].typeBlend;
@@ -365,7 +515,8 @@ export function useGameState(): GameState {
         stats: newStats,
         prevType,
         typeBlend: blend,
-        lastParamChange: Date.now()
+        lastParamChange: Date.now(),
+        nuclearTimer: 0 // Reset neglect timer on interaction
       };
       return p;
     });
@@ -382,7 +533,7 @@ export function useGameState(): GameState {
   const togglePause = (index: number) => {
     setPlanets(prev => {
        const p = [...prev];
-       p[index] = { ...p[index], isPaused: !p[index].isPaused };
+       p[index] = { ...p[index], isPaused: !p[index].isPaused, lastParamChange: Date.now(), nuclearTimer: 0 };
        return p;
     });
   };
@@ -390,7 +541,7 @@ export function useGameState(): GameState {
   const resetPlanet = (index: number) => {
     setPlanets(prev => {
        const p = [...prev];
-       p[index] = createPlanet(index);
+       p[index] = createPlanet(index, true); // Generate new random biased planet
        return p;
     });
   };
@@ -399,7 +550,7 @@ export function useGameState(): GameState {
     try {
       localStorage.removeItem(SAVE_KEY);
     } catch (e) {}
-    setPlanets([createPlanet(0), createPlanet(1), createPlanet(2)]);
+    setPlanets([createPlanet(0, true), createPlanet(1, true), createPlanet(2, true)]);
     setActiveIndex(0);
     setGlobalSpeed(1);
     setZoomLevel(0);

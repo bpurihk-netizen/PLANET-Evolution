@@ -13,12 +13,6 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const timeRemaining = Math.max(0, phaseInfo.end - p.time);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const i = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(i);
-  }, []);
 
   let lifeProgress = p.stats.biomass * 100;
   let civProgress = p.stats.civLevel * 100;
@@ -30,7 +24,7 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const tName = currentT ? currentT.name : '未知の形態';
   const tEmoji = EMOJI_MAP[p.transformation] || '🌍';
 
-  const nuclearIdle = (now - p.lastParamChange) / 1000;
+  const nuclearTimer = p.nuclearTimer || 0;
 
   if (isCollapse) {
     let msg = '';
@@ -153,9 +147,9 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
               <span>⚠️</span> <span>凍結警告: あと{(120 - p.freezeTimer).toFixed(0)}秒で崩壊</span>
             </div>
           )}
-          {nuclearIdle > 80 && (
+          {nuclearTimer > 80 && (
              <div className="bg-gray-900/80 border border-gray-500 p-2 rounded text-gray-100 text-sm animate-pulse flex items-center gap-2">
-              <span>💀</span> <span>放置警告: あと{(120 - nuclearIdle).toFixed(0)}秒で核戦争崩壊</span>
+              <span>💀</span> <span>放置警告: あと{(120 - nuclearTimer).toFixed(0)}秒で核戦争崩壊</span>
             </div>
           )}
         </div>

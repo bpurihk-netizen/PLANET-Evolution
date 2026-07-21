@@ -5,6 +5,7 @@ import { GameState, PlanetState } from '../hooks/useGameState';
 import { PLANET_TYPE_IDS } from '../hooks/usePlanetParams';
 import { SurfaceAnimations, SurfaceLabels } from './SurfaceAnimations';
 import { transformations, FAILURE_TRANSFORMATIONS } from '../data/transformations';
+import { Satellites } from './Satellites';
 
 interface PlanetProps {
   planetState: PlanetState;
@@ -537,6 +538,15 @@ export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clipp
           />
         </mesh>
       )}
+
+      {/* 衛星の描画 */}
+      <Satellites 
+        satelliteCount={p.params.satelliteCount}
+        planetRadius={2.0} // Base sphere radius inside this group
+        planetPosition={[0, 0, 0]}
+        isActive={isActive}
+        zoomLevel={gameState.zoomLevel}
+      />
     </group>
   );
 };
