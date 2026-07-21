@@ -19,69 +19,237 @@ const EFFECT_IDS: Record<string, number> = {
   retro: 1, ink: 2, cyber: 3, ghost: 4, angel: 5, fractal: 6, flower: 7, whitehole: 8, cracked: 9
 };
 
+const MORPH_TYPE_IDS: Record<string, number> = {
+  mobius:    1,
+  ghost:     2,
+  fractal:   3,
+  slime:     4,
+  retro:     5,
+  comic:     6,
+  ink:       7,
+  sandart:   8,
+  cyber:     9,
+  hive:      10,
+  spore:     11,
+  jungle:    12,
+  cracked:   13,
+  flower:    14,
+  ark:       15,
+  dyson:     16,
+  angel:     17,  // 球体はそのまま、別メッシュ(ハロー)を表示
+  steampunk: 18,  // 球体はそのまま、別メッシュ(歯車リング)を表示
+  whitehole: 19,  // 球体はそのまま、発光強化
+};
+
 const planetVertexShader = `
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vPosition;
 uniform float time;
 uniform float phaseTime;
+uniform int   uMorphType;
+uniform float uMorphBlend;
 
-// Simplex 3D Noise 
+// ---- Simplex Noise (既存のまま) ----
 vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
 vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
-
-float snoise(vec3 v){ 
-  const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
-  const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
-
-  vec3 i  = floor(v + dot(v, C.yyy) );
-  vec3 x0 = v - i + dot(i, C.xxx) ;
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
   vec3 g = step(x0.yzx, x0.xyz);
   vec3 l = 1.0 - g;
-  vec3 i1 = min( g.xyz, l.zxy );
-  vec3 i2 = max( g.xyz, l.zxy );
-  vec3 x1 = x0 - i1 + 1.0 * C.xxx;
-  vec3 x2 = x0 - i2 + 2.0 * C.xxx;
-  vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
-  i = mod(i, 289.0 ); 
-  vec4 p = permute( permute( permute( i.z + vec4(0.0, i1.z, i2.z, 1.0 )) + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
-  float n_ = 1.0/7.0; 
-  vec3  ns = n_ * D.wyz - D.xzx;
-  vec4 j = p - 49.0 * floor(p * ns.z *ns.z);  
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + 2.0*C.xxx;
+  vec3 x3 = x0 - 1.0 + 3.0*C.xxx;
+  i = mod(i, 289.0);
+  vec4 p = permute(permute(permute(
+    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 1.0/7.0;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
   vec4 x_ = floor(j * ns.z);
-  vec4 y_ = floor(j - 7.0 * x_ );    
-  vec4 x = x_ *ns.x + ns.yyyy;
-  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
   vec4 h = 1.0 - abs(x) - abs(y);
-  vec4 b0 = vec4( x.xy, y.xy );
-  vec4 b1 = vec4( x.zw, y.zw );
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
   vec4 s0 = floor(b0)*2.0 + 1.0;
   vec4 s1 = floor(b1)*2.0 + 1.0;
   vec4 sh = -step(h, vec4(0.0));
-  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
-  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
-  vec3 p0 = vec3(a0.xy,h.x);
-  vec3 p1 = vec3(a0.zw,h.y);
-  vec3 p2 = vec3(a1.xy,h.z);
-  vec3 p3 = vec3(a1.zw,h.w);
-  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
   p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  vec4 m = max(0.6 - vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)), 0.0);
   m = m * m;
-  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+  return 42.0 * dot(m*m, vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}
+// ---- 形状ごとのモーフ関数（全て球体の position を受け取り変形後 position を返す） ----
+
+// 1. メビウスの輪: 輪形状にY軸まわりで捻る
+vec3 morphMobius(vec3 pos, float t) {
+  float angle = atan(pos.z, pos.x);           // 0 to 2PI azimuthal
+  float twist = angle * 1.0;                  // 1回転の捻り
+  float cosT = cos(twist);
+  float sinT = sin(twist);
+  // Yを潰して半径を広げ、捻りを加える
+  vec3 ring = vec3(pos.x * 1.8, pos.y * 0.2, pos.z * 1.8); // 扁平化
+  float rx = ring.x * cosT - ring.y * sinT;
+  float ry = ring.x * sinT + ring.y * cosT;
+  return mix(pos, vec3(rx, ry, ring.z), t);
 }
 
+// 2. ゴースト: 時間で揺れる不定形ブロブ
+vec3 morphGhost(vec3 pos, float t, float time) {
+  float n = snoise(pos * 1.5 + vec3(time * 0.3, time * 0.2, time * 0.1));
+  float n2 = snoise(pos * 3.0 + vec3(time * -0.2, time * 0.4, 0.0));
+  vec3 blob = pos + normal * (n * 0.5 + n2 * 0.3);
+  // 下部を少し引き伸ばす（幽霊の裾）
+  blob.y += -0.2 * (1.0 - pos.y);
+  return mix(pos, blob, t);
+}
+
+// 3. フラクタル結晶: snoise の峰を棘として突出させる
+vec3 morphFractal(vec3 pos, float t) {
+  float n = snoise(pos * 4.0);
+  float spike = smoothstep(0.3, 0.8, n) * 0.9;
+  return mix(pos, pos * (1.0 + spike), t);
+}
+
+// 4. 流体スライム: ゆっくりしたアメーバ変形
+vec3 morphSlime(vec3 pos, float t, float time) {
+  float n = snoise(pos * 1.2 + time * 0.15);
+  float n2 = snoise(pos * 0.8 - time * 0.1);
+  vec3 blob = pos * (1.0 + n * 0.35 + n2 * 0.2);
+  return mix(pos, blob, t);
+}
+
+// 5. レトロゲーム: ボクセル化（グリッドに量子化）
+vec3 morphRetro(vec3 pos, float t) {
+  float grid = 0.28;
+  vec3 voxel = round(pos / grid) * grid;
+  return mix(pos, voxel, t);
+}
+
+// 6. アメコミ・ポップアート: 星形（赤道上で突起）
+vec3 morphComic(vec3 pos, float t) {
+  float azimuth = atan(pos.z, pos.x);
+  float spikes = 6.0;
+  float starFactor = 1.0 + 0.4 * sin(azimuth * spikes) * (1.0 - abs(pos.y));
+  return mix(pos, pos * starFactor, t);
+}
+
+// 7. 水墨画・和紙: 薄い円盤状に潰す
+vec3 morphInk(vec3 pos, float t) {
+  vec3 disc = vec3(pos.x * 1.3, pos.y * 0.25, pos.z * 1.3);
+  return mix(pos, disc, t);
+}
+
+// 8. サンドアート: 扁平な楕円体（砂丘のウェーブを追加）
+vec3 morphSandart(vec3 pos, float t) {
+  float wave = snoise(pos * 3.0) * 0.15;
+  vec3 oblate = vec3(pos.x * 1.25, pos.y * 0.55 + wave, pos.z * 1.25);
+  return mix(pos, oblate, t);
+}
+
+// 9. サイバーグリッド: 立方体に近づける
+vec3 morphCyber(vec3 pos, float t) {
+  // 球の法線方向をBOX面法線に寄せる
+  vec3 absPos = abs(pos);
+  float maxC = max(absPos.x, max(absPos.y, absPos.z));
+  vec3 boxPos = pos / maxC * 1.1; // 単位立方体の面へ
+  return mix(pos, boxPos, t);
+}
+
+// 10. インセクト・ハイヴ: 六角形の細胞バンプ
+vec3 morphHive(vec3 pos, float t) {
+  float hex = abs(sin(pos.x * 7.0) * cos(pos.z * 7.0) * sin(pos.y * 5.0));
+  vec3 bumpy = pos + normal * hex * 0.25;
+  return mix(pos, bumpy, t);
+}
+
+// 11. 巨大菌糸類・胞子: 触手状の突起
+vec3 morphSpore(vec3 pos, float t, float time) {
+  float tentacle = smoothstep(0.6, 0.9, snoise(pos * 5.0 + time * 0.1));
+  vec3 sprouted = pos + normal * tentacle * 0.7;
+  return mix(pos, sprouted, t);
+}
+
+// 12. 食虫植物の楽園: ランダムなツタの盛り上がり
+vec3 morphJungle(vec3 pos, float t, float time) {
+  float vine = smoothstep(0.4, 0.7, snoise(pos * 4.0)) * 0.4;
+  float vine2 = smoothstep(0.5, 0.8, snoise(pos * 6.0 + vec3(10.0))) * 0.3;
+  return mix(pos, pos + normal * (vine + vine2), t);
+}
+
+// 13. 砕けかけパズル: 断片化した破砕変位
+vec3 morphCracked(vec3 pos, float t) {
+  float chunk = floor(snoise(pos * 8.0) * 3.0) / 3.0;
+  vec3 frag = pos + normal * chunk * 0.35;
+  return mix(pos, frag, t);
+}
+
+// 14. ギャラクシー・フラワー: 花びら状の波紋
+vec3 morphFlower(vec3 pos, float t, float time) {
+  float petals = 5.0;
+  float azimuth = atan(pos.z, pos.x);
+  float petal = sin(azimuth * petals + time * 0.5) * 0.5 + 0.5;
+  float rFactor = 1.0 + petal * 0.4 * (1.0 - abs(pos.y));
+  return mix(pos, pos * rFactor, t);
+}
+
+// 15. ノアの箱舟: Z軸に伸びた楕円体（艦船型）
+vec3 morphArk(vec3 pos, float t) {
+  vec3 elongated = vec3(pos.x * 0.75, pos.y * 0.75, pos.z * 1.7);
+  return mix(pos, elongated, t);
+}
+
+// 16: ダイソン / 17: エンジェル / 18: スチームパンク / 19: ホワイトホール
+// → 球体形状はそのまま（別メッシュで追加表現）
+
+// ---- 通常フォーメーションフェーズの変位（既存） ----
 void main() {
   vUv = uv;
-  vNormal = normalize(normalMatrix * normal);
-  
   vec3 pos = position;
+
+  // 1. 通常惑星形成フェーズの変位
   float n = snoise(pos * 2.0 + time * 0.2);
-  
   float formPhase = smoothstep(15.0, 30.0, phaseTime) * (1.0 - smoothstep(60.0, 80.0, phaseTime));
-  float disp = n * 0.2 * formPhase;
-  
-  pos += normal * disp;
+  pos += normal * n * 0.2 * formPhase;
+
+  // 2. Transformation モーフ
+  if (uMorphBlend > 0.001) {
+    vec3 morphed = pos;
+    if (uMorphType == 1)  morphed = morphMobius(pos, uMorphBlend);
+    else if (uMorphType == 2)  morphed = morphGhost(pos, uMorphBlend, time);
+    else if (uMorphType == 3)  morphed = morphFractal(pos, uMorphBlend);
+    else if (uMorphType == 4)  morphed = morphSlime(pos, uMorphBlend, time);
+    else if (uMorphType == 5)  morphed = morphRetro(pos, uMorphBlend);
+    else if (uMorphType == 6)  morphed = morphComic(pos, uMorphBlend);
+    else if (uMorphType == 7)  morphed = morphInk(pos, uMorphBlend);
+    else if (uMorphType == 8)  morphed = morphSandart(pos, uMorphBlend);
+    else if (uMorphType == 9)  morphed = morphCyber(pos, uMorphBlend);
+    else if (uMorphType == 10) morphed = morphHive(pos, uMorphBlend);
+    else if (uMorphType == 11) morphed = morphSpore(pos, uMorphBlend, time);
+    else if (uMorphType == 12) morphed = morphJungle(pos, uMorphBlend, time);
+    else if (uMorphType == 13) morphed = morphCracked(pos, uMorphBlend);
+    else if (uMorphType == 14) morphed = morphFlower(pos, uMorphBlend, time);
+    else if (uMorphType == 15) morphed = morphArk(pos, uMorphBlend);
+    pos = morphed;
+  }
+
+  vNormal = normalize(normalMatrix * normal);
   vPosition = pos;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 }
@@ -427,7 +595,9 @@ export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clipp
     uTransformColor: { value: new THREE.Color(1, 1, 1) },
     uTransformGlow: { value: new THREE.Color(0, 0, 0) },
     uTransformBlend: { value: 0.0 },
-    uTransformType: { value: 0 }
+    uTransformType: { value: 0 },
+    uMorphType: { value: 0 },
+    uMorphBlend: { value: 0.0 }
   }), []);
 
   const atmosUniforms = useMemo(() => ({
@@ -457,6 +627,10 @@ export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clipp
       planetMaterialRef.current.uniforms.uTransformGlow.value.setRGB(tGlow[0], tGlow[1], tGlow[2]);
       planetMaterialRef.current.uniforms.uTransformBlend.value = currentP.transformationBlend;
       planetMaterialRef.current.uniforms.uTransformType.value = effId;
+      
+      const morphId = MORPH_TYPE_IDS[currentP.transformation] ?? 0;
+      planetMaterialRef.current.uniforms.uMorphType.value = morphId;
+      planetMaterialRef.current.uniforms.uMorphBlend.value = currentP.transformationBlend;
     }
     
     if (atmosMaterialRef.current) {
@@ -523,6 +697,93 @@ export const Planet: React.FC<PlanetProps> = ({ planetState: p, gameState, clipp
         />
       </mesh>
       
+      {/* Angel Halo */}
+      {p.transformation === 'angel' && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[2.6, 0.12, 16, 80]} />
+          <meshStandardMaterial
+            color={new THREE.Color(1.0, 0.95, 0.8)}
+            emissive={new THREE.Color(1.0, 1.0, 0.9)}
+            emissiveIntensity={2.0 * p.transformationBlend}
+            transparent
+            opacity={p.transformationBlend * 0.95}
+            roughness={0.1}
+            metalness={0.5}
+          />
+        </mesh>
+      )}
+
+      {/* Steampunk Gear Rings */}
+      {p.transformation === 'steampunk' && (
+        <>
+          {/* 大歯車リング */}
+          <mesh rotation={[Math.PI / 2.5, 0, 0]}>
+            <torusGeometry args={[2.5, 0.08, 8, 24]} />
+            <meshStandardMaterial
+              color={new THREE.Color(0.6, 0.4, 0.2)}
+              emissive={new THREE.Color(1.0, 0.7, 0.2)}
+              emissiveIntensity={0.8 * p.transformationBlend}
+              roughness={0.3}
+              metalness={0.9}
+              transparent
+              opacity={p.transformationBlend}
+            />
+          </mesh>
+          {/* 中歯車リング */}
+          <mesh rotation={[-Math.PI / 3, Math.PI / 4, 0]}>
+            <torusGeometry args={[2.2, 0.06, 8, 20]} />
+            <meshStandardMaterial
+              color={new THREE.Color(0.5, 0.35, 0.15)}
+              emissive={new THREE.Color(0.8, 0.5, 0.1)}
+              emissiveIntensity={0.6 * p.transformationBlend}
+              roughness={0.4}
+              metalness={0.85}
+              transparent
+              opacity={p.transformationBlend * 0.9}
+            />
+          </mesh>
+          {/* 小歯車リング */}
+          <mesh rotation={[Math.PI / 6, -Math.PI / 3, 0]}>
+            <torusGeometry args={[1.9, 0.05, 8, 16]} />
+            <meshStandardMaterial
+              color={new THREE.Color(0.4, 0.3, 0.1)}
+              emissive={new THREE.Color(0.6, 0.4, 0.1)}
+              emissiveIntensity={0.5 * p.transformationBlend}
+              roughness={0.5}
+              metalness={0.8}
+              transparent
+              opacity={p.transformationBlend * 0.85}
+            />
+          </mesh>
+        </>
+      )}
+
+      {/* Dyson Inner Rings */}
+      {p.transformation === 'dyson' && (
+        <>
+          <mesh>
+            <torusGeometry args={[1.5, 0.05, 8, 64]} />
+            <meshStandardMaterial
+              color={new THREE.Color(0.6, 0.8, 1.0)}
+              emissive={new THREE.Color(0.4, 0.7, 1.0)}
+              emissiveIntensity={2.0 * p.transformationBlend}
+              transparent
+              opacity={p.transformationBlend * 0.9}
+            />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[1.2, 0.04, 8, 64]} />
+            <meshStandardMaterial
+              color={new THREE.Color(0.8, 0.9, 1.0)}
+              emissive={new THREE.Color(0.6, 0.9, 1.0)}
+              emissiveIntensity={1.5 * p.transformationBlend}
+              transparent
+              opacity={p.transformationBlend * 0.85}
+            />
+          </mesh>
+        </>
+      )}
+
       {isActive && gameState.zoomLevel === 1 && <SurfaceLabels p={p} />}
 
       {isActive && (
