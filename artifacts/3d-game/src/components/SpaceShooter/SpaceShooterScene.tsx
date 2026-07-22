@@ -11,6 +11,9 @@ import { PowerCapsules } from './PowerCapsules';
 import { OptionOrbs } from './OptionOrbs';
 import { BossShip } from './BossShip';
 import { useShooterState } from '../../hooks/useShooterState';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { BlendFunction } from 'postprocessing';
+import { ExplosionSystem, Explosion } from './ExplosionSystem';
 
 // ゲームループコンポーネント（Canvas内）
 const GameLoop: React.FC<{ tick: (delta: number) => void }> = ({ tick }) => {
@@ -41,6 +44,7 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
   startRank, temperature, waterAmount, co2, transformation
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const explosionsRef = useRef<Explosion[]>([]);
 
   const {
     playerPosRef,
@@ -65,11 +69,28 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
     optionOrb2PosRef,
     bossRef,
     bossActive,
-    bossHP
+    bossHP,
+    onKillRef
   } = useShooterState({ 
     onVictory, onDefeat, civLevel, metallicCoreRatio,
     energyEfficiency, averageIntelligence, satelliteCount, startRank
   });
+
+  useEffect(() => {
+    onKillRef.current = (pos, type) => {
+      if (explosionsRef.current.length >= 10) explosionsRef.current.shift();
+      explosionsRef.current.push({
+        id: Date.now() + Math.random(),
+        pos,
+        time: 0,
+        color: type === 'scout' ? new THREE.Color(1, 0.3, 0.1)
+             : type === 'heavy' ? new THREE.Color(1, 0.5, 0.1)
+             : new THREE.Color(1, 0.8, 0.1),
+        scale: type === 'heavy' ? 1.8 : type === 'disc' ? 1.3 : 1.0,
+        isDead: false,
+      });
+    };
+  }, [onKillRef]);
 
   // タッチイベント登録
   useEffect(() => {
@@ -109,10 +130,20 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
         <BossShip bossRef={bossRef} />
         {/* killCount変化時に再レンダー → 敵配列が更新される */}
         <EnemyShips key={killCount} enemiesRef={enemiesRef} />
+        <ExplosionSystem explosionsRef={explosionsRef} />
         <Projectiles bulletsRef={bulletsRef} />
         <AsteroidField asteroidsRef={asteroidsRef} />
         <PowerCapsules capsulesRef={powerCapsules} count={killCount} />
-        <OptionOrbs orb1Ref={optionOrb1PosRef} orb2Ref={optionOrb2PosRef} powerRank={powerRank} />
+        <OptionOrbs orb1Ref={optionOrb1PosRef} orb2Ref={optionOrb2PosRef} playerPosRef={playerPosRef} powerRank={powerRank} />
+        
+        <EffectComposer>
+          <Bloom
+            luminanceThreshold={0.4}
+            luminanceSmoothing={0.9}
+            intensity={1.2}
+            blendFunction={BlendFunction.ADD}
+          />
+        </EffectComposer>
       </Canvas>
 
       {/* HTML HUD オーバーレイ */}

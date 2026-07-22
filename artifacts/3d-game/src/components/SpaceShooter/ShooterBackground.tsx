@@ -2,6 +2,87 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
+const VERTEX_SHADER = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const FRAGMENT_SHADER = `
+uniform float uTime;
+uniform vec3 uColor1;   // ネビュラ主色
+uniform vec3 uColor2;   // ネビュラ副色
+uniform vec3 uColor3;   // 星雲中心色（明るい部分）
+uniform float uSpeed;   // スクロール速度係数
+
+varying vec2 vUv;
+
+// ハッシュ関数
+float hash(vec2 p) {
+  p = fract(p * vec2(234.34, 435.345));
+  p += dot(p, p + 34.23);
+  return fract(p.x * p.y);
+}
+
+// 2D ノイズ
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash(i), hash(i + vec2(1,0)), f.x),
+    mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x),
+    f.y
+  );
+}
+
+// fBm (fractal Brownian motion)
+float fbm(vec2 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  float frequency = 1.0;
+  for (int i = 0; i < 5; i++) {
+    value += amplitude * noise(p * frequency);
+    frequency *= 2.1;
+    amplitude *= 0.48;
+  }
+  return value;
+}
+
+void main() {
+  vec2 uv = vUv;
+  // 縦スクロール（プレイヤーが前進する方向に合わせて上へ）
+  float scroll = uTime * uSpeed * 0.04;
+  
+  // 2層の fBm でガス雲を作る
+  float cloud1 = fbm(uv * 3.0 + vec2(scroll * 0.3, scroll));
+  float cloud2 = fbm(uv * 5.0 + vec2(-scroll * 0.2, scroll * 1.3) + vec2(3.7, 1.2));
+  
+  // ドメインワーピング（雲が渦を巻く）
+  vec2 warp = vec2(fbm(uv * 2.5 + scroll * 0.1), fbm(uv * 2.5 + vec2(5.2, 1.3) + scroll * 0.1));
+  float warpedCloud = fbm(uv * 4.0 + warp * 1.2 + scroll * 0.5);
+  
+  // 最終的なネビュラ密度
+  float nebula = cloud1 * 0.4 + cloud2 * 0.3 + warpedCloud * 0.3;
+  nebula = smoothstep(0.3, 0.8, nebula);
+  
+  // 色のブレンド（密度に応じて）
+  vec3 col = mix(uColor1 * 0.15, uColor2 * 0.4, nebula);
+  col = mix(col, uColor3 * 0.7, nebula * nebula);
+  
+  // 周辺を暗くして中心を明るく（ビネット）
+  float vignette = 1.0 - length((vUv - 0.5) * 1.4);
+  col *= smoothstep(0.0, 0.6, vignette);
+  
+  // アルファ: 宇宙黒をベースに、ネビュラ部分だけ可視
+  float alpha = nebula * 0.55 * vignette;
+  
+  gl_FragColor = vec4(col, alpha);
+}
+`;
+
 // 背景テーマを決定する関数
 const getBackgroundTheme = (temperature: number, waterAmount: number, co2: number, transformation: string) => {
   // 変形形態ごとの特別背景
@@ -94,7 +175,42 @@ export const ShooterBackground: React.FC<ShooterBackgroundProps> = ({
     return geo;
   }, [theme]);
 
+  // ShaderMaterial を useMemo で生成
+  const nebulaMat = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: VERTEX_SHADER,
+    fragmentShader: FRAGMENT_SHADER,
+    uniforms: {
+      uTime: { value: 0 },
+      uColor1: { value: theme.nebulaColor1 },
+      uColor2: { value: theme.nebulaColor2 },
+      uColor3: { value: new THREE.Color(1.0, 1.0, 1.0).multiplyScalar(0.3) },
+      uSpeed: { value: theme.starSpeed },
+    },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  }), [theme]);
+
+  // 第2ネビュラプレーン用の別の uniforms を持つマテリアル
+  const nebulaMat2 = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: VERTEX_SHADER,
+    fragmentShader: FRAGMENT_SHADER,
+    uniforms: {
+      uTime: { value: 0 },
+      uColor1: { value: theme.nebulaColor2 }, // 順序を逆にして変化をつける
+      uColor2: { value: theme.nebulaColor1 },
+      uColor3: { value: new THREE.Color(1.0, 1.0, 1.0).multiplyScalar(0.3) },
+      uSpeed: { value: theme.starSpeed },
+    },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  }), [theme]);
+
   useFrame((_, delta) => {
+    nebulaMat.uniforms.uTime.value += delta;
+    nebulaMat2.uniforms.uTime.value += delta;
+    
     if (starsRef.current) {
       const positions = starsRef.current.geometry.attributes.position.array as Float32Array;
       for (let i = 0; i < positions.length; i += 3) {
@@ -110,23 +226,14 @@ export const ShooterBackground: React.FC<ShooterBackgroundProps> = ({
       <points ref={starsRef} geometry={starGeo}>
         <pointsMaterial size={0.07} vertexColors transparent opacity={0.9} />
       </points>
-      {/* ネビュラ1 */}
-      <mesh position={[-4.5, 0, -18]}>
-        <sphereGeometry args={[5.5, 12, 12]} />
-        <meshBasicMaterial color={theme.nebulaColor1} transparent opacity={0.18} />
+      {/* ネビュラプレーン（最後尾の遠景） */}
+      <mesh position={[0, 0, -28]} material={nebulaMat}>
+        <planeGeometry args={[40, 30]} />
       </mesh>
-      {/* ネビュラ2 */}
-      <mesh position={[5.5, 0, -24]}>
-        <sphereGeometry args={[6.5, 12, 12]} />
-        <meshBasicMaterial color={theme.nebulaColor2} transparent opacity={0.14} />
+      {/* 第2ネビュラプレーン（別の位置・別uniforms） */}
+      <mesh position={[0, 0, -22]} rotation={[0, 0, 0.3]} material={nebulaMat2}>
+        <planeGeometry args={[30, 25]} />
       </mesh>
-      {/* 遠景の漂う岩石（背景装飾） */}
-      {[-3, 3, -1.5, 1.5, 0].map((x, i) => (
-        <mesh key={i} position={[x, 0, -18 - i * 2]} rotation={[i, i * 0.5, 0]}>
-          <icosahedronGeometry args={[0.3 + i * 0.15, 1]} />
-          <meshBasicMaterial color={theme.asteroidTint} transparent opacity={0.3} />
-        </mesh>
-      ))}
     </>
   );
 };

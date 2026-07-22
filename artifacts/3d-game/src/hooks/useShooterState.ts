@@ -72,6 +72,7 @@ export const useShooterState = ({
   const enemiesRef = useRef<ShooterEntity[]>([]);
   const asteroidsRef = useRef<ShooterEntity[]>([]);
   const nextIdRef = useRef(1);
+  const onKillRef = useRef<((pos: THREE.Vector3, type: string) => void) | null>(null);
 
   // パワーアップ
   const powerRankRef = useRef(startRank); // 0-8
@@ -409,6 +410,7 @@ export const useShooterState = ({
           e.hp -= BULLET_DAMAGE;
           if (e.hp <= 0) {
             e.isDead = true;
+            onKillRef.current?.(e.pos.clone(), e.type);
             newKills++;
             newScore += e.type === 'heavy' ? 300 : e.type === 'disc' ? 200 : 100;
             specialGaugeRef.current += 15;
@@ -455,6 +457,7 @@ export const useShooterState = ({
           a.hp -= BULLET_DAMAGE;
           if (a.hp <= 0) {
             a.isDead = true;
+            onKillRef.current?.(a.pos.clone(), a.type);
             newScore += 50;
             
             if (Math.random() < 0.1) {
@@ -555,6 +558,7 @@ export const useShooterState = ({
   }, [onVictory, onDefeat, BULLET_SPEED, BULLET_DAMAGE, AUTO_FIRE_INTERVAL, averageIntelligence, energyEfficiency, bossActive]);
 
   return {
+    onKillRef,
     playerPosRef,
     bulletsRef,
     enemiesRef,
