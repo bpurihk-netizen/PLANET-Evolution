@@ -65,6 +65,8 @@ export interface GameState {
   globalSpeed: number;
   zoomLevel: 0 | 1 | 2;
   shooterMode: 'off' | 'prompt' | 'playing' | 'victory' | 'defeat';
+  deilandMode: boolean;
+  deilandPlanetIndex: number;
   setZoomLevel: (z: 0|1|2) => void;
   setGlobalSpeed: (s: number) => void;
   setActiveIndex: (i: number) => void;
@@ -77,6 +79,8 @@ export interface GameState {
   startShooter: () => void;
   declineShooter: () => void;
   endShooter: (result: 'victory' | 'defeat') => void;
+  activateDeiland: (index: number) => void;
+  exitDeiland: () => void;
 }
 
 const SAVE_KEY = 'planet_evolution_save_v2';
@@ -584,6 +588,11 @@ export function useGameState(): GameState {
     setShooterMode('off');
   };
 
+  const [deilandMode, setDeilandMode] = useState(false);
+  const [deilandPlanetIndex, setDeilandPlanetIndex] = useState(0);
+  const activateDeiland = (index: number) => { setDeilandPlanetIndex(index); setDeilandMode(true); };
+  const exitDeiland = () => setDeilandMode(false);
+
   const startShooter = () => setShooterMode('playing');
   const declineShooter = () => setShooterMode('off');
   const endShooter = (result: 'victory' | 'defeat') => {
@@ -624,6 +633,10 @@ export function useGameState(): GameState {
     shooterMode,
     startShooter,
     declineShooter,
-    endShooter
+    endShooter,
+    deilandMode,
+    deilandPlanetIndex,
+    activateDeiland,
+    exitDeiland,
   };
 }

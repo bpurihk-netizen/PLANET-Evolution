@@ -276,6 +276,18 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
         </div>
       </div>
 
+      {/* Land on Planet button */}
+      {!isCollapse && gameState.shooterMode === 'off' && p.time > 180 && (
+        <div className="absolute left-4 bottom-[8.5rem] pointer-events-auto">
+          <button
+            onClick={() => gameState.activateDeiland(gameState.activeIndex)}
+            className="px-3 py-2 bg-emerald-900/70 hover:bg-emerald-800 border border-emerald-400/60 rounded-full text-emerald-200 text-xs font-bold backdrop-blur-md active:scale-95 transition-all flex items-center gap-1.5"
+          >
+            🌿 惑星に降り立つ
+          </button>
+        </div>
+      )}
+
       {/* Shooter Restart Button */}
       {isCrisis && p.stats.civLevel > 0.85 && gameState.shooterMode === 'off' && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-32 pointer-events-auto">

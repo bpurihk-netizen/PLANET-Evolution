@@ -4,6 +4,7 @@ import { useGameState } from './hooks/useGameState';
 import { PlanetScene } from './components/PlanetScene';
 import { HUD } from './components/HUD';
 import { SpaceShooter } from './components/SpaceShooter';
+import { Deiland } from './components/Deiland';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -13,14 +14,20 @@ function GameView() {
 
   return (
     <div className="w-full h-[100dvh] bg-[#030014] overflow-hidden relative">
-      <div className="absolute inset-0 z-0">
+      {/* Main space view – hidden (not unmounted) while in Deiland to preserve WebGL state */}
+      <div className="absolute inset-0 z-0" style={{ display: gameState.deilandMode ? 'none' : 'block' }}>
         <PlanetScene gameState={gameState} />
       </div>
-      <div className="absolute inset-0 z-10 pointer-events-none">
-        <HUD gameState={gameState} />
-      </div>
-      {gameState.shooterMode !== 'off' && (
+      {!gameState.deilandMode && (
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          <HUD gameState={gameState} />
+        </div>
+      )}
+      {gameState.shooterMode !== 'off' && !gameState.deilandMode && (
         <SpaceShooter gameState={gameState} />
+      )}
+      {gameState.deilandMode && (
+        <Deiland gameState={gameState} />
       )}
     </div>
   );
