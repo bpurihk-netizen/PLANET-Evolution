@@ -441,7 +441,9 @@ void main() {
       tColor *= crack;
     }
 
-    vec3 mixColor = mix(baseColor, tColor, uTransformBlend);
+    // 乗算合成：baseColorの地形テクスチャを残しつつtColorで染める
+    vec3 tinted = clamp(baseColor * (tColor * 2.0), 0.0, 1.0);
+    vec3 mixColor = mix(baseColor, tinted, uTransformBlend * 0.85);
 
     if (uTransformType == 5) { // angel
        mixColor += vec3(1.0) * uTransformBlend; 
