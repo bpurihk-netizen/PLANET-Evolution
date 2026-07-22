@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { PlanetParams, PlanetType, calculatePlanetType, calculateStats, detectTransformation } from './usePlanetParams';
+import { resetFleetProgress } from './useFleetProgress';
 
 export type Phase = 'SUPERNOVA' | 'FORMATION' | 'COOLING' | 'WATER' | 'LIFE' | 'CIVILIZATION' | 'CRISIS' | 'COLLAPSE';
 
@@ -63,6 +64,7 @@ export interface GameState {
   activeIndex: number;
   globalSpeed: number;
   zoomLevel: 0 | 1 | 2;
+  shooterMode: 'off' | 'prompt' | 'playing' | 'victory' | 'defeat';
   setZoomLevel: (z: 0|1|2) => void;
   setGlobalSpeed: (s: number) => void;
   setActiveIndex: (i: number) => void;
@@ -72,6 +74,9 @@ export interface GameState {
   resetPlanet: (index: number) => void;
   resetAllPlanets: () => void;
   dismissSuccessOverlay: (index: number) => void;
+  startShooter: () => void;
+  declineShooter: () => void;
+  endShooter: (result: 'victory' | 'defeat') => void;
 }
 
 const SAVE_KEY = 'planet_evolution_save_v2';
@@ -280,8 +285,16 @@ export function useGameState(): GameState {
   });
   
   const [activeIndex, setActiveIndex] = useState(() => initialSave.current?.activeIndex ?? 0);
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+
   const [globalSpeed, setGlobalSpeed] = useState(() => initialSave.current?.globalSpeed ?? 1);
   const [zoomLevel, setZoomLevel] = useState<0|1|2>(() => (initialSave.current?.zoomLevel as 0|1|2) ?? 0);
+
+  const [shooterMode, setShooterMode] = useState<'off' | 'prompt' | 'playing' | 'victory' | 'defeat'>('off');
+  const shooterModeRef = useRef(shooterMode);
+  shooterModeRef.current = shooterMode;
+  const shooterPromptShownRef = useRef(false);
 
   const lastUpdateRef = useRef<number>(performance.now());
   const frameRef = useRef<number>(0);
@@ -442,6 +455,13 @@ export function useGameState(): GameState {
           return updatedP;
         });
 
+        const activePlanet = nextPlanets[activeIndexRef.current];
+        if (activePlanet && activePlanet.time >= 680 && activePlanet.stats.civLevel > 0.85 && 
+            shooterModeRef.current === 'off' && !shooterPromptShownRef.current) {
+          shooterPromptShownRef.current = true;
+          setTimeout(() => setShooterMode('prompt'), 0);
+        }
+
         if (spawnedParents.length > 0) {
           for (const parent of spawnedParents) {
             let targetIndex = nextPlanets.findIndex(p => p.id !== parent.id && (p.succeeded || p.failureType !== null));
@@ -539,14 +559,20 @@ export function useGameState(): GameState {
   };
 
   const resetPlanet = (index: number) => {
+    resetFleetProgress();
     setPlanets(prev => {
        const p = [...prev];
        p[index] = createPlanet(index, true); // Generate new random biased planet
        return p;
     });
+    if (index === activeIndex) {
+      shooterPromptShownRef.current = false;
+      setShooterMode('off');
+    }
   };
 
   const resetAllPlanets = () => {
+    resetFleetProgress();
     try {
       localStorage.removeItem(SAVE_KEY);
     } catch (e) {}
@@ -554,6 +580,23 @@ export function useGameState(): GameState {
     setActiveIndex(0);
     setGlobalSpeed(1);
     setZoomLevel(0);
+    shooterPromptShownRef.current = false;
+    setShooterMode('off');
+  };
+
+  const startShooter = () => setShooterMode('playing');
+  const declineShooter = () => setShooterMode('off');
+  const endShooter = (result: 'victory' | 'defeat') => {
+    setShooterMode(result);
+    if (result === 'victory') {
+      setPlanets(prev => prev.map((p, i) => {
+        if (i !== activeIndexRef.current) return p;
+        return { ...p, nuclearTimer: 0, isPaused: false };
+      }));
+    }
+    setTimeout(() => {
+      setShooterMode('off');
+    }, 3000);
   };
 
   const dismissSuccessOverlay = (index: number) => {
@@ -577,6 +620,10 @@ export function useGameState(): GameState {
     togglePause,
     resetPlanet,
     resetAllPlanets,
-    dismissSuccessOverlay
+    dismissSuccessOverlay,
+    shooterMode,
+    startShooter,
+    declineShooter,
+    endShooter
   };
 }

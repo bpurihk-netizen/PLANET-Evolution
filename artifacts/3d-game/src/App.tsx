@@ -3,6 +3,7 @@ import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { useGameState } from './hooks/useGameState';
 import { PlanetScene } from './components/PlanetScene';
 import { HUD } from './components/HUD';
+import { SpaceShooter } from './components/SpaceShooter';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -18,6 +19,9 @@ function GameView() {
       <div className="absolute inset-0 z-10 pointer-events-none">
         <HUD gameState={gameState} />
       </div>
+      {gameState.shooterMode !== 'off' && (
+        <SpaceShooter gameState={gameState} />
+      )}
     </div>
   );
 }

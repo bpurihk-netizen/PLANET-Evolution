@@ -276,6 +276,18 @@ export const HUD: React.FC<{ gameState: GameState }> = ({ gameState }) => {
         </div>
       </div>
 
+      {/* Shooter Restart Button */}
+      {isCrisis && p.stats.civLevel > 0.85 && gameState.shooterMode === 'off' && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-32 pointer-events-auto">
+          <button
+            onClick={gameState.startShooter}
+            className="px-4 py-2 bg-cyan-700/80 hover:bg-cyan-600 border border-cyan-400 rounded-full text-white text-sm font-bold animate-pulse"
+          >
+            🚀 宇宙侵略を再開
+          </button>
+        </div>
+      )}
+
       {/* Settings Bottom Sheet */}
       <div className={cn(
         "fixed inset-0 z-50 pointer-events-auto bg-black/60 backdrop-blur-sm transition-opacity duration-300",
