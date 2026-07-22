@@ -7,7 +7,7 @@ import { PlanetState } from '../../hooks/useGameState';
 const CHAR_OFFSET = 0.15;
 const MOVE_SPEED  = 0.55; // units/s along arc
 const TURN_SPEED  = 1.8;  // rad/s
-const DESCENT_DURATION = 3.0; // seconds
+const DESCENT_DURATION = 3.5; // seconds
 
 interface DeilandWorldProps {
   planet: PlanetState;
@@ -17,7 +17,8 @@ interface DeilandWorldProps {
 function DeilandWorld({ planet, joystickRef }: DeilandWorldProps) {
   const { camera } = useThree();
 
-  const thetaRef   = useRef(Math.PI / 2);
+  // Start near the top of the sphere (small θ) so the default camera up=(0,1,0) is correct
+  const thetaRef   = useRef(0.35);
   const phiRef     = useRef(0);
   const facingRef  = useRef(0);
   const walkTimeRef = useRef(0);
@@ -25,8 +26,9 @@ function DeilandWorld({ planet, joystickRef }: DeilandWorldProps) {
   const keysRef    = useRef(new Set<string>());
   const charRef    = useRef<THREE.Group>(null);
 
-  // Set initial camera position (high above planet)
+  // Set initial camera position (high above, aligned with world up)
   useEffect(() => {
+    camera.up.set(0, 1, 0);
     camera.position.set(0, PLANET_RADIUS * 6, PLANET_RADIUS * 2);
     camera.lookAt(0, 0, 0);
   }, [camera]);
@@ -132,13 +134,13 @@ function DeilandWorld({ planet, joystickRef }: DeilandWorldProps) {
     const lookSpace   = new THREE.Vector3(0, 0, 0);
     const targetLook  = new THREE.Vector3().lerpVectors(lookSpace, lookSurface, ease);
 
-    camera.position.lerp(targetCamPos, 0.07);
-    // Smooth look-at via slerp on direction
-    const currentDir = new THREE.Vector3();
-    camera.getWorldDirection(currentDir);
-    const desiredDir = targetLook.clone().sub(camera.position).normalize();
-    currentDir.lerp(desiredDir, 0.07);
-    camera.lookAt(camera.position.clone().add(currentDir));
+    // Smoothly rotate camera's up vector from world-up to sphere-normal as we descend
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const targetUp = worldUp.clone().lerp(up, ease);
+    camera.up.lerp(targetUp.normalize(), 0.08);
+
+    camera.position.lerp(targetCamPos, 0.08);
+    camera.lookAt(targetLook);
   });
 
   // Lambert material color helper

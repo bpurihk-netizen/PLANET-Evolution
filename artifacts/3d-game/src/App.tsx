@@ -14,17 +14,19 @@ function GameView() {
 
   return (
     <div className="w-full h-[100dvh] bg-[#030014] overflow-hidden relative">
-      {/* Main space view – hidden (not unmounted) while in Deiland to preserve WebGL state */}
-      <div className="absolute inset-0 z-0" style={{ display: gameState.deilandMode ? 'none' : 'block' }}>
-        <PlanetScene gameState={gameState} />
-      </div>
+      {/* Main space view — fully unmounted while in Deiland to free the WebGL context */}
       {!gameState.deilandMode && (
-        <div className="absolute inset-0 z-10 pointer-events-none">
-          <HUD gameState={gameState} />
-        </div>
-      )}
-      {gameState.shooterMode !== 'off' && !gameState.deilandMode && (
-        <SpaceShooter gameState={gameState} />
+        <>
+          <div className="absolute inset-0 z-0">
+            <PlanetScene gameState={gameState} />
+          </div>
+          <div className="absolute inset-0 z-10 pointer-events-none">
+            <HUD gameState={gameState} />
+          </div>
+          {gameState.shooterMode !== 'off' && (
+            <SpaceShooter gameState={gameState} />
+          )}
+        </>
       )}
       {gameState.deilandMode && (
         <Deiland gameState={gameState} />
