@@ -1,35 +1,50 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
-import { useGameState } from './hooks/useGameState';
-import { PlanetScene } from './components/PlanetScene';
-import { HUD } from './components/HUD';
-import { SpaceShooter } from './components/SpaceShooter';
+import { useSolarSystem } from './hooks/useSolarSystem';
+import { SolarSystemView } from './components/SolarSystemView';
+import { ExplorerHUD } from './components/ExplorerHUD';
+import { InfoPanel } from './components/InfoPanel';
 import { Deiland } from './components/Deiland';
+import { SpaceShooter } from './components/SpaceShooter';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
 
-function GameView() {
-  const gameState = useGameState();
+function SolarExplorerApp() {
+  const state = useSolarSystem();
 
   return (
-    <div className="w-full h-[100dvh] bg-[#030014] overflow-hidden relative">
-      {/* Main space view — fully unmounted while in Deiland to free the WebGL context */}
-      {!gameState.deilandMode && (
+    <div className="w-full h-[100dvh] overflow-hidden relative bg-[#020408]">
+
+      {/* ── Deiland surface mode — full replacement (frees WebGL context) ── */}
+      {state.deilandMode ? (
+        <Deiland state={state} />
+      ) : (
         <>
+          {/* ── Main 3D solar system canvas ── */}
           <div className="absolute inset-0 z-0">
-            <PlanetScene gameState={gameState} />
+            <SolarSystemView state={state} />
           </div>
+
+          {/* ── Navigation HUD (top bar, breadcrumbs, exploration counter) ── */}
           <div className="absolute inset-0 z-10 pointer-events-none">
-            <HUD gameState={gameState} />
+            <ExplorerHUD state={state} />
           </div>
-          {gameState.shooterMode !== 'off' && (
-            <SpaceShooter gameState={gameState} />
+
+          {/* ── Educational info panel (slides up from bottom when body selected) ── */}
+          <div className="absolute inset-0 z-20 pointer-events-none">
+            <div className="pointer-events-auto h-full" style={{ pointerEvents: 'none' }}>
+              <InfoPanel state={state} />
+            </div>
+          </div>
+
+          {/* ── SpaceShooter overlay ── */}
+          {state.shooterMode !== 'off' && (
+            <div className="absolute inset-0 z-30">
+              <SpaceShooter state={state} />
+            </div>
           )}
         </>
-      )}
-      {gameState.deilandMode && (
-        <Deiland gameState={gameState} />
       )}
     </div>
   );
@@ -39,10 +54,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-         <Switch>
-           <Route path="/" component={GameView} />
-           <Route component={NotFound} />
-         </Switch>
+        <Switch>
+          <Route path="/" component={SolarExplorerApp} />
+          <Route component={NotFound} />
+        </Switch>
       </WouterRouter>
     </QueryClientProvider>
   );

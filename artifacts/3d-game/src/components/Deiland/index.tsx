@@ -1,27 +1,30 @@
 import React, { useRef } from 'react';
 import { DeilandScene } from './DeilandScene';
 import { DeilandHUD }   from './DeilandHUD';
-import { GameState }    from '../../hooks/useGameState';
+import { SolarSystemState } from '../../hooks/useSolarSystem';
+import { CelestialBody } from '../../data/celestialBodies';
 
 interface DeilandProps {
-  gameState: GameState;
+  state: SolarSystemState;
 }
 
-export const Deiland: React.FC<DeilandProps> = ({ gameState }) => {
+export const Deiland: React.FC<DeilandProps> = ({ state }) => {
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const planet = gameState.planets[gameState.deilandPlanetIndex];
+  const body = state.deilandBody;
+
+  if (!body) return null;
 
   return (
     <div className="absolute inset-0 z-50 bg-[#050510]">
       {/* 3-D scene */}
       <div className="absolute inset-0">
-        <DeilandScene planet={planet} joystickRef={joystickRef} />
+        <DeilandScene body={body} joystickRef={joystickRef} />
       </div>
       {/* DOM overlay (joystick, exit button) */}
       <DeilandHUD
-        planetName={planet.name}
+        planetName={body.nameJa}
         joystickRef={joystickRef}
-        onExit={gameState.exitDeiland}
+        onExit={state.exitDeiland}
       />
     </div>
   );

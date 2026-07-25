@@ -1,0 +1,669 @@
+// Real solar system data — educational content in Japanese
+
+export type BodyType =
+  | 'STAR'
+  | 'ROCKY'
+  | 'GAS_GIANT'
+  | 'ICE_GIANT'
+  | 'DWARF_PLANET'
+  | 'MOON'
+  | 'ASTEROID_BELT'
+  | 'COMET';
+
+// BiomeType drives Deiland surface visuals
+export type BiomeType =
+  | 'TEMPERATE'   // Earth-like
+  | 'OCEAN'       // Deep ocean
+  | 'DESERT'      // Hot/arid
+  | 'ICE'         // Frozen
+  | 'VOLCANIC'    // Lava / Io-like
+  | 'TOXIC'       // Dense acid clouds (Venus)
+  | 'AIRLESS'     // Moon / Mercury grey rock
+  | 'GAS'         // Gas giant surface
+  | 'METHANE'     // Titan-like orange haze
+  | 'FROZEN_ROCK';// Cold outer rocky (Pluto, Triton)
+
+export interface CelestialBody {
+  id: string;
+  nameJa: string;
+  nameEn: string;
+  type: BodyType;
+  biome: BiomeType;
+  classification: string; // Japanese classification label
+
+  // Physical
+  diameterKm: number;
+  massEarths: number;       // Mass relative to Earth
+  gravityG: number;         // Surface gravity (Earth = 1.0)
+  axialTiltDeg: number;
+  rotationPeriodHours: number; // negative = retrograde
+  surfaceTempC: { min: number; avg: number; max: number };
+
+  // Orbital (0 for Sun)
+  distanceAU: number;
+  orbitalPeriodYears: number;
+
+  // Appearance
+  colorMain: string;         // Hex color
+  colorSecondary: string;
+  hasRings: boolean;
+  ringInnerRatio: number;    // Ring inner radius as multiple of body radius
+  ringOuterRatio: number;    // Ring outer radius as multiple of body radius
+  hasAtmosphere: boolean;
+  atmosphereColor: string;
+  atmosphereOpacity: number;
+  moonCount: number;
+
+  // Educational facts (Japanese, 3 items)
+  facts: [string, string, string];
+
+  // Game integration
+  canLand: boolean;          // Triggers Deiland surface mode
+  hasAsteroids: boolean;     // Triggers SpaceShooter
+
+  // Display (log-scale orbit, not physical)
+  displayRadius: number;     // Visual sphere radius in scene units
+  logOrbitRadius: number;    // Pre-computed log-scale orbit distance
+  orbitSpeed: number;        // Relative orbit animation speed (not real scale)
+  orbitAngleOffset: number;  // Starting orbit angle (radians)
+
+  children?: CelestialBody[]; // Moons / sub-objects
+}
+
+// logOrbit = Math.log10(au * 5 + 1) * 14
+const logOrbit = (au: number) => Math.round(Math.log10(au * 5 + 1) * 14 * 100) / 100;
+
+export const SOLAR_SYSTEM: CelestialBody[] = [
+  // ── 太陽 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'sun',
+    nameJa: '太陽',
+    nameEn: 'Sun',
+    type: 'STAR',
+    biome: 'VOLCANIC',
+    classification: 'G型主系列星（黄色矮星）',
+    diameterKm: 1_392_700,
+    massEarths: 332_946,
+    gravityG: 27.9,
+    axialTiltDeg: 7.25,
+    rotationPeriodHours: 609.12,
+    surfaceTempC: { min: 4_000, avg: 5_500, max: 15_000_000 },
+    distanceAU: 0,
+    orbitalPeriodYears: 0,
+    colorMain: '#FDB813',
+    colorSecondary: '#FF6B00',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: true,
+    atmosphereColor: '#FFD700',
+    atmosphereOpacity: 0.4,
+    moonCount: 0,
+    facts: [
+      '太陽の直径は地球の約109倍。地球が100万個入る大きさです',
+      '中心温度は約1500万℃。水素が融合してヘリウムになる核融合反応が起きています',
+      '太陽から地球まで光が届くのに約8分20秒かかります',
+    ],
+    canLand: false,
+    hasAsteroids: false,
+    displayRadius: 2.2,
+    logOrbitRadius: 0,
+    orbitSpeed: 0,
+    orbitAngleOffset: 0,
+  },
+
+  // ── 水星 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'mercury',
+    nameJa: '水星',
+    nameEn: 'Mercury',
+    type: 'ROCKY',
+    biome: 'AIRLESS',
+    classification: '地球型惑星',
+    diameterKm: 4_879,
+    massEarths: 0.0553,
+    gravityG: 0.38,
+    axialTiltDeg: 0.034,
+    rotationPeriodHours: 1407.6,
+    surfaceTempC: { min: -180, avg: 167, max: 430 },
+    distanceAU: 0.387,
+    orbitalPeriodYears: 0.241,
+    colorMain: '#B5B5B5',
+    colorSecondary: '#8A8A8A',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: false,
+    atmosphereColor: '#888888',
+    atmosphereOpacity: 0,
+    moonCount: 0,
+    facts: [
+      '1日（自転周期）が地球の59日分と非常に長く、1年より長い「1日」を持ちます',
+      '太陽系で最も小さな惑星。直径は月より少し大きい程度です',
+      '昼夜の温度差が600℃以上と太陽系最大。大気がほぼないためです',
+    ],
+    canLand: true,
+    hasAsteroids: false,
+    displayRadius: 0.13,
+    logOrbitRadius: logOrbit(0.387),
+    orbitSpeed: 4.0,
+    orbitAngleOffset: 0.8,
+  },
+
+  // ── 金星 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'venus',
+    nameJa: '金星',
+    nameEn: 'Venus',
+    type: 'ROCKY',
+    biome: 'TOXIC',
+    classification: '地球型惑星',
+    diameterKm: 12_104,
+    massEarths: 0.815,
+    gravityG: 0.905,
+    axialTiltDeg: 177.4,
+    rotationPeriodHours: -5832.5,
+    surfaceTempC: { min: 437, avg: 464, max: 497 },
+    distanceAU: 0.723,
+    orbitalPeriodYears: 0.615,
+    colorMain: '#E8C97E',
+    colorSecondary: '#D4A845',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: true,
+    atmosphereColor: '#E8C97E',
+    atmosphereOpacity: 0.6,
+    moonCount: 0,
+    facts: [
+      '地表温度は平均464℃。鉛が溶けるほど熱く、太陽系で最も熱い惑星表面です',
+      '自転の向きが地球と逆（逆回転）。金星では太陽が西から昇ります',
+      '厚い二酸化炭素の雲に覆われた強烈な温室効果惑星で、気圧は地球の90倍です',
+    ],
+    canLand: true,
+    hasAsteroids: false,
+    displayRadius: 0.22,
+    logOrbitRadius: logOrbit(0.723),
+    orbitSpeed: 2.0,
+    orbitAngleOffset: 2.1,
+  },
+
+  // ── 地球 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'earth',
+    nameJa: '地球',
+    nameEn: 'Earth',
+    type: 'ROCKY',
+    biome: 'TEMPERATE',
+    classification: '地球型惑星',
+    diameterKm: 12_756,
+    massEarths: 1.0,
+    gravityG: 1.0,
+    axialTiltDeg: 23.44,
+    rotationPeriodHours: 23.93,
+    surfaceTempC: { min: -89, avg: 15, max: 56 },
+    distanceAU: 1.0,
+    orbitalPeriodYears: 1.0,
+    colorMain: '#2B6CB0',
+    colorSecondary: '#2F855A',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: true,
+    atmosphereColor: '#90CDF4',
+    atmosphereOpacity: 0.35,
+    moonCount: 1,
+    facts: [
+      '表面の約71%は海が占めています。太陽系で唯一、液体の水が大量に存在する惑星です',
+      '地球の磁場は宇宙線・太陽風から生命を守るバリアとして機能しています',
+      '月との潮汐力によって地球の自転は少しずつ遅くなっています（100年に約2ms）',
+    ],
+    canLand: true,
+    hasAsteroids: false,
+    displayRadius: 0.24,
+    logOrbitRadius: logOrbit(1.0),
+    orbitSpeed: 1.0,
+    orbitAngleOffset: 4.2,
+    children: [
+      {
+        id: 'moon',
+        nameJa: '月',
+        nameEn: 'Moon',
+        type: 'MOON',
+        biome: 'AIRLESS',
+        classification: '地球の衛星',
+        diameterKm: 3_475,
+        massEarths: 0.0123,
+        gravityG: 0.165,
+        axialTiltDeg: 6.68,
+        rotationPeriodHours: 655.7,
+        surfaceTempC: { min: -173, avg: -20, max: 127 },
+        distanceAU: 0.00257,
+        orbitalPeriodYears: 0.0748,
+        colorMain: '#C0C0C0',
+        colorSecondary: '#888888',
+        hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+        hasAtmosphere: false,
+        atmosphereColor: '#AAAAAA',
+        atmosphereOpacity: 0,
+        moonCount: 0,
+        facts: [
+          '月は地球から見て常に同じ面しか見えない「潮汐固定」状態にあります',
+          '月面では音が伝わらない。大気がないため完全な静寂が広がっています',
+          '月は毎年約3.8cm地球から遠ざかっています',
+        ],
+        canLand: true,
+        hasAsteroids: false,
+        displayRadius: 0.065,
+        logOrbitRadius: 0,
+        orbitSpeed: 0,
+        orbitAngleOffset: 0,
+      },
+    ],
+  },
+
+  // ── 火星 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'mars',
+    nameJa: '火星',
+    nameEn: 'Mars',
+    type: 'ROCKY',
+    biome: 'DESERT',
+    classification: '地球型惑星',
+    diameterKm: 6_792,
+    massEarths: 0.107,
+    gravityG: 0.379,
+    axialTiltDeg: 25.19,
+    rotationPeriodHours: 24.62,
+    surfaceTempC: { min: -143, avg: -65, max: 35 },
+    distanceAU: 1.524,
+    orbitalPeriodYears: 1.881,
+    colorMain: '#C1440E',
+    colorSecondary: '#E27B58',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: true,
+    atmosphereColor: '#E8A882',
+    atmosphereOpacity: 0.2,
+    moonCount: 2,
+    facts: [
+      'オリンポス山は太陽系最大の火山。高さ21km・幅600kmでエベレストの2.5倍です',
+      '火星の一日は24時間37分と地球にとても近く、季節もあります',
+      'マリネリス峡谷は全長4,000km・深さ7km。グランドキャニオンの10倍の規模です',
+    ],
+    canLand: true,
+    hasAsteroids: false,
+    displayRadius: 0.17,
+    logOrbitRadius: logOrbit(1.524),
+    orbitSpeed: 0.53,
+    orbitAngleOffset: 1.0,
+  },
+
+  // ── 小惑星帯 ──────────────────────────────────────────────────────────────
+  {
+    id: 'asteroid-belt',
+    nameJa: '小惑星帯',
+    nameEn: 'Asteroid Belt',
+    type: 'ASTEROID_BELT',
+    biome: 'AIRLESS',
+    classification: '小惑星帯',
+    diameterKm: 0,
+    massEarths: 0.0004,
+    gravityG: 0,
+    axialTiltDeg: 0,
+    rotationPeriodHours: 0,
+    surfaceTempC: { min: -170, avg: -100, max: -60 },
+    distanceAU: 2.7,
+    orbitalPeriodYears: 4.44,
+    colorMain: '#9E8A6E',
+    colorSecondary: '#7A6A55',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: false,
+    atmosphereColor: '#9E8A6E',
+    atmosphereOpacity: 0,
+    moonCount: 0,
+    facts: [
+      '200万個以上の小惑星が存在しますが、全質量を合わせても月の4%に過ぎません',
+      '映画と違い小惑星同士の間隔は平均97万kmと非常に広く、安全に通過できます',
+      '木星の重力によって惑星に成長できなかった岩や金属の破片の集まりです',
+    ],
+    canLand: false,
+    hasAsteroids: true,
+    displayRadius: 0.3,
+    logOrbitRadius: logOrbit(2.7),
+    orbitSpeed: 0,
+    orbitAngleOffset: 0,
+  },
+
+  // ── 木星 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'jupiter',
+    nameJa: '木星',
+    nameEn: 'Jupiter',
+    type: 'GAS_GIANT',
+    biome: 'GAS',
+    classification: '木星型惑星（ガス惑星）',
+    diameterKm: 142_984,
+    massEarths: 317.8,
+    gravityG: 2.528,
+    axialTiltDeg: 3.13,
+    rotationPeriodHours: 9.925,
+    surfaceTempC: { min: -145, avg: -110, max: -108 },
+    distanceAU: 5.203,
+    orbitalPeriodYears: 11.86,
+    colorMain: '#C88B3A',
+    colorSecondary: '#E8D5A3',
+    hasRings: true,
+    ringInnerRatio: 1.72,
+    ringOuterRatio: 2.0,
+    hasAtmosphere: true,
+    atmosphereColor: '#DEB887',
+    atmosphereOpacity: 0.3,
+    moonCount: 95,
+    facts: [
+      '大赤斑は地球が2個入る巨大な嵐。少なくとも350年以上継続して観測されています',
+      '磁場は地球の約2万倍。太陽系最強の磁場を持ち、強烈な放射線帯があります',
+      '太陽系の「盾」とも呼ばれ、強力な重力で多くの彗星・小惑星を引きつけています',
+    ],
+    canLand: false,
+    hasAsteroids: false,
+    displayRadius: 0.65,
+    logOrbitRadius: logOrbit(5.203),
+    orbitSpeed: 0.084,
+    orbitAngleOffset: 3.5,
+    children: [
+      {
+        id: 'io',
+        nameJa: 'イオ',
+        nameEn: 'Io',
+        type: 'MOON',
+        biome: 'VOLCANIC',
+        classification: '木星の衛星',
+        diameterKm: 3_643,
+        massEarths: 0.015,
+        gravityG: 0.183,
+        axialTiltDeg: 0,
+        rotationPeriodHours: 42.46,
+        surfaceTempC: { min: -145, avg: -73, max: 1600 },
+        distanceAU: 0,
+        orbitalPeriodYears: 0,
+        colorMain: '#FFCC00',
+        colorSecondary: '#FF4500',
+        hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+        hasAtmosphere: false,
+        atmosphereColor: '#FFCC00',
+        atmosphereOpacity: 0.1,
+        moonCount: 0,
+        facts: [
+          '太陽系で最も火山活動が活発な天体。数百の活火山が地表を覆っています',
+          '木星の強力な重力で内部が加熱される「潮汐加熱」が火山活動の原動力です',
+          '表面はイオウの化合物で黄色・赤・白に彩られています',
+        ],
+        canLand: true,
+        hasAsteroids: false,
+        displayRadius: 0.055,
+        logOrbitRadius: 0,
+        orbitSpeed: 0,
+        orbitAngleOffset: 0,
+      },
+      {
+        id: 'europa',
+        nameJa: 'エウロパ',
+        nameEn: 'Europa',
+        type: 'MOON',
+        biome: 'ICE',
+        classification: '木星の衛星',
+        diameterKm: 3_122,
+        massEarths: 0.008,
+        gravityG: 0.134,
+        axialTiltDeg: 0.1,
+        rotationPeriodHours: 85.23,
+        surfaceTempC: { min: -220, avg: -160, max: -148 },
+        distanceAU: 0,
+        orbitalPeriodYears: 0,
+        colorMain: '#E8E0D0',
+        colorSecondary: '#C8A882',
+        hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+        hasAtmosphere: false,
+        atmosphereColor: '#E8E0D0',
+        atmosphereOpacity: 0.05,
+        moonCount: 0,
+        facts: [
+          '厚さ数kmの氷の殻の下に深さ100km以上の液体の海が存在すると考えられています',
+          '地球外生命が存在する可能性が最も高い天体の一つとして注目されています',
+          '表面を走る茶色の線は氷の割れ目で、海水中の塩分が染み出たものとされています',
+        ],
+        canLand: true,
+        hasAsteroids: false,
+        displayRadius: 0.05,
+        logOrbitRadius: 0,
+        orbitSpeed: 0,
+        orbitAngleOffset: 0,
+      },
+    ],
+  },
+
+  // ── 土星 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'saturn',
+    nameJa: '土星',
+    nameEn: 'Saturn',
+    type: 'GAS_GIANT',
+    biome: 'GAS',
+    classification: '土星型惑星（ガス惑星）',
+    diameterKm: 120_536,
+    massEarths: 95.16,
+    gravityG: 1.065,
+    axialTiltDeg: 26.73,
+    rotationPeriodHours: 10.656,
+    surfaceTempC: { min: -178, avg: -140, max: -130 },
+    distanceAU: 9.537,
+    orbitalPeriodYears: 29.46,
+    colorMain: '#E8D5A3',
+    colorSecondary: '#C8A860',
+    hasRings: true,
+    ringInnerRatio: 1.11,
+    ringOuterRatio: 2.35,
+    hasAtmosphere: true,
+    atmosphereColor: '#F0E8C0',
+    atmosphereOpacity: 0.25,
+    moonCount: 146,
+    facts: [
+      'リングは主に水の氷の粒でできており、厚さはわずか10m〜1kmほどしかありません',
+      '密度は水より低く（0.69 g/cm³）、巨大な海があれば浮かぶ惑星です',
+      '衛星タイタンは液体メタンの湖・川・雨を持つ太陽系で唯一の天体です',
+    ],
+    canLand: false,
+    hasAsteroids: false,
+    displayRadius: 0.55,
+    logOrbitRadius: logOrbit(9.537),
+    orbitSpeed: 0.034,
+    orbitAngleOffset: 5.8,
+    children: [
+      {
+        id: 'titan',
+        nameJa: 'タイタン',
+        nameEn: 'Titan',
+        type: 'MOON',
+        biome: 'METHANE',
+        classification: '土星の衛星',
+        diameterKm: 5_149,
+        massEarths: 0.0225,
+        gravityG: 0.138,
+        axialTiltDeg: 0,
+        rotationPeriodHours: 382.7,
+        surfaceTempC: { min: -183, avg: -179, max: -172 },
+        distanceAU: 0,
+        orbitalPeriodYears: 0,
+        colorMain: '#D2691E',
+        colorSecondary: '#FF8C00',
+        hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+        hasAtmosphere: true,
+        atmosphereColor: '#FF8C00',
+        atmosphereOpacity: 0.5,
+        moonCount: 0,
+        facts: [
+          '液体メタンの湖・川・雨が存在する太陽系唯一の天体（地球以外）です',
+          '大気圧は地球の1.5倍。窒素を主成分とする濃い大気があります',
+          '有機物が豊富で、原始地球に似た環境を持つとも言われています',
+        ],
+        canLand: true,
+        hasAsteroids: false,
+        displayRadius: 0.07,
+        logOrbitRadius: 0,
+        orbitSpeed: 0,
+        orbitAngleOffset: 0,
+      },
+    ],
+  },
+
+  // ── 天王星 ────────────────────────────────────────────────────────────────
+  {
+    id: 'uranus',
+    nameJa: '天王星',
+    nameEn: 'Uranus',
+    type: 'ICE_GIANT',
+    biome: 'GAS',
+    classification: '天王星型惑星（氷の巨人）',
+    diameterKm: 51_118,
+    massEarths: 14.54,
+    gravityG: 0.886,
+    axialTiltDeg: 97.77,
+    rotationPeriodHours: -17.24,
+    surfaceTempC: { min: -224, avg: -195, max: -184 },
+    distanceAU: 19.19,
+    orbitalPeriodYears: 84.01,
+    colorMain: '#7DE8E8',
+    colorSecondary: '#5BC8D8',
+    hasRings: true,
+    ringInnerRatio: 1.7,
+    ringOuterRatio: 2.0,
+    hasAtmosphere: true,
+    atmosphereColor: '#7DE8E8',
+    atmosphereOpacity: 0.3,
+    moonCount: 28,
+    facts: [
+      '自転軸が約98°傾いており、横倒しで公転している太陽系で唯一の惑星です',
+      '1781年にウィリアム・ハーシェルが発見した、望遠鏡で初めて発見された惑星です',
+      '内部は「熱い氷」（水・アンモニア・メタンの高圧流体）でできた氷の巨人です',
+    ],
+    canLand: false,
+    hasAsteroids: false,
+    displayRadius: 0.36,
+    logOrbitRadius: logOrbit(19.19),
+    orbitSpeed: 0.012,
+    orbitAngleOffset: 0.4,
+  },
+
+  // ── 海王星 ────────────────────────────────────────────────────────────────
+  {
+    id: 'neptune',
+    nameJa: '海王星',
+    nameEn: 'Neptune',
+    type: 'ICE_GIANT',
+    biome: 'GAS',
+    classification: '天王星型惑星（氷の巨人）',
+    diameterKm: 49_528,
+    massEarths: 17.15,
+    gravityG: 1.137,
+    axialTiltDeg: 28.32,
+    rotationPeriodHours: 16.11,
+    surfaceTempC: { min: -218, avg: -200, max: -184 },
+    distanceAU: 30.07,
+    orbitalPeriodYears: 164.8,
+    colorMain: '#3F54BA',
+    colorSecondary: '#5B6FD4',
+    hasRings: true,
+    ringInnerRatio: 1.5,
+    ringOuterRatio: 1.85,
+    hasAtmosphere: true,
+    atmosphereColor: '#5B6FD4',
+    atmosphereOpacity: 0.3,
+    moonCount: 16,
+    facts: [
+      '時速2,100kmの強風が吹く太陽系で最も風が強い惑星です',
+      '数学的な計算（天王星の軌道の乱れ）から存在を予測して発見された惑星です（1846年）',
+      '大黒斑という地球サイズの嵐が観測されましたが、数年後に消えてしまいました',
+    ],
+    canLand: false,
+    hasAsteroids: false,
+    displayRadius: 0.35,
+    logOrbitRadius: logOrbit(30.07),
+    orbitSpeed: 0.006,
+    orbitAngleOffset: 2.9,
+  },
+
+  // ── 冥王星 ────────────────────────────────────────────────────────────────
+  {
+    id: 'pluto',
+    nameJa: '冥王星',
+    nameEn: 'Pluto',
+    type: 'DWARF_PLANET',
+    biome: 'FROZEN_ROCK',
+    classification: '矮小惑星',
+    diameterKm: 2_376,
+    massEarths: 0.0022,
+    gravityG: 0.063,
+    axialTiltDeg: 122.5,
+    rotationPeriodHours: -153.3,
+    surfaceTempC: { min: -240, avg: -229, max: -218 },
+    distanceAU: 39.48,
+    orbitalPeriodYears: 247.9,
+    colorMain: '#CCAA88',
+    colorSecondary: '#F5E6C8',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: true,
+    atmosphereColor: '#EED5AA',
+    atmosphereOpacity: 0.1,
+    moonCount: 5,
+    facts: [
+      '「トンボー地域」と呼ばれる巨大なハート型の白い地形が表面にあります',
+      '2006年に惑星の定義が改められ、「矮小惑星」に再分類されました',
+      '衛星カロンは冥王星の直径の半分以上の大きさを持ち、二重天体とも呼ばれます',
+    ],
+    canLand: true,
+    hasAsteroids: false,
+    displayRadius: 0.10,
+    logOrbitRadius: logOrbit(39.48),
+    orbitSpeed: 0.004,
+    orbitAngleOffset: 1.7,
+  },
+
+  // ── ハレー彗星 ────────────────────────────────────────────────────────────
+  {
+    id: 'halley',
+    nameJa: 'ハレー彗星',
+    nameEn: "Halley's Comet",
+    type: 'COMET',
+    biome: 'AIRLESS',
+    classification: '短周期彗星',
+    diameterKm: 15,
+    massEarths: 0.000_000_022,
+    gravityG: 0.00001,
+    axialTiltDeg: 162.3,
+    rotationPeriodHours: 52.0,
+    surfaceTempC: { min: -270, avg: -220, max: 77 },
+    distanceAU: 17.8,
+    orbitalPeriodYears: 75.3,
+    colorMain: '#AACCEE',
+    colorSecondary: '#FFFFFF',
+    hasRings: false, ringInnerRatio: 0, ringOuterRatio: 0,
+    hasAtmosphere: false,
+    atmosphereColor: '#AADDFF',
+    atmosphereOpacity: 0.3,
+    moonCount: 0,
+    facts: [
+      '約75年の周期で太陽に接近する有名な周期彗星。次回接近は2061年の予定です',
+      '最後に地球に接近したのは1986年。人類史上で最も多く記録された彗星です',
+      '太陽に近づくと氷が昇華して、最大数億kmに達するコマと尾を形成します',
+    ],
+    canLand: false,
+    hasAsteroids: false,
+    displayRadius: 0.08,
+    logOrbitRadius: logOrbit(17.8),
+    orbitSpeed: 0.014,
+    orbitAngleOffset: 4.7,
+  },
+];
+
+// Flat list including children (for lookup by ID)
+export const ALL_BODIES: CelestialBody[] = SOLAR_SYSTEM.flatMap(b =>
+  b.children ? [b, ...b.children] : [b]
+);
+
+export const getBodyById = (id: string): CelestialBody | undefined =>
+  ALL_BODIES.find(b => b.id === id);
+
+// Bodies that appear in the main orbital view (not children)
+export const MAIN_ORBITAL_BODIES = SOLAR_SYSTEM;
