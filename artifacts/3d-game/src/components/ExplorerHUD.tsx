@@ -1,6 +1,6 @@
 import React from 'react';
 import { SolarSystemState } from '../hooks/useSolarSystem';
-import { ALL_BODIES, SOLAR_SYSTEM } from '../data/celestialBodies';
+import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import { ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -8,105 +8,148 @@ interface ExplorerHUDProps {
   state: SolarSystemState;
 }
 
-// Minimap planet data (in orbital order)
-const MINIMAP_BODIES = [
-  { id: 'mercury',      label: '水', color: '#B5B5B5', size: 10 },
-  { id: 'venus',        label: '金', color: '#E8C97E', size: 10 },
-  { id: 'earth',        label: '地', color: '#2B6CB0', size: 10 },
-  { id: 'mars',         label: '火', color: '#C1440E', size: 10 },
-  { id: 'asteroid-belt',label: '帯', color: '#9E8A6E', size: 10 },
-  { id: 'jupiter',      label: '木', color: '#C88B3A', size: 14 },
-  { id: 'saturn',       label: '土', color: '#E8D5A3', size: 13 },
-  { id: 'uranus',       label: '天', color: '#7DE8E8', size: 10 },
-  { id: 'neptune',      label: '海', color: '#3F54BA', size: 10 },
-  { id: 'pluto',        label: '冥', color: '#CCAA88', size: 10 },
-];
+// System emoji icons
+const SYSTEM_ICONS: Record<string, string> = {
+  'solar-system':  '☀️',
+  'trappist1':     '🔴',
+  'alpha-centauri':'⭐',
+  'kepler442':     '🟠',
+};
 
 export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state }) => {
-  const body = state.selectedBody;
-  const visitedCount = state.visitedBodyIds.length;
-  const totalCount = ALL_BODIES.filter(b => b.type !== 'ASTEROID_BELT').length;
+  const body         = state.selectedBody;
+  const systemBodies = state.currentSystem.bodies;
+
+  // Only count non-star, non-asteroid-belt bodies as "explorable" for the counter
+  const explorable    = systemBodies.flatMap(b => b.children ? [b, ...b.children] : [b]);
+  const totalCount    = explorable.filter(b => b.type !== 'ASTEROID_BELT').length;
+  const visitedCount  = state.visitedBodyIds.length;
+
+  // Minimap: main bodies of current system (excluding children which appear in detail)
+  const minimapBodies = systemBodies.filter(b => b.type !== 'ASTEROID_BELT' || b.hasAsteroids);
 
   return (
     <div className="absolute inset-0 pointer-events-none z-20">
+
       {/* ── Top bar ── */}
       <div className="absolute top-0 left-0 right-0 pointer-events-auto">
-        <div className="flex items-center justify-between px-4 pt-safe-top pt-4 pb-3 bg-gradient-to-b from-black/70 to-transparent">
-          {/* Back button (detail mode) or title (overview) */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 bg-gradient-to-b from-black/70 to-transparent gap-2">
+          {/* Back button (detail mode) or app title (overview) */}
           {state.viewMode === 'detail' ? (
             <button
               onClick={state.backToOverview}
-              className="flex items-center gap-1.5 min-h-[44px] px-4 py-2 bg-white/10 active:bg-white/20 backdrop-blur-md border border-white/15 rounded-full text-white/80 text-sm font-medium transition-all active:scale-95"
+              className="flex items-center gap-1.5 min-h-[44px] px-4 py-2 bg-white/10 active:bg-white/20 backdrop-blur-md border border-white/15 rounded-full text-white/80 text-sm font-medium transition-all active:scale-95 shrink-0"
             >
               <ChevronLeft size={18} />
-              太陽系マップ
+              <span className="whitespace-nowrap">{state.currentSystem.nameJa}</span>
             </button>
           ) : (
-            <div className="flex items-center gap-2 min-h-[44px]">
+            <div className="flex items-center gap-2 min-h-[44px] shrink-0">
               <span className="text-2xl">🔭</span>
-              <span className="text-white/90 font-bold tracking-widest text-base">SOLAR EXPLORER</span>
+              <span className="text-white/90 font-bold tracking-widest text-sm">SOLAR EXPLORER</span>
             </div>
           )}
 
           {/* Current body name (detail mode) */}
           {body && state.viewMode === 'detail' && (
-            <div className="flex items-center gap-1.5 px-3 py-2 bg-white/8 backdrop-blur-md border border-white/12 rounded-full min-h-[44px]">
-              <span className="text-white/90 text-sm font-bold">{body.nameJa}</span>
-              <span className="text-white/40 text-xs">{body.nameEn}</span>
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-white/8 backdrop-blur-md border border-white/12 rounded-full min-h-[44px] min-w-0">
+              <span className="text-white/90 text-sm font-bold truncate">{body.nameJa.replace(' ★', '')}</span>
             </div>
           )}
 
           {/* Exploration counter */}
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-white/8 backdrop-blur-md border border-white/12 rounded-full min-h-[44px]">
+          <div className="flex items-center gap-1 px-3 py-2 bg-white/8 backdrop-blur-md border border-white/12 rounded-full min-h-[44px] shrink-0">
             <span className="text-amber-400 text-sm font-mono font-bold">{visitedCount}/{totalCount}</span>
             <span className="text-white/50 text-xs">探索</span>
           </div>
         </div>
+
+        {/* ── System switcher (always visible) ── */}
+        <div className="pointer-events-auto px-4 pb-2">
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1">
+            {ALL_STAR_SYSTEMS.map(sys => {
+              const isActive = state.currentSystemId === sys.id;
+              return (
+                <button
+                  key={sys.id}
+                  onClick={() => state.switchSystem(sys.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold whitespace-nowrap transition-all active:scale-95 min-h-[36px]',
+                    isActive
+                      ? 'bg-amber-500/25 border-amber-400/60 text-amber-200'
+                      : 'bg-white/5 border-white/15 text-white/50 active:bg-white/10'
+                  )}
+                >
+                  <span>{SYSTEM_ICONS[sys.id]}</span>
+                  <span>{sys.nameJa}</span>
+                  {sys.distanceLy > 0 && (
+                    <span className="text-white/30 font-normal">
+                      {sys.distanceLy >= 1000
+                        ? `${(sys.distanceLy / 1000).toFixed(1)}k`
+                        : sys.distanceLy.toFixed(2)}
+                      ly
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* ── Minimap (overview only) — clickable planet dots ── */}
+      {/* ── Minimap — clickable body dots (overview only) ── */}
       {state.viewMode === 'overview' && (
         <div className="absolute bottom-6 left-3 right-3 flex justify-center pointer-events-auto">
-          <div className="bg-black/60 backdrop-blur-md border border-white/12 rounded-2xl px-3 py-2.5 flex flex-col gap-2">
+          <div className="bg-black/60 backdrop-blur-md border border-white/12 rounded-2xl px-3 py-2.5 flex flex-col gap-2 max-w-full">
             <span className="text-[10px] text-white/40 font-mono tracking-widest uppercase text-center">
-              TAP TO EXPLORE
+              TAP TO EXPLORE · {state.currentSystem.nameJa}
             </span>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              {MINIMAP_BODIES.map(({ id, label, color, size }) => {
-                const isVisited = state.visitedBodyIds.includes(id);
-                const isSelected = state.selectedBodyId === id;
+            <div className="flex items-end justify-center gap-2 flex-wrap">
+              {minimapBodies.map(b => {
+                const isVisited  = state.visitedBodyIds.includes(b.id);
+                const isSelected = state.selectedBodyId === b.id;
+                const sz = b.type === 'STAR' ? 18 : b.displayRadius > 0.5 ? 15 : 10;
+                const isHabitable = b.nameJa.includes('★');
                 return (
                   <button
-                    key={id}
-                    onClick={() => state.enterDetail(id)}
+                    key={b.id}
+                    onClick={() => state.enterDetail(b.id)}
                     className="flex flex-col items-center gap-0.5 group"
                   >
                     <div
                       className={cn(
-                        'rounded-full transition-all duration-200',
+                        'rounded-full transition-all duration-200 relative',
                         isSelected
                           ? 'ring-2 ring-white/80 ring-offset-1 ring-offset-transparent scale-125'
                           : 'group-active:scale-110',
-                        !isVisited && 'opacity-50'
+                        !isVisited && 'opacity-40'
                       )}
                       style={{
-                        width: size,
-                        height: size,
-                        background: color,
+                        width: sz, height: sz, background: b.colorMain,
+                        boxShadow: b.type === 'STAR' ? `0 0 ${sz}px ${b.colorMain}60` : undefined,
                       }}
-                    />
-                    <span
-                      className={cn(
-                        'text-[9px] font-mono',
-                        isSelected ? 'text-white' : 'text-white/40'
-                      )}
                     >
-                      {label}
+                      {isHabitable && (
+                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full border border-black/30" />
+                      )}
+                    </div>
+                    <span className={cn(
+                      'text-[9px] font-mono max-w-[28px] truncate text-center',
+                      isSelected ? 'text-white' : 'text-white/40'
+                    )}>
+                      {b.nameJa.replace(' ★', '').replace('TRAPPIST-1 ', '').replace('ケプラー', 'K-').replace('ケンタウリ', '')}
                     </span>
                   </button>
                 );
               })}
             </div>
+            {/* Habitable zone legend */}
+            {state.currentSystem.id !== 'solar-system' && (
+              <div className="flex items-center gap-1.5 justify-center mt-0.5">
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+                <span className="text-[9px] text-green-400/70 font-mono">ハビタブルゾーン</span>
+              </div>
+            )}
           </div>
         </div>
       )}

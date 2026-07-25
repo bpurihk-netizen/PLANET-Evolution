@@ -1,8 +1,8 @@
-import React, { useRef, useMemo, useState, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { SOLAR_SYSTEM, CelestialBody } from '../data/celestialBodies';
+import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
 import { CelestialBodyMesh, AsteroidBeltRing, CometTail } from './CelestialBody';
 
@@ -65,46 +65,48 @@ const OrbitLine: React.FC<{ radius: number; selected?: boolean }> = ({ radius, s
 // ── Camera controller ────────────────────────────────────────────────────────
 interface CameraControllerProps {
   viewMode: 'overview' | 'detail';
+  /** Display radius of the FOCUSED body (parent if a child is selected). */
   targetRadius: number;
+  systemId: string;
 }
-const OVERVIEW_CAM = new THREE.Vector3(0, 55, 32);
+const OVERVIEW_CAM  = new THREE.Vector3(0, 55, 32);
 const OVERVIEW_LOOK = new THREE.Vector3(0, 0, 0);
 
-const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRadius }) => {
+const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRadius, systemId }) => {
   const { camera } = useThree();
-  const targetCamPos = useRef(OVERVIEW_CAM.clone());
-  const targetLookAt = useRef(OVERVIEW_LOOK.clone());
-  const currentLook = useRef(OVERVIEW_LOOK.clone());
-  // Track whether we are in an active transition (vs. steady state in overview)
+  const targetCamPos  = useRef(OVERVIEW_CAM.clone());
+  const targetLookAt  = useRef(OVERVIEW_LOOK.clone());
+  const currentLook   = useRef(OVERVIEW_LOOK.clone());
   const transitioning = useRef(false);
-  const prevMode = useRef(viewMode);
+
+  // Reset to overview whenever viewMode goes to overview OR when system changes
+  useEffect(() => {
+    targetCamPos.current.copy(OVERVIEW_CAM);
+    targetLookAt.current.copy(OVERVIEW_LOOK);
+    transitioning.current = true;
+  }, [systemId]);
 
   useEffect(() => {
     if (viewMode === 'overview') {
       targetCamPos.current.copy(OVERVIEW_CAM);
       targetLookAt.current.copy(OVERVIEW_LOOK);
-      transitioning.current = true; // animate back to overview position
+      transitioning.current = true;
     } else {
-      // Detail mode: planet has moved to world origin (0,0,0)
-      // Camera: high above-behind so planet sits in upper 40% of screen
+      // Detail: planet at world origin — camera above+behind, lookAt below centre
       const yOff = Math.max(targetRadius * 3.0, 2.5);
       const zOff = Math.max(targetRadius * 7.0, 6.0);
       targetCamPos.current.set(0, yOff, zOff);
-      // Look at a point below the planet center so planet appears in upper portion
       targetLookAt.current.set(0, -targetRadius * 1.2, 0);
       transitioning.current = true;
     }
-    prevMode.current = viewMode;
   }, [viewMode, targetRadius]);
 
   useFrame(() => {
     if (viewMode === 'detail') {
-      // Always drive camera in detail (OrbitControls is disabled)
       camera.position.lerp(targetCamPos.current, 0.07);
       currentLook.current.lerp(targetLookAt.current, 0.07);
       camera.lookAt(currentLook.current);
     } else if (transitioning.current) {
-      // overview: animate back to OVERVIEW_CAM, then stop so OrbitControls takes over
       camera.position.lerp(targetCamPos.current, 0.06);
       currentLook.current.lerp(targetLookAt.current, 0.06);
       camera.lookAt(currentLook.current);
@@ -112,7 +114,6 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
         transitioning.current = false;
       }
     }
-    // else: overview + not transitioning → OrbitControls owns the camera freely
   });
   return null;
 };
@@ -121,7 +122,6 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
 interface OrbitingBodyProps {
   body: CelestialBody;
   isSelected: boolean;
-  isVisited: boolean;
   viewMode: 'overview' | 'detail';
   onClick: () => void;
   angleRef: React.MutableRefObject<number>;
@@ -147,7 +147,6 @@ const OrbitingBody: React.FC<OrbitingBodyProps> = ({
   });
 
   if (body.type === 'ASTEROID_BELT') {
-    // Transparent torus hit area so users can tap the asteroid belt
     return (
       <group onClick={onClick}>
         <mesh rotation={[Math.PI / 2, 0, 0]}>
@@ -164,25 +163,18 @@ const OrbitingBody: React.FC<OrbitingBodyProps> = ({
 
   return (
     <group ref={groupRef}>
-      {/* Clickable hit area */}
       <mesh onClick={onClick}>
         <sphereGeometry args={[Math.max(displayR * 1.3, 0.5), 8, 8]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-
       <CelestialBodyMesh body={body} radius={displayR} isOverview={isOverview} onClick={onClick} />
-
       {body.id === 'halley' && !isOverview && <CometTail radius={displayR} />}
-
-      {/* Selected glow ring */}
       {isSelected && isOverview && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[displayR * 1.5, displayR * 1.75, 32]} />
           <meshBasicMaterial color="#88aaff" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
         </mesh>
       )}
-
-      {/* Label (overview only) */}
       {isOverview && (
         <BodyLabel body={body} radius={displayR} isSelected={isSelected} />
       )}
@@ -195,22 +187,21 @@ const BodyLabel: React.FC<{ body: CelestialBody; radius: number; isSelected: boo
   body, radius, isSelected
 }) => {
   const ref = useRef<THREE.Sprite>(null);
+  // Strip the ★ marker from display labels
+  const displayName = body.nameJa.replace(' ★', '');
   const canvas = useMemo(() => {
     const c = document.createElement('canvas');
     c.width = 256; c.height = 64;
     const ctx = c.getContext('2d')!;
     ctx.clearRect(0, 0, 256, 64);
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = 'bold 20px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = isSelected ? '#aaddff' : 'rgba(255,255,255,0.7)';
-    ctx.fillText(body.nameJa, 128, 38);
+    ctx.fillText(displayName, 128, 38);
     return c;
-  }, [body.nameJa, isSelected]);
+  }, [displayName, isSelected]);
 
-  const texture = useMemo(() => {
-    const t = new THREE.CanvasTexture(canvas);
-    return t;
-  }, [canvas]);
+  const texture = useMemo(() => new THREE.CanvasTexture(canvas), [canvas]);
 
   return (
     <sprite ref={ref} position={[0, radius * 1.8 + 0.5, 0]} scale={[2.5, 0.65, 1]}>
@@ -219,107 +210,24 @@ const BodyLabel: React.FC<{ body: CelestialBody; radius: number; isSelected: boo
   );
 };
 
-// ── Sun special glow ───────────────────────────────────────────────────────────
-const SunGlow: React.FC = () => {
+// ── Star glow (generic — any star) ────────────────────────────────────────────
+const StarGlow: React.FC<{ color: string; radius: number }> = ({ color, radius }) => {
   const ref = useRef<THREE.Mesh>(null);
-  useFrame((_, dt) => {
+  useFrame(() => {
     if (ref.current) {
       const mat = ref.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.12 + Math.sin(Date.now() * 0.001) * 0.04;
+      mat.opacity = 0.10 + Math.sin(Date.now() * 0.001) * 0.04;
     }
   });
   return (
     <mesh ref={ref}>
-      <sphereGeometry args={[5.5, 16, 16]} />
-      <meshBasicMaterial color="#FFD700" transparent opacity={0.12} side={THREE.FrontSide} depthWrite={false} />
+      <sphereGeometry args={[radius * 2.5, 16, 16]} />
+      <meshBasicMaterial color={color} transparent opacity={0.10} side={THREE.FrontSide} depthWrite={false} />
     </mesh>
   );
 };
 
-// ── Main Scene ────────────────────────────────────────────────────────────────
-interface SceneProps {
-  state: SolarSystemState;
-}
-
-const Scene: React.FC<SceneProps> = ({ state }) => {
-  // Keep angle refs for each body (persistent across renders)
-  const angleRefs = useRef<Record<string, React.MutableRefObject<number>>>({});
-  SOLAR_SYSTEM.forEach(b => {
-    if (!angleRefs.current[b.id]) {
-      angleRefs.current[b.id] = { current: b.orbitAngleOffset };
-    }
-  });
-
-  return (
-    <>
-      <Stars />
-      <CameraController
-        viewMode={state.viewMode}
-        targetRadius={(state.selectedBody?.displayRadius ?? 0.5) * 4}
-      />
-
-      {/* Orbit lines (overview only) */}
-      {state.viewMode === 'overview' && SOLAR_SYSTEM.map(b =>
-        b.type !== 'ASTEROID_BELT' && b.logOrbitRadius > 0 ? (
-          <OrbitLine
-            key={`orbit-${b.id}`}
-            radius={b.logOrbitRadius}
-            selected={state.selectedBodyId === b.id}
-          />
-        ) : null
-      )}
-
-      {/* Sun */}
-      <group>
-        <CelestialBodyMesh
-          body={SOLAR_SYSTEM[0]}
-          isOverview={state.viewMode === 'overview'}
-          onClick={() => state.enterDetail('sun')}
-        />
-        {state.viewMode === 'overview' && <SunGlow />}
-        {state.viewMode === 'overview' && (
-          <BodyLabel body={SOLAR_SYSTEM[0]} radius={SOLAR_SYSTEM[0].displayRadius} isSelected={state.selectedBodyId === 'sun'} />
-        )}
-      </group>
-
-      {/* Planets & other bodies */}
-      {SOLAR_SYSTEM.slice(1).map(body => (
-        <OrbitingBody
-          key={body.id}
-          body={body}
-          isSelected={state.selectedBodyId === body.id}
-          isVisited={state.visitedBodyIds.includes(body.id)}
-          viewMode={state.viewMode}
-          angleRef={angleRefs.current[body.id] ?? { current: body.orbitAngleOffset }}
-          onClick={() => state.enterDetail(body.id)}
-        />
-      ))}
-
-      {/* Detail: show moons around selected planet */}
-      {state.viewMode === 'detail' && state.selectedBody?.children?.map((moon, i) => {
-        const moonAngle = (i / (state.selectedBody!.children!.length)) * Math.PI * 2;
-        const moonR = state.selectedBody!.displayRadius * 4 * (1.8 + i * 0.6);
-        return (
-          <MoonOrbit
-            key={moon.id}
-            moon={moon}
-            orbitRadius={moonR}
-            initialAngle={moonAngle}
-            onClick={() => state.selectBody(moon.id)}
-            isSelected={state.selectedBodyId === moon.id}
-          />
-        );
-      })}
-
-      {/* Ambient lighting */}
-      <ambientLight intensity={0.12} />
-      <pointLight position={[0, 0, 0]} intensity={6.0} color="#FFF5E0" distance={200} decay={1.2} />
-      <directionalLight position={[50, 30, 50]} intensity={0.3} color="#ffffff" />
-    </>
-  );
-};
-
-// ── Moon orbit ────────────────────────────────────────────────────────────────
+// ── Moon orbit (detail view) ────────────────────────────────────────────────
 const MoonOrbit: React.FC<{
   moon: CelestialBody;
   orbitRadius: number;
@@ -355,9 +263,102 @@ const MoonOrbit: React.FC<{
   );
 };
 
-// ── Outer component ────────────────────────────────────────────────────────────
+// ── Main Scene (dynamic — works for any star system) ──────────────────────────
+interface SceneProps {
+  state: SolarSystemState;
+}
+
+const Scene: React.FC<SceneProps> = ({ state }) => {
+  const bodies = state.currentSystem.bodies;
+  const starBody = bodies[0]; // Always the central star
+  const orbitBodies = bodies.slice(1);
+
+  // Angle refs persistent across renders, keyed by body id
+  const angleRefs = useRef<Record<string, React.MutableRefObject<number>>>({});
+  bodies.forEach(b => {
+    if (!angleRefs.current[b.id]) {
+      angleRefs.current[b.id] = { current: b.orbitAngleOffset };
+    }
+  });
+
+  // The body centred in detail mode is the FOCUS body (parent when a child is selected)
+  const focusBodies = state.focusBody?.children ?? [];
+
+  return (
+    <>
+      <Stars />
+      <CameraController
+        viewMode={state.viewMode}
+        targetRadius={(state.focusBody?.displayRadius ?? state.selectedBody?.displayRadius ?? 0.5) * 4}
+        systemId={state.currentSystemId}
+      />
+
+      {/* Orbit lines (overview only) */}
+      {state.viewMode === 'overview' && orbitBodies.map(b =>
+        b.type !== 'ASTEROID_BELT' && b.logOrbitRadius > 0 ? (
+          <OrbitLine
+            key={`orbit-${b.id}`}
+            radius={b.logOrbitRadius}
+            selected={state.selectedBodyId === b.id}
+          />
+        ) : null
+      )}
+
+      {/* Central star */}
+      <group>
+        <CelestialBodyMesh
+          body={starBody}
+          isOverview={state.viewMode === 'overview'}
+          onClick={() => state.enterDetail(starBody.id)}
+        />
+        {state.viewMode === 'overview' && (
+          <StarGlow color={starBody.colorMain} radius={starBody.displayRadius} />
+        )}
+        {state.viewMode === 'overview' && (
+          <BodyLabel body={starBody} radius={starBody.displayRadius} isSelected={state.selectedBodyId === starBody.id} />
+        )}
+      </group>
+
+      {/* Orbiting bodies — isDetail uses focusBodyId so the parent centres when a child is selected */}
+      {orbitBodies.map(body => (
+        <OrbitingBody
+          key={`${state.currentSystemId}-${body.id}`}
+          body={body}
+          isSelected={state.focusBodyId === body.id}
+          viewMode={state.viewMode}
+          angleRef={angleRefs.current[body.id] ?? { current: body.orbitAngleOffset }}
+          onClick={() => state.enterDetail(body.id)}
+        />
+      ))}
+
+      {/* Detail: show children (moons/sub-planets) around the FOCUSED body */}
+      {state.viewMode === 'detail' && focusBodies.length > 0 && focusBodies.map((child, i) => {
+        const moonAngle = (i / focusBodies.length) * Math.PI * 2;
+        const moonR = (state.focusBody!.displayRadius) * 4 * (1.8 + i * 0.6);
+        return (
+          <MoonOrbit
+            key={child.id}
+            moon={child}
+            orbitRadius={moonR}
+            initialAngle={moonAngle}
+            onClick={() => state.enterDetail(child.id)}
+            isSelected={state.selectedBodyId === child.id}
+          />
+        );
+      })}
+
+      {/* Lighting */}
+      <ambientLight intensity={0.12} />
+      <pointLight position={[0, 0, 0]} intensity={6.0} color="#FFF5E0" distance={200} decay={1.2} />
+      <directionalLight position={[50, 30, 50]} intensity={0.3} color="#ffffff" />
+    </>
+  );
+};
+
+// ── Exported canvas component ────────────────────────────────────────────────
 export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }) => (
   <Canvas
+    key={state.currentSystemId} // Force remount on system change to reset R3F state
     camera={{ position: [0, 55, 32], fov: 42, near: 0.1, far: 1000 }}
     gl={{ antialias: true, alpha: false, toneMapping: THREE.ACESFilmicToneMapping }}
     style={{ width: '100%', height: '100%', background: '#020408' }}

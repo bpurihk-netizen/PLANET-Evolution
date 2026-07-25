@@ -392,10 +392,107 @@ void main(){
 }
 `;
 
+// ── Red dwarf shader (TRAPPIST-1, Proxima Centauri) ───────────────────────
+const FRAG_RED_DWARF = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float f=fbm(n*3.0+uTime*0.06);
+  float f2=fbm(n*6.0-uTime*0.04);
+  float spot=smoothstep(0.55,0.65,f2);
+  vec3 col=mix(vec3(0.85,0.15,0.02),vec3(0.60,0.08,0.01),f);
+  col=mix(col,vec3(0.20,0.02,0.00),spot*0.8);
+  float flare=smoothstep(0.7,0.8,fbm(n*8.0+uTime*0.2));
+  col+=vec3(1.0,0.3,0.1)*flare*0.4;
+  // Limb brightening
+  float limb=1.0-max(dot(vNormal,normalize(vec3(0,0,1))),0.0);
+  col+=vec3(1.0,0.2,0.05)*pow(limb,3.0)*0.8;
+  gl_FragColor=vec4(col,1.0);
+}
+`;
+
+// ── Orange dwarf shader (Centauri B, Kepler-442) ───────────────────────────
+const FRAG_ORANGE_DWARF = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float f=fbm(n*2.5+uTime*0.035);
+  float f2=fbm(n*5.0-uTime*0.05);
+  vec3 col=mix(vec3(1.0,0.52,0.10),vec3(0.90,0.36,0.06),f);
+  col=mix(col,vec3(0.75,0.28,0.04),f2*0.4);
+  float granule=smoothstep(0.58,0.65,fbm(n*9.0+uTime*0.12));
+  col=mix(col,vec3(1.0,0.70,0.35),granule*0.3);
+  float limb=1.0-max(dot(vNormal,normalize(vec3(0,0,1))),0.0);
+  col+=vec3(1.0,0.55,0.1)*pow(limb,3.0)*1.0;
+  gl_FragColor=vec4(col,1.0);
+}
+`;
+
+// ── Exoplanet habitable (TRAPPIST-1e/f/g, Kepler-442b, Proxima b) ─────────
+const FRAG_HABITABLE_EXOPLANET = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*3.5);
+  float t2=fbm(n*7.0+vec3(8.0));
+  float land=smoothstep(0.42,0.52,t+t2*0.15);
+  // More reddish ocean (red dwarf light environment)
+  vec3 ocean=mix(vec3(0.10,0.20,0.55),vec3(0.20,0.40,0.72),t2);
+  float elev=smoothstep(0.5,0.8,t);
+  vec3 ground=mix(vec3(0.35,0.45,0.22),vec3(0.50,0.38,0.20),elev);
+  ground=mix(ground,vec3(0.80,0.78,0.76),smoothstep(0.75,0.92,elev));
+  float polar=smoothstep(0.8,0.9,abs(n.y));
+  ground=mix(ground,vec3(0.95,0.95,1.0),polar);
+  ocean=mix(ocean,vec3(0.95,0.95,1.0),polar);
+  vec3 col=mix(ocean,ground,land);
+  // Sparse clouds
+  float cloud=smoothstep(0.55,0.65,fbm(n*5.0+uTime*0.015));
+  col=mix(col,vec3(0.9,0.9,0.95),cloud*0.55);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.8+0.2;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Tidally locked rocky (TRAPPIST-1b/c/d/h) ─────────────────────────────
+const FRAG_TIDALLY_LOCKED = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*4.0);
+  float t2=fbm(n*9.0+vec3(3.));
+  // Dark basaltic rock
+  vec3 col=mix(vec3(0.38,0.28,0.22),vec3(0.55,0.42,0.32),t);
+  col=mix(col,vec3(0.22,0.16,0.12),t2*0.4);
+  // Bright-side vs dark-side gradient
+  float brightSide=max(dot(n,vec3(0,0,1)),0.0);
+  float glowing=smoothstep(0.6,0.8,brightSide);
+  col=mix(col,vec3(0.70,0.28,0.08),glowing*0.5);
+  // Crater edges
+  float crater=abs(t2-0.5)*2.0;
+  col=mix(col,vec3(0.65,0.50,0.40),smoothstep(0.88,0.95,crater)*0.3);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.85+0.15;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
 // ── Helper: choose frag shader by id ──────────────────────────────────────
 function getFragShader(body: CelestialBodyData): string {
   switch (body.id) {
-    case 'sun': return FRAG_STAR;
+    case 'sun':
+    case 'centauri-a':
+      return FRAG_STAR;
     case 'earth': return FRAG_EARTH;
     case 'mars': return FRAG_MARS;
     case 'moon': return FRAG_MOON;
@@ -410,6 +507,24 @@ function getFragShader(body: CelestialBodyData): string {
     case 'europa': return FRAG_MOON_ICE;
     case 'titan': return FRAG_TITAN;
     case 'halley': return FRAG_COMET;
+    // Exoplanet systems
+    case 'trappist1-star':
+    case 'proxima-centauri':
+      return FRAG_RED_DWARF;
+    case 'centauri-b':
+    case 'kepler442-star':
+      return FRAG_ORANGE_DWARF;
+    case 'trappist1-e':
+    case 'trappist1-f':
+    case 'trappist1-g':
+    case 'kepler442-b':
+    case 'proxima-b':
+      return FRAG_HABITABLE_EXOPLANET;
+    case 'trappist1-b':
+    case 'trappist1-c':
+    case 'trappist1-d':
+    case 'trappist1-h':
+      return FRAG_TIDALLY_LOCKED;
     default: return FRAG_FROZEN;
   }
 }
