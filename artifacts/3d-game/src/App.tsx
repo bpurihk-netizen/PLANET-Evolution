@@ -7,6 +7,7 @@ import { InfoPanel } from './components/InfoPanel';
 import { Deiland } from './components/Deiland';
 import { SpaceShooter } from './components/SpaceShooter';
 import { ConstellationGlobe } from './components/ConstellationGlobe';
+import { ConstellationEncyclopedia } from './components/ConstellationEncyclopedia';
 import { WarpOverlay } from './components/WarpOverlay';
 import NotFound from '@/pages/not-found';
 
@@ -18,8 +19,14 @@ function SolarExplorerApp() {
   return (
     <div className="w-full h-[100dvh] overflow-hidden relative bg-[#020408]">
 
-      {/* ── Constellation globe mode — full replacement ── */}
-      {state.globeMode ? (
+      {/* ── Constellation encyclopedia mode — full replacement ── */}
+      {state.encyclopediaMode ? (
+        <ConstellationEncyclopedia
+          onExit={state.exitEncyclopedia}
+          onSwitchSystem={(id) => { state.exitEncyclopedia(); state.switchSystem(id); }}
+        />
+      ) : state.globeMode ? (
+        /* ── Constellation globe mode — full replacement ── */
         <ConstellationGlobe
           onExit={state.exitGlobe}
           onSwitchSystem={(id) => { state.exitGlobe(); state.switchSystem(id); }}

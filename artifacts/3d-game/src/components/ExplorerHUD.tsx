@@ -101,6 +101,14 @@ export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state }) => {
               <span>🌐</span>
               <span>天球儀</span>
             </button>
+            {/* ── 星座図鑑ボタン ── */}
+            <button
+              onClick={state.enterEncyclopedia}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold whitespace-nowrap transition-all active:scale-95 min-h-[36px] bg-violet-500/15 border-violet-400/40 text-violet-200 active:bg-violet-500/30"
+            >
+              <span>📚</span>
+              <span>図鑑</span>
+            </button>
           </div>
         </div>
       </div>

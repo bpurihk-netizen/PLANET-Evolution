@@ -12,8 +12,11 @@ export type ViewMode = 'overview' | 'detail';
 export type ShooterMode = 'off' | 'prompt' | 'playing' | 'victory' | 'defeat';
 
 export interface SolarSystemState {
-  // Globe mode (celestial globe view — all 88 constellations)
+  // Globe mode (3D celestial globe — all 88 constellations)
   globeMode: boolean;
+
+  // Encyclopedia mode (2D constellation encyclopedia)
+  encyclopediaMode: boolean;
 
   // Current star system
   currentSystemId: string;
@@ -50,6 +53,8 @@ export interface SolarSystemState {
   // Actions
   enterGlobe: () => void;
   exitGlobe: () => void;
+  enterEncyclopedia: () => void;
+  exitEncyclopedia: () => void;
   switchSystem: (id: string) => void;
   completeWarp: () => void;
   selectBody: (id: string | null) => void;
@@ -86,18 +91,16 @@ function savePersist(data: SaveData) {
 
 /** Given a body id, return the top-level parent body id (or the id itself if already top-level). */
 function resolveFocusId(id: string, systemBodies: CelestialBody[]): string {
-  // Is it a top-level body?
   if (systemBodies.some(b => b.id === id)) return id;
-  // Is it a child of a top-level body?
   const parent = systemBodies.find(b => b.children?.some(c => c.id === id));
   if (parent) return parent.id;
-  // Fallback: itself
   return id;
 }
 
 export function useSolarSystem(): SolarSystemState {
   const [save] = useState(() => loadSave());
   const [globeMode, setGlobeMode] = useState(false);
+  const [encyclopediaMode, setEncyclopediaMode] = useState(false);
   const [currentSystemId, setCurrentSystemId] = useState<string>('solar-system');
   const [visitedBySystem, setVisitedBySystem] = useState<Record<string, string[]>>(save.visitedBySystem);
   const [selectedBodyId, setSelectedBodyId] = useState<string | null>(null);
@@ -110,7 +113,6 @@ export function useSolarSystem(): SolarSystemState {
   const currentSystem = getSystemById(currentSystemId);
   const visitedBodyIds = visitedBySystem[currentSystemId] ?? [];
 
-  // Persist visited bodies
   useEffect(() => {
     const timer = setTimeout(() => {
       savePersist({ visitedBySystem, lastSystemId: currentSystemId });
@@ -128,6 +130,7 @@ export function useSolarSystem(): SolarSystemState {
 
   const enterGlobe = useCallback(() => {
     setGlobeMode(true);
+    setEncyclopediaMode(false);
     setViewMode('overview');
     setSelectedBodyId(null);
   }, []);
@@ -136,22 +139,32 @@ export function useSolarSystem(): SolarSystemState {
     setGlobeMode(false);
   }, []);
 
+  const enterEncyclopedia = useCallback(() => {
+    setEncyclopediaMode(true);
+    setGlobeMode(false);
+    setViewMode('overview');
+    setSelectedBodyId(null);
+  }, []);
+
+  const exitEncyclopedia = useCallback(() => {
+    setEncyclopediaMode(false);
+  }, []);
+
   const switchSystem = useCallback((id: string) => {
     // No-op while a warp is already in progress — prevents mid-warp retargeting
     setWarpTarget(prev => {
-      if (prev !== null) return prev; // already warping, ignore
-      if (id === currentSystemId) return null; // same system, no-op
+      if (prev !== null) return prev;
+      if (id === currentSystemId) return null;
       const target = getSystemById(id);
       return { systemId: id, nameJa: target.nameJa, distanceLy: target.distanceLy };
     });
-    // Exit any sub-modes immediately so the 3D view is visible during warp
-    // (We do this unconditionally — harmless if same system / already warping)
     setSelectedBodyId(null);
     setViewMode('overview');
     setDeilandMode(false);
     setDeilandBodyId(null);
     setShooterMode('off');
     setGlobeMode(false);
+    setEncyclopediaMode(false);
   }, [currentSystemId]);
 
   const completeWarp = useCallback(() => {
@@ -198,13 +211,12 @@ export function useSolarSystem(): SolarSystemState {
   const systemBodies = currentSystem.bodies;
   const selectedBody = selectedBodyId ? (getAnyBodyById(selectedBodyId, systemBodies) ?? null) : null;
   const deilandBody  = deilandBodyId  ? (getAnyBodyById(deilandBodyId)  ?? null) : null;
-
-  // Resolve focus: if selectedBody is a child, focus on its parent
-  const focusBodyId = selectedBodyId ? resolveFocusId(selectedBodyId, systemBodies) : null;
-  const focusBody   = focusBodyId ? (getAnyBodyById(focusBodyId, systemBodies) ?? null) : null;
+  const focusBodyId  = selectedBodyId ? resolveFocusId(selectedBodyId, systemBodies) : null;
+  const focusBody    = focusBodyId    ? (getAnyBodyById(focusBodyId, systemBodies) ?? null) : null;
 
   return {
     globeMode,
+    encyclopediaMode,
     currentSystemId,
     currentSystem,
     isWarping: warpTarget !== null,
@@ -221,6 +233,8 @@ export function useSolarSystem(): SolarSystemState {
     deilandBody,
     enterGlobe,
     exitGlobe,
+    enterEncyclopedia,
+    exitEncyclopedia,
     switchSystem,
     completeWarp,
     selectBody,
