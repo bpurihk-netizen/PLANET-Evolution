@@ -6,6 +6,9 @@ export type ViewMode = 'overview' | 'detail';
 export type ShooterMode = 'off' | 'prompt' | 'playing' | 'victory' | 'defeat';
 
 export interface SolarSystemState {
+  // Globe mode (celestial globe view — all 88 constellations)
+  globeMode: boolean;
+
   // Current star system
   currentSystemId: string;
   currentSystem: StarSystem;
@@ -35,6 +38,8 @@ export interface SolarSystemState {
   deilandBody: CelestialBody | null;
 
   // Actions
+  enterGlobe: () => void;
+  exitGlobe: () => void;
   switchSystem: (id: string) => void;
   selectBody: (id: string | null) => void;
   enterDetail: (id: string) => void;
@@ -81,6 +86,7 @@ function resolveFocusId(id: string, systemBodies: CelestialBody[]): string {
 
 export function useSolarSystem(): SolarSystemState {
   const [save] = useState(() => loadSave());
+  const [globeMode, setGlobeMode] = useState(false);
   const [currentSystemId, setCurrentSystemId] = useState<string>('solar-system');
   const [visitedBySystem, setVisitedBySystem] = useState<Record<string, string[]>>(save.visitedBySystem);
   const [selectedBodyId, setSelectedBodyId] = useState<string | null>(null);
@@ -108,6 +114,16 @@ export function useSolarSystem(): SolarSystemState {
     });
   }, []);
 
+  const enterGlobe = useCallback(() => {
+    setGlobeMode(true);
+    setViewMode('overview');
+    setSelectedBodyId(null);
+  }, []);
+
+  const exitGlobe = useCallback(() => {
+    setGlobeMode(false);
+  }, []);
+
   const switchSystem = useCallback((id: string) => {
     setCurrentSystemId(id);
     setSelectedBodyId(null);
@@ -115,6 +131,7 @@ export function useSolarSystem(): SolarSystemState {
     setDeilandMode(false);
     setDeilandBodyId(null);
     setShooterMode('off');
+    setGlobeMode(false);
   }, []);
 
   const selectBody = useCallback((id: string | null) => {
@@ -161,6 +178,7 @@ export function useSolarSystem(): SolarSystemState {
   const focusBody   = focusBodyId ? (getAnyBodyById(focusBodyId, systemBodies) ?? null) : null;
 
   return {
+    globeMode,
     currentSystemId,
     currentSystem,
     selectedBodyId,
@@ -173,6 +191,8 @@ export function useSolarSystem(): SolarSystemState {
     visitedBodyIds,
     selectedBody,
     deilandBody,
+    enterGlobe,
+    exitGlobe,
     switchSystem,
     selectBody,
     enterDetail,

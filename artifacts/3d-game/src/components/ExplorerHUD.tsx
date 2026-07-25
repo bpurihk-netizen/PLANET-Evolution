@@ -64,7 +64,7 @@ export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state }) => {
           </div>
         </div>
 
-        {/* ── System switcher (always visible) ── */}
+        {/* ── System switcher + Globe button (always visible) ── */}
         <div className="pointer-events-auto px-4 pb-2">
           <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1">
             {ALL_STAR_SYSTEMS.map(sys => {
@@ -93,6 +93,14 @@ export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state }) => {
                 </button>
               );
             })}
+            {/* ── 天球儀ボタン ── */}
+            <button
+              onClick={state.enterGlobe}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold whitespace-nowrap transition-all active:scale-95 min-h-[36px] bg-indigo-500/15 border-indigo-400/40 text-indigo-200 active:bg-indigo-500/30"
+            >
+              <span>🌐</span>
+              <span>天球儀</span>
+            </button>
           </div>
         </div>
       </div>

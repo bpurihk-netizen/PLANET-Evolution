@@ -6,6 +6,7 @@ import { ExplorerHUD } from './components/ExplorerHUD';
 import { InfoPanel } from './components/InfoPanel';
 import { Deiland } from './components/Deiland';
 import { SpaceShooter } from './components/SpaceShooter';
+import { ConstellationGlobe } from './components/ConstellationGlobe';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -16,8 +17,14 @@ function SolarExplorerApp() {
   return (
     <div className="w-full h-[100dvh] overflow-hidden relative bg-[#020408]">
 
-      {/* ── Deiland surface mode — full replacement (frees WebGL context) ── */}
-      {state.deilandMode ? (
+      {/* ── Constellation globe mode — full replacement ── */}
+      {state.globeMode ? (
+        <ConstellationGlobe
+          onExit={state.exitGlobe}
+          onSwitchSystem={(id) => { state.exitGlobe(); state.switchSystem(id); }}
+        />
+      ) : state.deilandMode ? (
+        /* ── Deiland surface mode — full replacement (frees WebGL context) ── */
         <Deiland state={state} />
       ) : (
         <>
