@@ -2,6 +2,12 @@ import { useState, useCallback, useEffect } from 'react';
 import { CelestialBody } from '../data/celestialBodies';
 import { StarSystem, ALL_STAR_SYSTEMS, getSystemById, getAnyBodyById } from '../data/starSystems';
 
+export interface WarpTarget {
+  systemId: string;
+  nameJa: string;
+  distanceLy: number;
+}
+
 export type ViewMode = 'overview' | 'detail';
 export type ShooterMode = 'off' | 'prompt' | 'playing' | 'victory' | 'defeat';
 
@@ -12,6 +18,10 @@ export interface SolarSystemState {
   // Current star system
   currentSystemId: string;
   currentSystem: StarSystem;
+
+  // Warp animation
+  isWarping: boolean;
+  warpTarget: WarpTarget | null;
 
   // Navigation
   selectedBodyId: string | null;
@@ -41,6 +51,7 @@ export interface SolarSystemState {
   enterGlobe: () => void;
   exitGlobe: () => void;
   switchSystem: (id: string) => void;
+  completeWarp: () => void;
   selectBody: (id: string | null) => void;
   enterDetail: (id: string) => void;
   backToOverview: () => void;
@@ -94,6 +105,7 @@ export function useSolarSystem(): SolarSystemState {
   const [deilandMode, setDeilandMode] = useState(false);
   const [deilandBodyId, setDeilandBodyId] = useState<string | null>(null);
   const [shooterMode, setShooterMode] = useState<ShooterMode>('off');
+  const [warpTarget, setWarpTarget] = useState<WarpTarget | null>(null);
 
   const currentSystem = getSystemById(currentSystemId);
   const visitedBodyIds = visitedBySystem[currentSystemId] ?? [];
@@ -125,14 +137,28 @@ export function useSolarSystem(): SolarSystemState {
   }, []);
 
   const switchSystem = useCallback((id: string) => {
-    setCurrentSystemId(id);
+    // No-op while a warp is already in progress — prevents mid-warp retargeting
+    setWarpTarget(prev => {
+      if (prev !== null) return prev; // already warping, ignore
+      if (id === currentSystemId) return null; // same system, no-op
+      const target = getSystemById(id);
+      return { systemId: id, nameJa: target.nameJa, distanceLy: target.distanceLy };
+    });
+    // Exit any sub-modes immediately so the 3D view is visible during warp
+    // (We do this unconditionally — harmless if same system / already warping)
     setSelectedBodyId(null);
     setViewMode('overview');
     setDeilandMode(false);
     setDeilandBodyId(null);
     setShooterMode('off');
     setGlobeMode(false);
-  }, []);
+  }, [currentSystemId]);
+
+  const completeWarp = useCallback(() => {
+    if (!warpTarget) return;
+    setCurrentSystemId(warpTarget.systemId);
+    setWarpTarget(null);
+  }, [warpTarget]);
 
   const selectBody = useCallback((id: string | null) => {
     setSelectedBodyId(id);
@@ -181,6 +207,8 @@ export function useSolarSystem(): SolarSystemState {
     globeMode,
     currentSystemId,
     currentSystem,
+    isWarping: warpTarget !== null,
+    warpTarget,
     selectedBodyId,
     viewMode,
     focusBodyId,
@@ -194,6 +222,7 @@ export function useSolarSystem(): SolarSystemState {
     enterGlobe,
     exitGlobe,
     switchSystem,
+    completeWarp,
     selectBody,
     enterDetail,
     backToOverview,

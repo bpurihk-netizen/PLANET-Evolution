@@ -7,6 +7,7 @@ import { InfoPanel } from './components/InfoPanel';
 import { Deiland } from './components/Deiland';
 import { SpaceShooter } from './components/SpaceShooter';
 import { ConstellationGlobe } from './components/ConstellationGlobe';
+import { WarpOverlay } from './components/WarpOverlay';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -49,6 +50,14 @@ function SolarExplorerApp() {
               <SpaceShooter state={state} />
             </div>
           )}
+
+          {/* ── Warp animation overlay ── */}
+          <WarpOverlay
+            isActive={state.isWarping}
+            destinationName={state.warpTarget?.nameJa ?? ''}
+            distanceLy={state.warpTarget?.distanceLy ?? 0}
+            onComplete={state.completeWarp}
+          />
         </>
       )}
     </div>
