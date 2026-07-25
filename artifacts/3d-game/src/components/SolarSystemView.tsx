@@ -65,33 +65,54 @@ const OrbitLine: React.FC<{ radius: number; selected?: boolean }> = ({ radius, s
 // ── Camera controller ────────────────────────────────────────────────────────
 interface CameraControllerProps {
   viewMode: 'overview' | 'detail';
-  targetPos: THREE.Vector3 | null;
   targetRadius: number;
 }
 const OVERVIEW_CAM = new THREE.Vector3(0, 55, 32);
 const OVERVIEW_LOOK = new THREE.Vector3(0, 0, 0);
 
-const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetPos, targetRadius }) => {
+const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRadius }) => {
   const { camera } = useThree();
   const targetCamPos = useRef(OVERVIEW_CAM.clone());
   const targetLookAt = useRef(OVERVIEW_LOOK.clone());
   const currentLook = useRef(OVERVIEW_LOOK.clone());
+  // Track whether we are in an active transition (vs. steady state in overview)
+  const transitioning = useRef(false);
+  const prevMode = useRef(viewMode);
 
   useEffect(() => {
     if (viewMode === 'overview') {
       targetCamPos.current.copy(OVERVIEW_CAM);
       targetLookAt.current.copy(OVERVIEW_LOOK);
-    } else if (targetPos) {
-      const offset = new THREE.Vector3(0, targetRadius * 2.5, targetRadius * 5.5);
-      targetCamPos.current.copy(targetPos).add(offset);
-      targetLookAt.current.copy(targetPos);
+      transitioning.current = true; // animate back to overview position
+    } else {
+      // Detail mode: planet has moved to world origin (0,0,0)
+      // Camera: high above-behind so planet sits in upper 40% of screen
+      const yOff = Math.max(targetRadius * 3.0, 2.5);
+      const zOff = Math.max(targetRadius * 7.0, 6.0);
+      targetCamPos.current.set(0, yOff, zOff);
+      // Look at a point below the planet center so planet appears in upper portion
+      targetLookAt.current.set(0, -targetRadius * 1.2, 0);
+      transitioning.current = true;
     }
-  }, [viewMode, targetPos, targetRadius]);
+    prevMode.current = viewMode;
+  }, [viewMode, targetRadius]);
 
   useFrame(() => {
-    camera.position.lerp(targetCamPos.current, 0.06);
-    currentLook.current.lerp(targetLookAt.current, 0.06);
-    camera.lookAt(currentLook.current);
+    if (viewMode === 'detail') {
+      // Always drive camera in detail (OrbitControls is disabled)
+      camera.position.lerp(targetCamPos.current, 0.07);
+      currentLook.current.lerp(targetLookAt.current, 0.07);
+      camera.lookAt(currentLook.current);
+    } else if (transitioning.current) {
+      // overview: animate back to OVERVIEW_CAM, then stop so OrbitControls takes over
+      camera.position.lerp(targetCamPos.current, 0.06);
+      currentLook.current.lerp(targetLookAt.current, 0.06);
+      camera.lookAt(currentLook.current);
+      if (camera.position.distanceTo(targetCamPos.current) < 0.5) {
+        transitioning.current = false;
+      }
+    }
+    // else: overview + not transitioning → OrbitControls owns the camera freely
   });
   return null;
 };
@@ -126,7 +147,16 @@ const OrbitingBody: React.FC<OrbitingBodyProps> = ({
   });
 
   if (body.type === 'ASTEROID_BELT') {
-    return <AsteroidBeltRing orbitRadius={body.logOrbitRadius} />;
+    // Transparent torus hit area so users can tap the asteroid belt
+    return (
+      <group onClick={onClick}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[body.logOrbitRadius, 2.0, 4, 80]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+        <AsteroidBeltRing orbitRadius={body.logOrbitRadius} />
+      </group>
+    );
   }
 
   const isOverview = viewMode === 'overview';
@@ -220,23 +250,12 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
     }
   });
 
-  // Camera target position for selected body
-  const targetPos = useMemo(() => {
-    if (!state.selectedBody || state.viewMode !== 'detail') return null;
-    const ar = angleRefs.current[state.selectedBody.id];
-    if (!ar) return null;
-    const angle = ar.current;
-    const r = state.selectedBody.logOrbitRadius;
-    return new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
-  }, [state.selectedBody, state.viewMode]);
-
   return (
     <>
       <Stars />
       <CameraController
         viewMode={state.viewMode}
-        targetPos={targetPos}
-        targetRadius={state.selectedBody?.displayRadius ?? 0.5}
+        targetRadius={(state.selectedBody?.displayRadius ?? 0.5) * 4}
       />
 
       {/* Orbit lines (overview only) */}

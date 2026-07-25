@@ -78,7 +78,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
         <div className="w-10 h-1 rounded-full bg-white/20" />
       </div>
 
-      <div className="bg-[#080c18]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl max-h-[78dvh] overflow-y-auto">
+      <div className="bg-[#080c18]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl max-h-[50dvh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-[#080c18]/95 backdrop-blur-xl z-10 px-5 pt-4 pb-3 border-b border-white/8">
           <div className="flex items-start justify-between">

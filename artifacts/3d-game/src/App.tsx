@@ -33,9 +33,7 @@ function SolarExplorerApp() {
 
           {/* ── Educational info panel (slides up from bottom when body selected) ── */}
           <div className="absolute inset-0 z-20 pointer-events-none">
-            <div className="pointer-events-auto h-full" style={{ pointerEvents: 'none' }}>
-              <InfoPanel state={state} />
-            </div>
+            <InfoPanel state={state} />
           </div>
 
           {/* ── SpaceShooter overlay ── */}
