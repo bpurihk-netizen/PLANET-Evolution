@@ -164,6 +164,7 @@ const StoryCard: React.FC<StoryCardProps> = ({
                 constellationId={con.id}
                 accentColor={originColor}
                 size={180}
+                animate
               />
             </div>
 

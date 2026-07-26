@@ -9,6 +9,11 @@ interface ConstellationSilhouetteProps {
   className?: string;
   /** Enable tap-to-show-star-name interaction. Default true. */
   interactive?: boolean;
+  /**
+   * When true, plays the line-drawing animation on mount.
+   * Re-mounting the component replays the animation (works naturally when cards expand/collapse).
+   */
+  animate?: boolean;
 }
 
 export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = ({
@@ -17,6 +22,7 @@ export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = (
   size = 200,
   className,
   interactive = true,
+  animate = false,
 }) => {
   const art = useMemo(() => getConstellationArt(constellationId), [constellationId]);
   // Stable random suffix per constellationId (avoids filter ID collisions in multi-instance renders)
@@ -25,6 +31,30 @@ export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = (
 
   const [activeStar, setActiveStar] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Animation state ────────────────────────────────────────────────────────
+  // `drawn` flips to true after two animation frames, triggering CSS transitions.
+  const [drawn, setDrawn] = useState(!animate);
+
+  useEffect(() => {
+    if (!animate) {
+      setDrawn(true);
+      return;
+    }
+    setDrawn(false);
+    // Double-rAF ensures the browser has painted the initial "hidden" state before
+    // we flip `drawn`, so the CSS transition actually plays.
+    let raf1: number, raf2: number;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setDrawn(true);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, []); // intentionally only on mount — re-mounting replays automatically
 
   // Reset when constellation changes
   useEffect(() => {
@@ -64,6 +94,34 @@ export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = (
   }, [activeStar, art.stars]);
 
   const activeStarData = activeStar !== null ? (art.starNames?.[activeStar] ?? null) : null;
+
+  // ── Animation metrics ──────────────────────────────────────────────────────
+  // SVG viewBox is 0-100, so coordinate distances are in those units.
+  const numLines = art.lines.length;
+  const TOTAL_MS = 800; // total animation duration
+  const LINE_DRAW_MS = Math.max(280, TOTAL_MS / Math.max(numLines, 1)); // per-line draw duration
+
+  // For each line: start delay, Euclidean length in SVG units
+  const lineMetrics = useMemo(() => art.lines.map(([a, b], i) => {
+    const [x1, y1] = art.stars[a];
+    const [x2, y2] = art.stars[b];
+    const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    // Stagger: each line starts slightly after the previous
+    const delayMs = numLines <= 1 ? 0 : (i / (numLines - 1)) * (TOTAL_MS - LINE_DRAW_MS * 0.5);
+    return { length, delayMs };
+  }), [art, numLines]);
+
+  // For each star: earliest line that touches it → use that line's delay as star appearance delay
+  const starDelays = useMemo(() => {
+    const delays = new Array(art.stars.length).fill(TOTAL_MS + 100); // default: after all lines
+    art.lines.forEach(([a, b], i) => {
+      const d = lineMetrics[i].delayMs;
+      if (d < delays[a]) delays[a] = d;
+      if (d < delays[b]) delays[b] = d;
+    });
+    // Stars with no connected line appear at 0
+    return delays.map(d => (d === TOTAL_MS + 100 ? 0 : d));
+  }, [art, lineMetrics]);
 
   return (
     <div
@@ -107,6 +165,15 @@ export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = (
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+
+          {/* Bright-star burst filter used during animation entry */}
+          <filter id={`${svgId}-burst`} x="-200%" y="-200%" width="500%" height="500%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2.8" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
         {/* Background radial glow */}
@@ -127,35 +194,50 @@ export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = (
           />
         )}
 
-        {/* Constellation lines */}
+        {/* Constellation lines — animated with stroke-dashoffset */}
         {art.lines.map(([a, b], i) => {
           const [x1, y1] = art.stars[a];
           const [x2, y2] = art.stars[b];
+          const { length, delayMs } = lineMetrics[i];
           return (
             <line
               key={i}
               x1={x1} y1={y1} x2={x2} y2={y2}
               stroke={accentColor}
               strokeWidth="0.6"
-              strokeOpacity="0.45"
+              strokeOpacity={drawn ? 0.45 : 0.45}
               strokeLinecap="round"
+              style={{
+                strokeDasharray: animate ? length : undefined,
+                strokeDashoffset: animate ? (drawn ? 0 : length) : undefined,
+                transition: animate
+                  ? `stroke-dashoffset ${LINE_DRAW_MS}ms cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms`
+                  : undefined,
+              }}
             />
           );
         })}
 
-        {/* Stars */}
+        {/* Stars — animated with opacity + scale */}
         {art.stars.map(([x, y], i) => {
           const starName = art.starNames?.[i];
           const hasName = !!starName;
           const isActive = activeStar === i;
           const isBrightest = !!starName?.isBrightest;
+          const starDelayMs = starDelays[i];
 
           return (
             <g
               key={i}
               filter={isActive ? `url(#${svgId}-active-glow)` : `url(#${svgId}-glow)`}
               onClick={hasName && interactive ? (e) => handleStarClick(e, i) : undefined}
-              style={hasName && interactive ? { cursor: 'pointer' } : undefined}
+              style={{
+                cursor: hasName && interactive ? 'pointer' : undefined,
+                opacity: animate ? (drawn ? 1 : 0) : 1,
+                transition: animate
+                  ? `opacity 300ms ease-out ${starDelayMs + LINE_DRAW_MS * 0.6}ms`
+                  : undefined,
+              }}
             >
               {/* Invisible tap-friendly hit area */}
               {hasName && interactive && (
@@ -204,6 +286,23 @@ export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = (
                   <line x1={x - 3.5} y1={y} x2={x - 1.9} y2={y} stroke="white" strokeWidth="0.35" />
                   <line x1={x + 1.9} y1={y} x2={x + 3.5} y2={y} stroke="white" strokeWidth="0.35" />
                 </g>
+              )}
+
+              {/* Entry flash: bright ring that fades out as the star "lights up" */}
+              {animate && (
+                <circle
+                  cx={x} cy={y}
+                  r={isBrightest ? 5.5 : 4.0}
+                  fill="none"
+                  stroke={accentColor}
+                  strokeWidth="0.5"
+                  style={{
+                    opacity: drawn ? 0 : 0,
+                    transition: animate
+                      ? `opacity 500ms ease-out ${starDelayMs + LINE_DRAW_MS * 0.6}ms`
+                      : undefined,
+                  }}
+                />
               )}
             </g>
           );
