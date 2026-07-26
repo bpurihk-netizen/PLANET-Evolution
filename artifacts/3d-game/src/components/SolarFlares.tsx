@@ -41,6 +41,7 @@ void main(){
 }`;
 const CORONA_FRAG = `
 uniform float uTime;
+uniform float uActivity;
 varying vec3 vN; varying vec3 vV;
 ${NOISE_GLSL}
 void main(){
@@ -49,15 +50,24 @@ void main(){
   float n2=fbm(vN*5.5-uTime*.05)*.5+.5;
   float nm=n*.65+n2*.35;
   float breath=.9+.1*sin(uTime*.35);
-  vec3 col=mix(vec3(1.,.4,.03),vec3(1.,.88,.30),nm);
-  float a=fr*(0.22+0.12*nm)*breath;
+  // Higher activity → hotter corona (more white-yellow, brighter)
+  vec3 quietCol=mix(vec3(1.,.4,.03),vec3(1.,.88,.30),nm);
+  vec3 activeCol=mix(vec3(1.,.65,.10),vec3(1.,.98,.60),nm);
+  vec3 col=mix(quietCol,activeCol,uActivity);
+  float baseA=0.22+0.12*nm;
+  float a=fr*baseA*breath*(0.70+0.55*uActivity);
   gl_FragColor=vec4(col,a);
 }`;
 
-const EnhancedCorona: React.FC<{ sunR: number }> = ({ sunR }) => {
+const EnhancedCorona: React.FC<{ sunR: number; activity: number }> = ({ sunR, activity }) => {
   const ref = useRef<THREE.ShaderMaterial>(null);
-  const uni = useMemo(() => ({ uTime: { value: 0 } }), []);
-  useFrame((_,dt) => { if (ref.current) ref.current.uniforms.uTime.value += dt; });
+  const uni = useMemo(() => ({ uTime: { value: 0 }, uActivity: { value: activity } }), [activity]);
+  useFrame((_,dt) => {
+    if (ref.current) {
+      ref.current.uniforms.uTime.value += dt;
+      ref.current.uniforms.uActivity.value = activity;
+    }
+  });
   return (
     <mesh>
       <sphereGeometry args={[sunR * 1.65, 48, 48]} />
@@ -86,13 +96,14 @@ void main(){
 }`;
 const STREAMER_FRAG = `
 uniform float uTime;
+uniform float uActivity;
 varying float vLen;
 varying float vSeed;
 void main(){
-  // Outer streamers are white/pale-yellow at base fading to transparent at tip
   float breath=.88+.12*sin(uTime*.4+vSeed*3.1);
   vec3 col=mix(vec3(1.,.88,.45),vec3(1.,.96,.75),vLen);
-  float a=(1.-vLen)*(1.-vLen)*0.30*breath;
+  // Active sun → more visible, brighter streamers
+  float a=(1.-vLen)*(1.-vLen)*(0.15+0.28*uActivity)*breath;
   gl_FragColor=vec4(col,a);
 }`;
 
@@ -160,11 +171,16 @@ function buildStreamersGeo(sunR: number): THREE.BufferGeometry {
   return geo;
 }
 
-const CoronaStreamers: React.FC<{ sunR: number }> = ({ sunR }) => {
+const CoronaStreamers: React.FC<{ sunR: number; activity: number }> = ({ sunR, activity }) => {
   const ref  = useRef<THREE.ShaderMaterial>(null);
   const geo  = useMemo(() => buildStreamersGeo(sunR), [sunR]);
-  const uni  = useMemo(() => ({ uTime: { value: 0 } }), []);
-  useFrame((_,dt) => { if (ref.current) ref.current.uniforms.uTime.value += dt; });
+  const uni  = useMemo(() => ({ uTime: { value: 0 }, uActivity: { value: activity } }), [activity]);
+  useFrame((_,dt) => {
+    if (ref.current) {
+      ref.current.uniforms.uTime.value += dt;
+      ref.current.uniforms.uActivity.value = activity;
+    }
+  });
   return (
     <mesh geometry={geo}>
       <shaderMaterial ref={ref}
@@ -186,6 +202,7 @@ void main(){
 }`;
 const CHROM_FRAG = `
 uniform float uTime;
+uniform float uActivity;
 varying vec3 vN; varying vec3 vV;
 ${NOISE_GLSL}
 void main(){
@@ -193,16 +210,22 @@ void main(){
   fr=pow(fr,4.5);
   float n=fbm(vN*8.+uTime*.06)*.5+.5;
   float pulse=.85+.15*sin(uTime*.8);
-  // H-alpha pink / crimson
+  // H-alpha pink/crimson; active sun adds bright flare spicules
   vec3 col=mix(vec3(.95,.15,.12),vec3(1.,.45,.25),n);
-  float a=fr*(0.35+0.15*n)*pulse;
-  gl_FragColor=vec4(col,a);
+  vec3 flareCol=mix(col,vec3(1.,.7,.3),uActivity*0.5);
+  float a=fr*(0.20+0.28*uActivity+0.10*n)*pulse;
+  gl_FragColor=vec4(flareCol,a);
 }`;
 
-const Chromosphere: React.FC<{ sunR: number }> = ({ sunR }) => {
+const Chromosphere: React.FC<{ sunR: number; activity: number }> = ({ sunR, activity }) => {
   const ref = useRef<THREE.ShaderMaterial>(null);
-  const uni = useMemo(() => ({ uTime: { value: 0 } }), []);
-  useFrame((_,dt) => { if (ref.current) ref.current.uniforms.uTime.value += dt; });
+  const uni = useMemo(() => ({ uTime: { value: 0 }, uActivity: { value: activity } }), [activity]);
+  useFrame((_,dt) => {
+    if (ref.current) {
+      ref.current.uniforms.uTime.value += dt;
+      ref.current.uniforms.uActivity.value = activity;
+    }
+  });
   return (
     <mesh>
       <sphereGeometry args={[sunR * 1.025, 64, 64]} />
@@ -218,52 +241,54 @@ const Chromosphere: React.FC<{ sunR: number }> = ({ sunR }) => {
 const PROM_VERT = `
 uniform float uTime;
 uniform float uSeed;
+uniform float uActivity;
 varying vec2 vUv;
 ${NOISE_GLSL}
 void main(){
   vUv=uv;
-  // Turbulent displacement along the ribbon surface (stronger at apex, u≈0.5)
   float arch=sin(uv.x*3.14159);
   vec3 p=position;
-  float turb=fbm(p*1.8+uTime*0.12+uSeed)*0.14*arch;
+  // More turbulent at higher activity
+  float speed=0.12+0.18*uActivity;
+  float turb=fbm(p*1.8+uTime*speed+uSeed)*(0.10+0.10*uActivity)*arch;
   p+=normal*turb;
-  // Slow global sway
-  float sway=sin(uTime*0.15+uSeed*6.28)*arch*0.08;
+  float sway=sin(uTime*(0.15+0.12*uActivity)+uSeed*6.28)*arch*0.08;
   p.x+=sway; p.z+=sway*0.3;
   gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
 }`;
 const PROM_FRAG = `
 uniform float uTime;
 uniform float uSeed;
+uniform float uActivity;
 varying vec2 vUv;
 ${NOISE_GLSL}
 void main(){
   float along=vUv.x;
-  float arch=sin(along*3.14159);   // 0→1→0
-  float rim =1.-abs(vUv.y*2.-1.); // 0→1→0 across ribbon width
+  float arch=sin(along*3.14159);
+  float rim =1.-abs(vUv.y*2.-1.);
 
-  // Turbulent interior structure
-  vec2 nuv=vUv*vec2(4.,1.)+vec2(uTime*0.06+uSeed,uTime*0.03);
+  float speed=0.06+0.08*uActivity;
+  vec2 nuv=vUv*vec2(4.,1.)+vec2(uTime*speed+uSeed,uTime*speed*.5);
   float n=fbm(vec3(nuv,uSeed))*.5+.5;
   float n2=fbm(vec3(nuv*2.1,uSeed+1.))*.5+.5;
 
-  // Color: hot footpoints (yellow) → cool apex (crimson, H-alpha style)
-  vec3 footCol=vec3(1.00,0.78,0.10);   // bright yellow-white footpoint
-  vec3 midCol =vec3(1.00,0.35,0.05);   // orange mid
-  vec3 apexCol=vec3(0.85,0.08,0.15);   // deep crimson/H-alpha apex
+  // Color: hot footpoints (yellow) → cool apex (crimson H-alpha)
+  // Active sun adds flare brightening (white-yellow surge)
+  vec3 footCol=mix(vec3(1.00,0.78,0.10),vec3(1.00,0.95,0.55),uActivity*0.6);
+  vec3 midCol =vec3(1.00,0.35,0.05);
+  vec3 apexCol=vec3(0.85,0.08,0.15);
   vec3 col=mix(footCol,midCol,arch*.6);
   col=mix(col,apexCol,arch*arch*(n*.4+.6));
-  col=mix(col,col*1.4,n2*.3);          // bright filament threads
+  col=mix(col,col*1.4,n2*.3);
 
-  // Slow pulse + flicker
-  float pulse  =0.80+0.20*sin(uTime*0.50+uSeed*3.7);
-  float flicker=0.92+0.08*sin(uTime*3.10+uSeed*7.3);
+  float pulse  =0.80+0.20*sin(uTime*(0.50+0.30*uActivity)+uSeed*3.7);
+  float flicker=0.92+0.08*sin(uTime*(3.10+1.5*uActivity)+uSeed*7.3);
   col*=pulse*flicker;
 
-  // Alpha: fade at feet, at ribbon edges, and slightly at apex for transparency
-  float edgeA=arch*(0.5+0.5*arch);  // more opaque in lower half of arch
+  float edgeA=arch*(0.5+0.5*arch);
   float rimA =pow(rim,0.7);
-  float a=edgeA*rimA*(0.72+0.18*n)*pulse;
+  // More opaque / larger at higher activity
+  float a=edgeA*rimA*(0.60+0.30*uActivity+0.12*n)*pulse;
   gl_FragColor=vec4(col,a);
 }`;
 
@@ -342,11 +367,20 @@ function buildRibbonGeo(sunR: number, cfg: FlareCfg): THREE.BufferGeometry {
   return geo;
 }
 
-const ProminenceRibbon: React.FC<{ sunR: number; cfg: FlareCfg }> = ({ sunR, cfg }) => {
+const ProminenceRibbon: React.FC<{ sunR: number; cfg: FlareCfg; activity: number }> = ({ sunR, cfg, activity }) => {
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const geo    = useMemo(() => buildRibbonGeo(sunR, cfg), [sunR, cfg]);
-  const uni    = useMemo(() => ({ uTime: { value: 0 }, uSeed: { value: cfg.seed } }), [cfg.seed]);
-  useFrame((_,dt) => { if (matRef.current) matRef.current.uniforms.uTime.value += dt; });
+  const uni    = useMemo(() => ({
+    uTime:     { value: 0 },
+    uSeed:     { value: cfg.seed },
+    uActivity: { value: activity },
+  }), [cfg.seed, activity]);
+  useFrame((_,dt) => {
+    if (matRef.current) {
+      matRef.current.uniforms.uTime.value += dt;
+      matRef.current.uniforms.uActivity.value = activity;
+    }
+  });
   return (
     <mesh geometry={geo}>
       <shaderMaterial ref={matRef}
@@ -358,7 +392,11 @@ const ProminenceRibbon: React.FC<{ sunR: number; cfg: FlareCfg }> = ({ sunR, cfg
 };
 
 // ── Public export ─────────────────────────────────────────────────────────────
-export interface SolarFlaresProps { sunRadius: number; }
+export interface SolarFlaresProps {
+  sunRadius: number;
+  /** 0.0–1.0 activity level from NOAA (default 0.2 = quiet sun) */
+  activityLevel?: number;
+}
 
 function buildConfigs(sunR: number): FlareCfg[] {
   // [theta, phi, heightRatio, spreadRad, widthRatio, seed]
@@ -380,15 +418,15 @@ function buildConfigs(sunR: number): FlareCfg[] {
   }));
 }
 
-export const SolarFlares: React.FC<SolarFlaresProps> = ({ sunRadius }) => {
+export const SolarFlares: React.FC<SolarFlaresProps> = ({ sunRadius, activityLevel = 0.2 }) => {
   const configs = useMemo(() => buildConfigs(sunRadius), [sunRadius]);
   return (
     <group>
-      <EnhancedCorona    sunR={sunRadius} />
-      <CoronaStreamers   sunR={sunRadius} />
-      <Chromosphere      sunR={sunRadius} />
+      <EnhancedCorona    sunR={sunRadius} activity={activityLevel} />
+      <CoronaStreamers   sunR={sunRadius} activity={activityLevel} />
+      <Chromosphere      sunR={sunRadius} activity={activityLevel} />
       {configs.map((cfg, i) => (
-        <ProminenceRibbon key={i} sunR={sunRadius} cfg={cfg} />
+        <ProminenceRibbon key={i} sunR={sunRadius} cfg={cfg} activity={activityLevel} />
       ))}
     </group>
   );

@@ -6,6 +6,7 @@ import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
 import { CelestialBodyMesh, AsteroidBeltRing, CometTail } from './CelestialBody';
 import { SolarFlares } from './SolarFlares';
+import { useNoaaSpaceWeather, FlareClass } from '../hooks/useNoaaSpaceWeather';
 
 // ── Stars background ────────────────────────────────────────────────────────
 const Stars: React.FC = () => {
@@ -378,9 +379,10 @@ const MoonOrbit: React.FC<{
 // ── Main Scene (dynamic — works for any star system) ──────────────────────────
 interface SceneProps {
   state: SolarSystemState;
+  activityLevel: number;
 }
 
-const Scene: React.FC<SceneProps> = ({ state }) => {
+const Scene: React.FC<SceneProps> = ({ state, activityLevel }) => {
   const bodies = state.currentSystem.bodies;
   const starBody = bodies[0]; // Always the central star
   const orbitBodies = bodies.slice(1);
@@ -451,8 +453,8 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
             isOverview={state.viewMode === 'overview'}
             onClick={() => state.enterDetail(starBody.id)}
           />
-          {/* Solar flares + enhanced corona — visible in both overview and detail */}
-          <SolarFlares sunRadius={starBody.displayRadius} />
+          {/* Solar flares + enhanced corona — driven by live NOAA activity */}
+          <SolarFlares sunRadius={starBody.displayRadius} activityLevel={activityLevel} />
           {state.viewMode === 'overview' && (
             <StarGlow color={starBody.colorMain} radius={starBody.displayRadius} />
           )}
@@ -528,27 +530,78 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
   );
 };
 
+// ── Activity badge colors ────────────────────────────────────────────────────
+const BADGE_COLOR: Record<FlareClass, string> = {
+  A: '#22c55e', B: '#4ade80', C: '#eab308', M: '#f97316', X: '#ef4444', '?': '#6b7280',
+};
+const BADGE_BG: Record<FlareClass, string> = {
+  A: '#14532d', B: '#166534', C: '#713f12', M: '#7c2d12', X: '#7f1d1d', '?': '#1f2937',
+};
+
 // ── Exported canvas component ────────────────────────────────────────────────
-export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }) => (
-  <Canvas
-    key={state.currentSystemId} // Force remount on system change to reset R3F state
-    camera={{ position: [0, 55, 32], fov: 42, near: 0.1, far: 1000 }}
-    gl={{ antialias: true, alpha: false, toneMapping: THREE.ACESFilmicToneMapping }}
-    style={{ width: '100%', height: '100%', background: '#020408' }}
-  >
-    <color attach="background" args={['#020408']} />
-    <Scene state={state} />
-    {state.viewMode === 'overview' && (
-      <OrbitControls
-        enablePan={false}
-        enableZoom={true}
-        enableDamping
-        dampingFactor={0.08}
-        minDistance={12}
-        maxDistance={100}
-        maxPolarAngle={Math.PI / 2.2}
-        touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
-      />
-    )}
-  </Canvas>
-);
+export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }) => {
+  const weather = useNoaaSpaceWeather();
+  const isSun   = state.viewMode === 'detail' && state.currentSystem.bodies[0]?.id === 'sun'
+                  && state.focusBodyId === 'sun';
+
+  return (
+    <div className="relative w-full h-full">
+      <Canvas
+        key={state.currentSystemId}
+        camera={{ position: [0, 55, 32], fov: 42, near: 0.1, far: 1000 }}
+        gl={{ antialias: true, alpha: false, toneMapping: THREE.ACESFilmicToneMapping }}
+        style={{ width: '100%', height: '100%', background: '#020408' }}
+      >
+        <color attach="background" args={['#020408']} />
+        <Scene state={state} activityLevel={weather.activityLevel} />
+        {state.viewMode === 'overview' && (
+          <OrbitControls
+            enablePan={false}
+            enableZoom={true}
+            enableDamping
+            dampingFactor={0.08}
+            minDistance={12}
+            maxDistance={100}
+            maxPolarAngle={Math.PI / 2.2}
+            touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
+          />
+        )}
+      </Canvas>
+
+      {/* ── NOAA Solar Activity Badge (sun detail view only) ── */}
+      {isSun && !weather.loading && (
+        <div className="absolute bottom-[calc(env(safe-area-inset-bottom,0px)+200px)] left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-md"
+            style={{
+              background: BADGE_BG[weather.flareClass] + 'cc',
+              borderColor: BADGE_COLOR[weather.flareClass] + '66',
+            }}
+          >
+            {/* Pulsing dot */}
+            <span
+              className="w-2 h-2 rounded-full animate-pulse shrink-0"
+              style={{ background: BADGE_COLOR[weather.flareClass] }}
+            />
+            <span className="text-white/50 text-[10px] font-mono">現在の太陽活動</span>
+            <span
+              className="text-xs font-bold font-mono tracking-wider"
+              style={{ color: BADGE_COLOR[weather.flareClass] }}
+            >
+              {weather.label}
+            </span>
+            {weather.flareClass === 'X' && (
+              <span className="text-[10px] text-red-300 font-bold animate-pulse">⚠ 強フレア</span>
+            )}
+            {weather.flareClass === 'M' && (
+              <span className="text-[10px] text-orange-300">中フレア</span>
+            )}
+            {weather.error && (
+              <span className="text-[10px] text-white/30">（オフライン）</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
