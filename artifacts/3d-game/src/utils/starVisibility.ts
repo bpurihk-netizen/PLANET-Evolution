@@ -456,21 +456,109 @@ function outerPlanetVisibility(elong: number): PlanetVisibility {
   return elong > 0 ? 'evening' : 'morning';
 }
 
-function elongToBestTime(elong: number, isInner: boolean): string {
+/**
+ * Compute approximate local sunrise and sunset times (hours in 0–24 local solar time)
+ * for a given date and observer latitude.
+ *
+ * Uses the standard hour-angle formula:
+ *   cos(H) = (sin(h₀) − sin(lat)·sin(dec)) / (cos(lat)·cos(dec))
+ * where h₀ = −0.833° accounts for atmospheric refraction + solar disk radius.
+ *
+ * Returns:
+ *   sunriseH  — local solar time of sunrise (hours, 0–24); null for polar night
+ *   sunsetH   — local solar time of sunset (hours, 0–24); null for polar night
+ *   isMidnightSun — true when the sun never sets (Arctic/Antarctic summer)
+ *   isPolarNight  — true when the sun never rises (Arctic/Antarctic winter)
+ *
+ * Note: "local solar time" ≈ local standard time for this educational display.
+ * Accuracy ±15 min, adequate for the "best viewing time" hint.
+ */
+export function computeSunriseSunsetHours(date: Date, latDeg: number): {
+  sunriseH: number | null;
+  sunsetH:  number | null;
+  isMidnightSun: boolean;
+  isPolarNight:  boolean;
+} {
+  // Sun's ecliptic longitude (degrees) — same approximation as getSunRADeg
+  const doy = getDayOfYear(date);
+  const lambdaDeg = ((doy - 80) / 365.25) * 360;
+  const lambdaRad = lambdaDeg * (Math.PI / 180);
+
+  // Sun's declination
+  const eps = 23.44 * (Math.PI / 180);
+  const decRad = Math.asin(Math.sin(eps) * Math.sin(lambdaRad));
+
+  // Hour angle at horizon (h₀ = −0.833° refraction correction)
+  const h0Rad  = -0.833 * (Math.PI / 180);
+  const latRad = latDeg * (Math.PI / 180);
+  const cosH =
+    (Math.sin(h0Rad) - Math.sin(latRad) * Math.sin(decRad)) /
+    (Math.cos(latRad) * Math.cos(decRad));
+
+  if (cosH > 1)  return { sunriseH: null, sunsetH: null, isMidnightSun: false, isPolarNight: true };
+  if (cosH < -1) return { sunriseH: null, sunsetH: null, isMidnightSun: true,  isPolarNight: false };
+
+  const H_hours = Math.acos(cosH) * (180 / Math.PI) / 15; // half-day arc in hours
+  return {
+    sunriseH: 12 - H_hours,
+    sunsetH:  12 + H_hours,
+    isMidnightSun: false,
+    isPolarNight:  false,
+  };
+}
+
+/**
+ * Compute the "best viewing time" label for a planet, adjusted for the observer's
+ * latitude (which determines local sunset/sunrise hours).
+ *
+ * @param elong     Signed elongation from Sun (degrees). + = east = evening sky.
+ * @param isInner   True for Mercury/Venus (inner planets).
+ * @param latDeg    Observer latitude (default: Japan 35°N).
+ * @param date      Observation date (used to compute solar declination → sun times).
+ */
+function elongToBestTime(elong: number, isInner: boolean, latDeg = JAPAN_LAT, date: Date = new Date()): string {
   const absE = Math.abs(elong);
   if (absE < 18) return '観察不可';
-  if (absE > 160) return '22:00ごろ南中';
-  if (elong > 0) {
-    // Evening sky: Sun sets ~18:00, planet is elong/15 hours after Sun
-    const hoursAfterSunset = absE / 15;
-    const h = Math.min(Math.round(18 + hoursAfterSunset), 23);
-    return `${h}:00ごろ見ごろ`;
-  } else {
-    // Morning sky
-    const hoursBeforeSunrise = absE / 15;
-    const h = Math.max(Math.round(6 - hoursBeforeSunrise), 1);
-    return `${h.toString().padStart(2,'0')}:00ごろ見ごろ`;
+
+  const { sunriseH, sunsetH, isMidnightSun, isPolarNight } = computeSunriseSunsetHours(date, latDeg);
+
+  // ── Polar night: darkness all day → planet is visible whenever above horizon ──
+  if (isPolarNight) {
+    if (absE > 160) return '深夜ごろ南中（極夜）';
+    if (elong > 0)  return '夕方の空（極夜）';
+    return '夜明け前の空（極夜）';
   }
+
+  // ── Midnight sun: no astronomical darkness → observation is difficult ──
+  if (isMidnightSun) {
+    return '白夜のため観察困難';
+  }
+
+  // ── Opposition / near-opposition outer planet ──
+  if (absE > 160) {
+    // Planet transits near local solar midnight (≈ 00:00 solar time).
+    // Give a rough local time: midnight in local solar time ≈ 00:00.
+    // Round to nearest hour for display.
+    return '深夜0時ごろ南中';
+  }
+
+  // ── Evening sky (planet east of Sun) ──
+  if (elong > 0) {
+    // Planet rises roughly elong/15 hours after the Sun, so it's highest
+    // elong/15 hours after local sunset.
+    const hoursAfterSunset = absE / 15;
+    const rawH = (sunsetH ?? 18) + hoursAfterSunset;
+    // Clamp to sensible night-time range [sunset, 23:59]
+    const h = Math.min(Math.round(rawH), 23);
+    return `${h.toString().padStart(2, '0')}:00ごろ見ごろ`;
+  }
+
+  // ── Morning sky (planet west of Sun) ──
+  const hoursBeforeSunrise = absE / 15;
+  const rawH = (sunriseH ?? 6) - hoursBeforeSunrise;
+  // Clamp to sensible pre-dawn range [01:00, sunrise]
+  const h = Math.max(Math.round(rawH), 1);
+  return `${h.toString().padStart(2, '0')}:00ごろ見ごろ`;
 }
 
 function elongToNoteJa(nameJa: string, visibility: PlanetVisibility, elongDeg: number): string {
@@ -562,7 +650,7 @@ function computeGalileanMoons(jd: number): GalileanMoon[] {
   });
 }
 
-export function computePlanetsTonight(date: Date): PlanetInfo[] {
+export function computePlanetsTonight(date: Date, latDeg = JAPAN_LAT, _lonDeg = JAPAN_LON): PlanetInfo[] {
   const jd = toJD(date);
 
   // Earth's heliocentric position (ecliptic plane, AU)
@@ -607,7 +695,7 @@ export function computePlanetsTonight(date: Date): PlanetInfo[] {
       ? innerPlanetVisibility(elongationDeg)
       : outerPlanetVisibility(elongationDeg);
 
-    const bestTimeJa = elongToBestTime(elongationDeg, isInner);
+    const bestTimeJa = elongToBestTime(elongationDeg, isInner, latDeg, date);
     const noteJa = elongToNoteJa(nameJa, visibility, elongationDeg);
 
     const extra: Partial<PlanetInfo> = {};

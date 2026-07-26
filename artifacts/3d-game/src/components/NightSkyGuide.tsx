@@ -1102,7 +1102,10 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
     [today, location.latDeg, location.lonDeg],
   );
   const moon = useMemo(() => computeMoonPhase(today), [today]);
-  const planets = useMemo(() => computePlanetsTonight(today), [today]);
+  const planets = useMemo(
+    () => computePlanetsTonight(today, location.latDeg, location.lonDeg),
+    [today, location.latDeg, location.lonDeg],
+  );
   const annualCalendar = useMemo(
     () => computeAnnualCalendar(CONSTELLATIONS, today.getFullYear(), location.latDeg, location.lonDeg),
     [today, location.latDeg, location.lonDeg],
