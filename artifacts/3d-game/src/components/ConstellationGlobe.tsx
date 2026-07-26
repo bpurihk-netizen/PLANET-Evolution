@@ -1,12 +1,13 @@
-import React, { useRef, useMemo, useState } from 'react';
+import React, { useRef, useMemo, useState, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { CONSTELLATIONS, Constellation, radec2xyz } from '../data/constellations';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import { CONSTELLATION_LINES } from '../data/constellationLines';
+import { NAMED_STARS, NamedStarEntry } from '../data/namedStars';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, X, ExternalLink, Search } from 'lucide-react';
+import { ChevronLeft, X, ExternalLink, Search, Star } from 'lucide-react';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GLOBE_R = 32;
@@ -131,6 +132,45 @@ const ConstellationNode: React.FC<ConstellationNodeProps> = ({ con, isSelected, 
   );
 };
 
+// ── Named Star Node ───────────────────────────────────────────────────────────
+interface NamedStarNodeProps {
+  star: NamedStarEntry;
+  isSelected: boolean;
+  onClick: () => void;
+}
+
+const NamedStarNode: React.FC<NamedStarNodeProps> = ({ star, isSelected, onClick }) => {
+  const [x, y, z] = radec2xyz(star.raDeg, star.decDeg, GLOBE_R - 0.05);
+  const dotR   = star.isBrightest ? 0.24 : 0.14;
+  const hitR   = Math.max(dotR * 5, 0.9);
+  const color  = star.isBrightest
+    ? (isSelected ? '#ffe066' : '#ffd700')
+    : (isSelected ? '#a0dfff' : '#88ccee');
+  const opacity = isSelected ? 1.0 : star.isBrightest ? 0.85 : 0.60;
+
+  return (
+    <group>
+      {/* Invisible hit sphere */}
+      <mesh position={[x, y, z]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+        <sphereGeometry args={[hitR, 6, 6]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      {/* Visible dot */}
+      <mesh position={[x, y, z]}>
+        <sphereGeometry args={[dotR, 8, 8]} />
+        <meshBasicMaterial color={color} transparent opacity={opacity} />
+      </mesh>
+      {/* Selection ring */}
+      {isSelected && (
+        <mesh position={[x, y, z]}>
+          <ringGeometry args={[dotR * 2.2, dotR * 3.2, 24]} />
+          <meshBasicMaterial color="#ffe066" transparent opacity={0.70} side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+      )}
+    </group>
+  );
+};
+
 // ── Star-system Pin ──────────────────────────────────────────────────────────
 interface SystemPinProps {
   raDeg: number;
@@ -224,9 +264,15 @@ interface GlobeSceneProps {
   onSelect: (id: string | null) => void;
   visibleIds: Set<string> | null; // null = show all
   showLines: boolean;
+  selectedStarKey: string | null;
+  onSelectStar: (star: NamedStarEntry | null) => void;
+  showStarNames: boolean;
 }
 
-const GlobeScene: React.FC<GlobeSceneProps> = ({ selectedId, onSelect, visibleIds, showLines }) => (
+const GlobeScene: React.FC<GlobeSceneProps> = ({
+  selectedId, onSelect, visibleIds, showLines,
+  selectedStarKey, onSelectStar, showStarNames,
+}) => (
   <>
     <StarField />
     <CelestialEquator />
@@ -243,6 +289,17 @@ const GlobeScene: React.FC<GlobeSceneProps> = ({ selectedId, onSelect, visibleId
         onClick={() => onSelect(selectedId === con.id ? null : con.id)}
       />
     ))}
+    {showStarNames && NAMED_STARS.map((star, idx) => {
+      const key = `${star.conId}-${star.nameEn}-${idx}`;
+      return (
+        <NamedStarNode
+          key={key}
+          star={star}
+          isSelected={selectedStarKey === key}
+          onClick={() => onSelectStar(selectedStarKey === key ? null : star)}
+        />
+      );
+    })}
     {SYSTEM_PINS.map(pin => (
       <SystemPin key={pin.id} {...pin} />
     ))}
@@ -337,6 +394,70 @@ const GlobeInfoPanel: React.FC<GlobeInfoPanelProps> = ({ constellation, onClose,
   );
 };
 
+// ── Star Name Popup ───────────────────────────────────────────────────────────
+interface StarNamePopupProps {
+  star: NamedStarEntry | null;
+  onClose: () => void;
+}
+
+const StarNamePopup: React.FC<StarNamePopupProps> = ({ star, onClose }) => {
+  const isVisible = !!star;
+  const con = star ? CONSTELLATIONS.find(c => c.id === star.conId) : null;
+
+  return (
+    <div
+      className={cn(
+        'fixed bottom-28 left-1/2 -translate-x-1/2 z-40 transition-all duration-300 pointer-events-auto w-[min(92vw,360px)]',
+        isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+      )}
+    >
+      {star && (
+        <div className="bg-[#0a0f1f]/95 backdrop-blur-xl border border-white/12 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-start justify-between px-4 pt-3.5 pb-2.5 border-b border-white/8">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {star.isBrightest ? (
+                <span className="text-yellow-400 shrink-0"><Star size={16} fill="currentColor" /></span>
+              ) : (
+                <span className="text-sky-400/80 shrink-0">✦</span>
+              )}
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-white font-bold text-lg leading-tight">{star.nameJa}</span>
+                  {star.isBrightest && (
+                    <span className="text-yellow-400/70 text-[10px] font-bold tracking-widest uppercase border border-yellow-400/30 rounded-full px-1.5 py-0.5 shrink-0">
+                      主星
+                    </span>
+                  )}
+                </div>
+                <div className="text-white/45 text-xs font-mono mt-0.5">{star.nameEn}</div>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full bg-white/8 active:bg-white/20 text-white/50 transition-colors shrink-0 ml-2 min-w-[36px] min-h-[36px] flex items-center justify-center"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {/* Body */}
+          <div className="px-4 py-3 space-y-2">
+            {star.meaning && (
+              <p className="text-white/70 text-sm leading-relaxed">{star.meaning}</p>
+            )}
+            {con && (
+              <div className="flex items-center gap-1.5 text-indigo-300/60 text-xs font-mono">
+                <span>✦</span>
+                <span>{con.nameJa}（{con.nameEn}）</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Exported Component ────────────────────────────────────────────────────────
 interface ConstellationGlobeProps {
   onExit: () => void;
@@ -348,6 +469,10 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [showLines, setShowLines] = useState(false);
+  const [showStarNames, setShowStarNames] = useState(false);
+  const [selectedStar, setSelectedStar] = useState<NamedStarEntry | null>(null);
+  const [selectedStarKey, setSelectedStarKey] = useState<string | null>(null);
+
   const selected = selectedId ? CONSTELLATIONS.find(c => c.id === selectedId) ?? null : null;
 
   const isSearching = searchText.trim().length > 0;
@@ -365,12 +490,25 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
   const handleSelect = (id: string | null) => {
     setSelectedId(id);
     if (id) onConstellationViewed?.(id);
+    // Close star popup when selecting a constellation
+    if (id) { setSelectedStar(null); setSelectedStarKey(null); }
   };
 
   const handleSwitchSystem = (id: string) => {
     onSwitchSystem(id);
     onExit();
   };
+
+  const handleSelectStar = useCallback((star: NamedStarEntry | null) => {
+    setSelectedStar(star);
+    if (star) {
+      const idx = NAMED_STARS.indexOf(star);
+      setSelectedStarKey(`${star.conId}-${star.nameEn}-${idx}`);
+      setSelectedId(null); // close constellation panel
+    } else {
+      setSelectedStarKey(null);
+    }
+  }, []);
 
   return (
     <div className="w-full h-full relative bg-[#020408]">
@@ -381,7 +519,15 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
         style={{ width: '100%', height: '100%' }}
       >
         <color attach="background" args={['#020408']} />
-        <GlobeScene selectedId={selectedId} onSelect={handleSelect} visibleIds={visibleIds} showLines={showLines} />
+        <GlobeScene
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          visibleIds={visibleIds}
+          showLines={showLines}
+          selectedStarKey={selectedStarKey}
+          onSelectStar={handleSelectStar}
+          showStarNames={showStarNames}
+        />
         <OrbitControls
           enablePan={false}
           enableZoom={true}
@@ -425,9 +571,9 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
             </button>
           </div>
 
-          {/* Search bar */}
-          <div className="px-4 pb-2 pointer-events-auto">
-            <div className="relative flex items-center">
+          {/* Second toolbar row: search + star-names toggle */}
+          <div className="px-4 pb-2 pointer-events-auto flex items-center gap-2">
+            <div className="relative flex items-center flex-1">
               <Search size={13} className="absolute left-3 text-white/30 pointer-events-none" />
               <input
                 type="text"
@@ -445,12 +591,29 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
                 </button>
               )}
             </div>
-            {isSearching && (
-              <div className="text-[10px] text-white/30 font-mono mt-1 pl-1">
-                {searchResultCount > 0 ? `${searchResultCount} 件ヒット` : '一致する星座が見つかりません'}
-              </div>
-            )}
+            {/* Star names toggle */}
+            <button
+              onClick={() => {
+                setShowStarNames(v => !v);
+                if (showStarNames) { setSelectedStar(null); setSelectedStarKey(null); }
+              }}
+              className={cn(
+                'shrink-0 px-3 py-2 backdrop-blur-md border rounded-xl min-h-[36px] flex items-center gap-1.5 transition-all active:scale-95 text-xs font-bold',
+                showStarNames
+                  ? 'bg-yellow-500/20 border-yellow-400/50 text-yellow-300'
+                  : 'bg-white/8 border-white/12 text-white/40'
+              )}
+              title="星名を表示"
+            >
+              <Star size={12} fill={showStarNames ? 'currentColor' : 'none'} />
+              <span className="hidden sm:inline">星名</span>
+            </button>
           </div>
+          {isSearching && (
+            <div className="text-[10px] text-white/30 font-mono px-5 pb-1">
+              {searchResultCount > 0 ? `${searchResultCount} 件ヒット` : '一致する星座が見つかりません'}
+            </div>
+          )}
         </div>
 
         {/* Legend */}
@@ -464,22 +627,43 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
               <div className="w-2 h-2 rounded-full bg-[#88ccff]" />
               <span className="text-[10px] text-white/50 font-mono">一般星座</span>
             </div>
+            {showStarNames && (
+              <>
+                <div className="h-px bg-white/10 my-0.5" />
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[#ffd700]" />
+                  <span className="text-[10px] text-white/50 font-mono">主星</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#88ccee]" />
+                  <span className="text-[10px] text-white/50 font-mono">恒星</span>
+                </div>
+              </>
+            )}
             <div className="h-px bg-white/10 my-0.5" />
             <div className="text-[10px] text-white/30 font-mono whitespace-nowrap">ドラッグで回転</div>
             <div className="text-[10px] text-white/30 font-mono whitespace-nowrap">ピンチでズーム</div>
           </div>
         </div>
 
-        {!selectedId && !isSearching && (
+        {!selectedId && !selectedStar && !isSearching && (
           <div className="absolute bottom-10 left-0 right-0 flex justify-center pointer-events-none">
             <div className="bg-black/50 backdrop-blur-md border border-white/10 rounded-full px-4 py-2">
-              <span className="text-[11px] text-white/40 font-mono">星座名をタップして詳細を見る</span>
+              <span className="text-[11px] text-white/40 font-mono">
+                {showStarNames ? '星をタップして星名を見る' : '星座名をタップして詳細を見る'}
+              </span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Info panel */}
+      {/* Star name popup */}
+      <StarNamePopup
+        star={selectedStar}
+        onClose={() => { setSelectedStar(null); setSelectedStarKey(null); }}
+      />
+
+      {/* Constellation info panel */}
       <GlobeInfoPanel
         constellation={selected}
         onClose={() => setSelectedId(null)}
