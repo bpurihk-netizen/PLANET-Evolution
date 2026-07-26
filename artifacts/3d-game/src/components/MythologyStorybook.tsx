@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { CONSTELLATIONS, Constellation } from '../data/constellations';
 import { CONSTELLATION_META, getConstellationMeta, SEASON_LABELS, SEASON_COLORS } from '../data/constellationMeta';
 import {
@@ -8,7 +8,7 @@ import {
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import { ConstellationSilhouette } from './ConstellationSilhouette';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, X, BookOpen, ExternalLink, Star, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, X, BookOpen, ExternalLink, Star, ChevronDown, ChevronUp, Search } from 'lucide-react';
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 const STORYBOOK_KEY = 'mythology_storybook_v1';
@@ -253,6 +253,8 @@ export const MythologyStorybook: React.FC<MythologyStorybookProps> = ({
   const [activeOrigin, setActiveOrigin] = useState<MythologyOrigin | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [readIds, setReadIds] = useState<Set<string>>(() => loadRead());
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Build a map: id → {con, entry}
   const entries = useMemo(() => {
@@ -264,21 +266,35 @@ export const MythologyStorybook: React.FC<MythologyStorybookProps> = ({
     return map;
   }, []);
 
-  // Count per origin
+  // Normalize search query
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  // All entries matching search (regardless of origin filter)
+  const searchMatchedEntries = useMemo(() => {
+    if (!normalizedQuery) return [...entries.values()];
+    return [...entries.values()].filter(({ con, entry }) => {
+      return (
+        con.nameJa.toLowerCase().includes(normalizedQuery) ||
+        con.nameEn.toLowerCase().includes(normalizedQuery) ||
+        entry.character.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [normalizedQuery, entries]);
+
+  // Count per origin (based on search results)
   const originCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: MYTHOLOGY_DATA.length };
-    MYTHOLOGY_DATA.forEach(e => {
-      counts[e.origin] = (counts[e.origin] ?? 0) + 1;
+    const counts: Record<string, number> = { all: searchMatchedEntries.length };
+    searchMatchedEntries.forEach(({ entry }) => {
+      counts[entry.origin] = (counts[entry.origin] ?? 0) + 1;
     });
     return counts;
-  }, []);
+  }, [searchMatchedEntries]);
 
-  // Filtered + sorted list
+  // Filtered + sorted list (search + origin filter combined)
   const filteredList = useMemo(() => {
-    const all = [...entries.values()];
     const filtered = activeOrigin === 'all'
-      ? all
-      : all.filter(({ entry }) => entry.origin === activeOrigin);
+      ? searchMatchedEntries
+      : searchMatchedEntries.filter(({ entry }) => entry.origin === activeOrigin);
     // Sort: linked systems first, then alphabetically by nameJa
     return filtered.sort((a, b) => {
       const aLinked = !!a.entry.linkedSystemId ? 0 : 1;
@@ -286,7 +302,18 @@ export const MythologyStorybook: React.FC<MythologyStorybookProps> = ({
       if (aLinked !== bLinked) return aLinked - bLinked;
       return a.con.nameJa.localeCompare(b.con.nameJa, 'ja');
     });
-  }, [activeOrigin, entries]);
+  }, [activeOrigin, searchMatchedEntries]);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setExpandedId(null);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setExpandedId(null);
+    searchInputRef.current?.focus();
+  };
 
   const handleToggle = (id: string) => {
     if (expandedId === id) {
@@ -349,6 +376,29 @@ export const MythologyStorybook: React.FC<MythologyStorybookProps> = ({
           </div>
         </div>
 
+        {/* ── Search bar ── */}
+        <div className="px-4 pb-2">
+          <div className="relative flex items-center">
+            <Search size={14} className="absolute left-3 text-white/30 pointer-events-none shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="星座名・英語名・登場人物で検索…"
+              className="w-full bg-white/6 border border-white/12 rounded-full pl-8 pr-8 py-2 text-xs text-white/80 placeholder-white/25 focus:outline-none focus:border-rose-400/40 focus:bg-white/8 transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={handleClearSearch}
+                className="absolute right-2.5 text-white/30 active:text-white/60 transition-colors p-0.5"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* ── Origin filter tabs ── */}
         <div className="flex overflow-x-auto scrollbar-hide px-4 pb-3 gap-1.5">
           {ORIGIN_ORDER.map(origin => {
@@ -379,7 +429,7 @@ export const MythologyStorybook: React.FC<MythologyStorybookProps> = ({
       </div>
 
       {/* ── Intro banner ── */}
-      {activeOrigin === 'all' && readIds.size === 0 && (
+      {activeOrigin === 'all' && readIds.size === 0 && !searchQuery && (
         <div className="mx-4 mb-3 px-4 py-3 bg-rose-900/20 border border-rose-500/20 rounded-xl shrink-0">
           <p className="text-rose-300/80 text-[11px] leading-relaxed">
             📖 各カードをタップするとその星座の神話全文と星座データが展開されます。
@@ -391,8 +441,21 @@ export const MythologyStorybook: React.FC<MythologyStorybookProps> = ({
       {/* ── Story Cards ── */}
       <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-2.5">
         {filteredList.length === 0 ? (
-          <div className="text-center py-16 text-white/30 text-sm">
-            この分類の神話は現在準備中です
+          <div className="text-center py-16 space-y-2">
+            <div className="text-white/25 text-3xl">🔭</div>
+            <div className="text-white/40 text-sm font-medium">
+              {searchQuery
+                ? `「${searchQuery}」に一致する星座が見つかりません`
+                : 'この分類の神話は現在準備中です'}
+            </div>
+            {searchQuery && (
+              <button
+                onClick={handleClearSearch}
+                className="mt-2 text-rose-400/70 text-xs underline underline-offset-2"
+              >
+                検索をクリア
+              </button>
+            )}
           </div>
         ) : (
           filteredList.map(({ con, entry }) => (
