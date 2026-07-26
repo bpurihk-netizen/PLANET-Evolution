@@ -1,6 +1,7 @@
 import React, { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
@@ -566,6 +567,15 @@ export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }
             touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
           />
         )}
+        {/* Bloom — only bright pixels (sun surface + corona) exceed threshold */}
+        <EffectComposer enableNormalPass={false}>
+          <Bloom
+            luminanceThreshold={0.55}
+            luminanceSmoothing={0.3}
+            intensity={0.9}
+            mipmapBlur
+          />
+        </EffectComposer>
       </Canvas>
 
       {/* ── NOAA Solar Activity Badge (sun detail view only) ── */}
