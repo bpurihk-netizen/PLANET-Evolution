@@ -6,6 +6,7 @@ import {
   ORIGIN_LABELS, ORIGIN_COLORS, getMythologyData,
 } from '../data/mythologyData';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
+import { ConstellationSilhouette } from './ConstellationSilhouette';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, X, BookOpen, ExternalLink, Star, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -140,6 +141,39 @@ const StoryCard: React.FC<StoryCardProps> = ({
         <div className="px-4 pb-5 space-y-4">
           {/* Divider */}
           <div className="h-px bg-white/8" />
+
+          {/* ── Constellation silhouette diagram ── */}
+          <div
+            className="rounded-xl overflow-hidden relative"
+            style={{ background: `${originColor}08`, border: `1px solid ${originColor}20` }}
+          >
+            {/* Header label */}
+            <div className="px-3 pt-2.5 pb-1 flex items-center justify-between">
+              <span
+                className="text-[9px] font-bold tracking-widest uppercase"
+                style={{ color: originColor }}
+              >
+                ✦ 星座図
+              </span>
+              <span className="text-[9px] text-white/25 font-mono">{con.nameEn}</span>
+            </div>
+
+            {/* SVG silhouette centered */}
+            <div className="flex justify-center pb-2">
+              <ConstellationSilhouette
+                constellationId={con.id}
+                accentColor={originColor}
+                size={180}
+              />
+            </div>
+
+            {/* Brightest star label */}
+            <div className="px-3 pb-2.5 flex items-center gap-1.5">
+              <span className="text-[9px] text-white/30">最明星：</span>
+              <span className="text-[10px] font-mono text-white/60">{con.brightestStarJa}</span>
+              <span className="text-[9px] text-white/20 font-mono">/ {con.brightestStarEn}</span>
+            </div>
+          </div>
 
           {/* Full mythology story */}
           <div
