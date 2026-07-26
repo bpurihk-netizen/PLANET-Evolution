@@ -97,19 +97,21 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
       transitioning.current = true;
       zoomRef.current = 1.0;
     } else {
-      // Detail: lookAt below centre; camera position is computed per-frame with zoom
-      targetLookAt.current.set(0, -targetRadius * 1.2, 0);
       transitioning.current = true;
     }
   }, [viewMode, targetRadius, zoomRef]);
 
   useFrame(() => {
     if (viewMode === 'detail') {
-      // Recompute target every frame so pinch-zoom applies immediately
+      // Recompute both camera position AND lookAt every frame so zoom stays centred.
+      // lookAt scales with zoom: at z=1 slightly below origin (leave room for InfoPanel),
+      // approaching (0,0,0) as user zooms in so body never drifts off-screen.
       const z = zoomRef.current;
-      const yOff = Math.max(targetRadius * 3.0, 2.5) * z;
-      const zOff = Math.max(targetRadius * 7.0, 6.0) * z;
+      const yOff   = Math.max(targetRadius * 2.5, 2.0) * z;
+      const zOff   = Math.max(targetRadius * 6.5, 5.0) * z;
+      const lookY  = -Math.min(targetRadius * 0.5, 2.5) * Math.min(z, 1.0);
       targetCamPos.current.set(0, yOff, zOff);
+      targetLookAt.current.set(0, lookY, 0);
 
       camera.position.lerp(targetCamPos.current, 0.08);
       currentLook.current.lerp(targetLookAt.current, 0.08);
