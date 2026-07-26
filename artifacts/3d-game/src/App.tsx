@@ -165,9 +165,9 @@ function SolarExplorerApp() {
             />
           </div>
 
-          {/* ── Observation toolbar (detail mode only) ── */}
+          {/* ── Observation toolbar (detail mode only) — sits below top HUD bar, clear of InfoPanel ── */}
           {state.viewMode === 'detail' && state.selectedBody && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 z-[25] pointer-events-auto flex flex-col gap-2">
+            <div className="absolute right-3 top-[108px] z-[25] pointer-events-auto flex flex-col gap-2">
               {/* Rotation toggle */}
               <button
                 onClick={state.toggleObsRotation}

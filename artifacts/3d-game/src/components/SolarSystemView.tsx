@@ -356,11 +356,12 @@ const MoonOrbit: React.FC<{
 
   return (
     <group ref={groupRef}>
+      {/* Invisible hit sphere — generously sized for finger tapping */}
       <mesh onClick={onClick}>
-        <sphereGeometry args={[Math.max(moon.displayRadius * 4, 0.3), 8, 8]} />
+        <sphereGeometry args={[Math.max(moon.displayRadius * 7, 1.2), 8, 8]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <CelestialBodyMesh body={moon} radius={moon.displayRadius * 4} isOverview={false} onClick={onClick} />
+      <CelestialBodyMesh body={moon} radius={Math.max(moon.displayRadius * 4, 0.18)} isOverview={false} onClick={onClick} />
       {isSelected && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[moon.displayRadius * 4 * 1.4, moon.displayRadius * 4 * 1.7, 24]} />
