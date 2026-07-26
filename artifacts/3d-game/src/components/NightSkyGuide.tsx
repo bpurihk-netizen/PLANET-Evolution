@@ -508,6 +508,15 @@ function getSeasonLabel(date: Date): string {
   return '冬';
 }
 
+// ── Location persistence ──────────────────────────────────────────────────────
+const LOCATION_STORAGE_KEY = 'stellar_location_v1';
+function loadSavedLocationId(): string {
+  try { return localStorage.getItem(LOCATION_STORAGE_KEY) ?? 'japan'; } catch { return 'japan'; }
+}
+function saveLocationId(id: string) {
+  try { localStorage.setItem(LOCATION_STORAGE_KEY, id); } catch {}
+}
+
 // ── Location Presets ──────────────────────────────────────────────────────────
 interface LocationPreset {
   id: string;
@@ -645,7 +654,16 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
 }) => {
   const today = useMemo(() => new Date(), []);
   const [activeTab, setActiveTab] = useState<Tab>('tonight');
-  const [location, setLocation] = useState<LocationPreset>(LOCATION_PRESETS[0]);
+  const [location, setLocation] = useState<LocationPreset>(() => {
+    const savedId = loadSavedLocationId();
+    return LOCATION_PRESETS.find(p => p.id === savedId) ?? LOCATION_PRESETS[0];
+  });
+
+  // Persist location choice
+  const handleSetLocation = (preset: LocationPreset) => {
+    saveLocationId(preset.id);
+    setLocation(preset);
+  };
 
   const result = useMemo(
     () => computeNightSky(CONSTELLATIONS, today, location.latDeg),
@@ -735,7 +753,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
         {activeTab === 'tonight' && (
           <div className="space-y-5">
             {/* Location selector */}
-            <LocationSelector selected={location} onSelect={setLocation} />
+            <LocationSelector selected={location} onSelect={handleSetLocation} />
 
             {/* Season context bar */}
             <div className="px-4 py-2.5 bg-indigo-950/50 border border-indigo-500/20 rounded-2xl">

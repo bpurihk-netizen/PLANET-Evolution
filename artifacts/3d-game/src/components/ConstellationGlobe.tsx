@@ -4,8 +4,9 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { CONSTELLATIONS, Constellation, radec2xyz } from '../data/constellations';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
+import { CONSTELLATION_LINES } from '../data/constellationLines';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, X, ExternalLink } from 'lucide-react';
+import { ChevronLeft, X, ExternalLink, Search } from 'lucide-react';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GLOBE_R = 32;
@@ -182,13 +183,50 @@ const SYSTEM_PINS = [
   { id: 'kepler442',      raDeg: 285.3, decDeg: 47.0,  color: '#44ccff', label: 'ケプラー442' },
 ];
 
+// ── Constellation Lines ───────────────────────────────────────────────────────
+interface ConstellationLinesProps {
+  selectedId: string | null;
+  showAllLines: boolean;
+}
+
+const ConstellationLinesRenderer: React.FC<ConstellationLinesProps> = ({ selectedId, showAllLines }) => {
+  const lineObjects = useMemo(() => {
+    return CONSTELLATION_LINES.map(({ conId, segments }) => {
+      const isSelected = selectedId === conId;
+      const visible = showAllLines || isSelected;
+      if (!visible) return null;
+
+      const opacity = isSelected ? 0.85 : 0.22;
+      const color = isSelected ? '#ffcc44' : '#88ccff';
+
+      return segments.map(([ra1, dec1, ra2, dec2], idx) => {
+        const [x1, y1, z1] = radec2xyz(ra1, dec1, GLOBE_R * 0.985);
+        const [x2, y2, z2] = radec2xyz(ra2, dec2, GLOBE_R * 0.985);
+        const pts = new Float32Array([x1, y1, z1, x2, y2, z2]);
+        return (
+          <line key={`${conId}-${idx}`}>
+            <bufferGeometry>
+              <bufferAttribute attach="attributes-position" args={[pts, 3]} />
+            </bufferGeometry>
+            <lineBasicMaterial color={color} transparent opacity={opacity} />
+          </line>
+        );
+      });
+    });
+  }, [selectedId, showAllLines]);
+
+  return <>{lineObjects}</>;
+};
+
 // ── Globe Scene ───────────────────────────────────────────────────────────────
 interface GlobeSceneProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  visibleIds: Set<string> | null; // null = show all
+  showLines: boolean;
 }
 
-const GlobeScene: React.FC<GlobeSceneProps> = ({ selectedId, onSelect }) => (
+const GlobeScene: React.FC<GlobeSceneProps> = ({ selectedId, onSelect, visibleIds, showLines }) => (
   <>
     <StarField />
     <CelestialEquator />
@@ -196,7 +234,8 @@ const GlobeScene: React.FC<GlobeSceneProps> = ({ selectedId, onSelect }) => (
       <sphereGeometry args={[GLOBE_R + 0.2, 32, 32]} />
       <meshBasicMaterial color="#112244" transparent opacity={0.04} side={THREE.BackSide} />
     </mesh>
-    {CONSTELLATIONS.map(con => (
+    <ConstellationLinesRenderer selectedId={selectedId} showAllLines={showLines} />
+    {CONSTELLATIONS.filter(con => !visibleIds || visibleIds.has(con.id)).map(con => (
       <ConstellationNode
         key={con.id}
         con={con}
@@ -307,7 +346,21 @@ interface ConstellationGlobeProps {
 
 export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, onSwitchSystem, onConstellationViewed }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [showLines, setShowLines] = useState(false);
   const selected = selectedId ? CONSTELLATIONS.find(c => c.id === selectedId) ?? null : null;
+
+  const isSearching = searchText.trim().length > 0;
+  const visibleIds: Set<string> | null = useMemo(() => {
+    if (!isSearching) return null; // show all
+    const q = searchText.trim().toLowerCase();
+    const matched = CONSTELLATIONS
+      .filter(c => c.nameJa.toLowerCase().includes(q) || c.nameEn.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))
+      .map(c => c.id);
+    return new Set(matched);
+  }, [isSearching, searchText]);
+
+  const searchResultCount = visibleIds ? visibleIds.size : CONSTELLATIONS.length;
 
   const handleSelect = (id: string | null) => {
     setSelectedId(id);
@@ -328,7 +381,7 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
         style={{ width: '100%', height: '100%' }}
       >
         <color attach="background" args={['#020408']} />
-        <GlobeScene selectedId={selectedId} onSelect={handleSelect} />
+        <GlobeScene selectedId={selectedId} onSelect={handleSelect} visibleIds={visibleIds} showLines={showLines} />
         <OrbitControls
           enablePan={false}
           enableZoom={true}
@@ -345,7 +398,7 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
       {/* HUD */}
       <div className="absolute inset-0 pointer-events-none z-20">
         <div className="absolute top-0 left-0 right-0 pointer-events-auto">
-          <div className="flex items-center justify-between px-4 pt-4 pb-3 bg-gradient-to-b from-black/70 to-transparent gap-2">
+          <div className="flex items-center justify-between px-4 pt-4 pb-2 bg-gradient-to-b from-black/70 to-transparent gap-2">
             <button
               onClick={onExit}
               className="flex items-center gap-1.5 min-h-[44px] px-4 py-2 bg-white/10 active:bg-white/20 backdrop-blur-md border border-white/15 rounded-full text-white/80 text-sm font-medium transition-all active:scale-95"
@@ -357,14 +410,51 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
               <span className="text-xl">🌐</span>
               <span className="text-white/90 font-bold tracking-widest text-xs">天球儀 · 88星座</span>
             </div>
-            <div className="px-3 py-2 bg-white/8 backdrop-blur-md border border-white/12 rounded-full min-h-[44px] flex items-center">
-              <span className="text-white/50 text-xs font-mono">全天</span>
+            {/* Lines toggle */}
+            <button
+              onClick={() => setShowLines(v => !v)}
+              className={cn(
+                'px-3 py-2 backdrop-blur-md border rounded-full min-h-[44px] flex items-center gap-1.5 transition-all active:scale-95 text-xs font-bold',
+                showLines
+                  ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
+                  : 'bg-white/8 border-white/12 text-white/40'
+              )}
+            >
+              <span>✦</span>
+              <span className="hidden sm:inline">{showLines ? 'ライン表示中' : 'ライン'}</span>
+            </button>
+          </div>
+
+          {/* Search bar */}
+          <div className="px-4 pb-2 pointer-events-auto">
+            <div className="relative flex items-center">
+              <Search size={13} className="absolute left-3 text-white/30 pointer-events-none" />
+              <input
+                type="text"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                placeholder="星座名で検索…"
+                className="w-full pl-8 pr-8 py-2 bg-black/50 backdrop-blur-md border border-white/12 rounded-xl text-white/80 text-xs placeholder:text-white/25 outline-none focus:border-indigo-400/50 transition-all"
+              />
+              {searchText && (
+                <button
+                  onClick={() => { setSearchText(''); }}
+                  className="absolute right-2.5 text-white/30 active:text-white/60 p-0.5"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
+            {isSearching && (
+              <div className="text-[10px] text-white/30 font-mono mt-1 pl-1">
+                {searchResultCount > 0 ? `${searchResultCount} 件ヒット` : '一致する星座が見つかりません'}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Legend */}
-        <div className="absolute top-24 right-4 pointer-events-none">
+        <div className="absolute top-32 right-4 pointer-events-none">
           <div className="bg-black/50 backdrop-blur-md border border-white/10 rounded-xl px-3 py-2.5 space-y-1.5">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-[#22dd88]" />
@@ -380,7 +470,7 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
           </div>
         </div>
 
-        {!selectedId && (
+        {!selectedId && !isSearching && (
           <div className="absolute bottom-10 left-0 right-0 flex justify-center pointer-events-none">
             <div className="bg-black/50 backdrop-blur-md border border-white/10 rounded-full px-4 py-2">
               <span className="text-[11px] text-white/40 font-mono">星座名をタップして詳細を見る</span>

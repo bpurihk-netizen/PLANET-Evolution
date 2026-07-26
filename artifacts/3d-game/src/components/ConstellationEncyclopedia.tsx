@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { CONSTELLATIONS, Constellation } from '../data/constellations';
 import {
   CONSTELLATION_META, ConstellationMeta, Season,
@@ -6,7 +6,7 @@ import {
 } from '../data/constellationMeta';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, X, ExternalLink, Star, BookOpen } from 'lucide-react';
+import { ChevronLeft, X, ExternalLink, Star, BookOpen, Search } from 'lucide-react';
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 const ENCYCLOPEDIA_KEY = 'stellar_encyclopedia_v1';
@@ -264,6 +264,8 @@ export const ConstellationEncyclopedia: React.FC<ConstellationEncyclopediaProps>
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewedIds, setViewedIds] = useState<Set<string>>(() => loadViewed());
   const [showAchievement, setShowAchievement] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Build lookup map: id → {con, meta}
   const constellationMap = useMemo(() => {
@@ -275,14 +277,27 @@ export const ConstellationEncyclopedia: React.FC<ConstellationEncyclopediaProps>
     return map;
   }, []);
 
-  // Filter by active season
+  const isSearching = searchText.trim().length > 0;
+
+  // Filter by active season OR by search query (search overrides season tab)
   const filteredEntries = useMemo(() => {
+    if (isSearching) {
+      const q = searchText.trim().toLowerCase();
+      return [...constellationMap.values()]
+        .filter(({ con }) =>
+          con.nameJa.toLowerCase().includes(q) ||
+          con.nameEn.toLowerCase().includes(q) ||
+          con.id.toLowerCase().includes(q) ||
+          con.mythologyJa.toLowerCase().includes(q)
+        )
+        .sort((a, b) => a.con.areaRank - b.con.areaRank);
+    }
     return CONSTELLATION_META
       .filter(m => m.season === activeSeason)
       .map(m => constellationMap.get(m.id))
       .filter((e): e is { con: Constellation; meta: ConstellationMeta } => !!e)
       .sort((a, b) => a.con.areaRank - b.con.areaRank);
-  }, [activeSeason, constellationMap]);
+  }, [activeSeason, constellationMap, searchText, isSearching]);
 
   // Season tab counts
   const seasonCounts = useMemo(() => {
@@ -350,7 +365,36 @@ export const ConstellationEncyclopedia: React.FC<ConstellationEncyclopediaProps>
           </div>
         </div>
 
-        {/* ── Season Tabs ── */}
+        {/* ── Search bar ── */}
+        <div className="px-4 pb-2">
+          <div className="relative flex items-center">
+            <Search size={13} className="absolute left-3 text-white/30 pointer-events-none" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="星座名・神話キーワードで検索…"
+              className="w-full pl-8 pr-8 py-2 bg-white/6 border border-white/12 rounded-xl text-white/80 text-xs placeholder:text-white/25 outline-none focus:border-indigo-400/50 focus:bg-white/8 transition-all"
+            />
+            {searchText && (
+              <button
+                onClick={() => setSearchText('')}
+                className="absolute right-2.5 text-white/30 active:text-white/60 p-0.5"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {isSearching && (
+            <div className="text-[10px] text-white/30 font-mono mt-1 pl-1">
+              {filteredEntries.length} 件ヒット
+            </div>
+          )}
+        </div>
+
+        {/* ── Season Tabs (hidden during search) ── */}
+        {!isSearching && (
         <div className="flex overflow-x-auto scrollbar-hide px-4 pb-3 gap-1.5">
           {SEASON_ORDER.map(season => {
             const isActive = activeSeason === season;
@@ -375,15 +419,22 @@ export const ConstellationEncyclopedia: React.FC<ConstellationEncyclopediaProps>
             );
           })}
         </div>
+        )}
       </div>
 
       {/* ── Card Grid ── */}
       <div className="flex-1 overflow-y-auto px-4 pb-6">
-        {activeSeason === 'southern' && (
+        {!isSearching && activeSeason === 'southern' && (
           <div className="mb-3 px-3 py-2.5 bg-purple-900/20 border border-purple-500/20 rounded-xl">
             <p className="text-purple-300/70 text-[11px] leading-relaxed">
               🌏 南天の星座は日本からほぼ見えません。南半球（オーストラリア・南米など）を旅するときに楽しめます。
             </p>
+          </div>
+        )}
+        {isSearching && filteredEntries.length === 0 && (
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <span className="text-4xl">🔭</span>
+            <p className="text-white/35 text-sm">「{searchText}」に一致する星座が見つかりませんでした</p>
           </div>
         )}
         <div className="grid grid-cols-2 gap-2.5">

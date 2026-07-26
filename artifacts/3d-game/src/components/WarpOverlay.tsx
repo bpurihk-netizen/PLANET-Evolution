@@ -1,5 +1,76 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+// ── Web Audio warp sound synthesiser ─────────────────────────────────────────
+function playWarpSound(durationMs: number) {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const end = ctx.currentTime + durationMs / 1000;
+
+    // 1. Rising pitch sweep — gives the "spooling up" feel
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(60, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(680, ctx.currentTime + durationMs * 0.45 / 1000);
+    osc1.frequency.exponentialRampToValueAtTime(200, end);
+    gain1.gain.setValueAtTime(0, ctx.currentTime);
+    gain1.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.12);
+    gain1.gain.linearRampToValueAtTime(0.22, ctx.currentTime + durationMs * 0.55 / 1000);
+    gain1.gain.linearRampToValueAtTime(0, end);
+    osc1.connect(gain1); gain1.connect(ctx.destination);
+    osc1.start(); osc1.stop(end);
+
+    // 2. Sub-bass rumble
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(40, ctx.currentTime);
+    osc2.frequency.linearRampToValueAtTime(80, ctx.currentTime + durationMs * 0.3 / 1000);
+    osc2.frequency.linearRampToValueAtTime(30, end);
+    gain2.gain.setValueAtTime(0, ctx.currentTime);
+    gain2.gain.linearRampToValueAtTime(0.30, ctx.currentTime + 0.18);
+    gain2.gain.linearRampToValueAtTime(0, end);
+    osc2.connect(gain2); gain2.connect(ctx.destination);
+    osc2.start(); osc2.stop(end);
+
+    // 3. White-noise burst at launch
+    const bufSize = ctx.sampleRate * 0.35;
+    const noiseBuffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 1200;
+    noiseFilter.Q.value = 0.5;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.12, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+    noiseSource.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noiseSource.start();
+
+    // 4. High shimmer
+    const osc3 = ctx.createOscillator();
+    const gain3 = ctx.createGain();
+    osc3.type = 'sine';
+    osc3.frequency.setValueAtTime(2200, ctx.currentTime);
+    osc3.frequency.linearRampToValueAtTime(4800, ctx.currentTime + durationMs * 0.6 / 1000);
+    gain3.gain.setValueAtTime(0, ctx.currentTime);
+    gain3.gain.linearRampToValueAtTime(0.07, ctx.currentTime + 0.3);
+    gain3.gain.linearRampToValueAtTime(0, end);
+    osc3.connect(gain3); gain3.connect(ctx.destination);
+    osc3.start(); osc3.stop(end);
+
+    // Auto-close context after playback
+    setTimeout(() => { try { ctx.close(); } catch {} }, durationMs + 200);
+  } catch {
+    // Silently ignore if AudioContext is not available
+  }
+}
+
 interface WarpOverlayProps {
   isActive: boolean;
   destinationName: string;
@@ -147,6 +218,9 @@ export const WarpOverlay: React.FC<WarpOverlayProps> = ({
     clearAllTimers();
     setVisible(true);
     setTextVisible(false);
+
+    // Fire warp sound effect
+    playWarpSound(WARP_DURATION_MS);
 
     const t1 = setTimeout(() => setTextVisible(true), 300);
 

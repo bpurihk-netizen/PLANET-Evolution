@@ -84,7 +84,12 @@ export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state, stampRally, onO
                   )}
                 >
                   <span>{SYSTEM_ICONS[sys.id]}</span>
-                  <span>{sys.nameJa}</span>
+                  <span className="flex flex-col items-start">
+                    <span>{sys.nameJa}</span>
+                    {sys.constellation && sys.constellation !== '—' && (
+                      <span className="text-[8px] font-normal opacity-50 leading-none">{sys.constellation}</span>
+                    )}
+                  </span>
                   {sys.distanceLy > 0 && (
                     <span className="text-white/30 font-normal">
                       {sys.distanceLy >= 1000
