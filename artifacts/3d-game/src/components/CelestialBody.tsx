@@ -626,7 +626,9 @@ function getDisplace(body: CelestialBodyData): number {
 
 // ── Real texture map (Solar System Scope CC-BY 4.0 textures) ─────────────
 const TEXTURE_FILENAMES: Record<string, string> = {
-  sun: 'sun.jpg',
+  // sun.jpg (NASA SDO) is a round disk on a black background — when UV-mapped to a sphere
+  // the black corners appear as a "cut", so the sun uses the procedural FRAG_STAR shader instead.
+  // sun: 'sun.jpg',
   mercury: 'mercury.jpg',
   venus: 'venus.jpg',
   earth: 'earth.jpg',

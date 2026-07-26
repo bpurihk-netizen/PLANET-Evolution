@@ -457,6 +457,8 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel, showAtmosphere }) =
             isOverview={state.viewMode === 'overview'}
             onClick={() => state.enterDetail(starBody.id)}
             showAtmosphere={showAtmosphere}
+            rotationPaused={state.focusBodyId === starBody.id && state.viewMode === 'detail' ? state.obsRotationPaused : false}
+            manualRotationRef={state.focusBodyId === starBody.id && state.viewMode === 'detail' ? manualRotationRef : undefined}
           />
           {/* Solar flares + enhanced corona — toggled by atmosphere switch */}
           {showAtmosphere && <SolarFlares sunRadius={starBody.displayRadius} activityLevel={activityLevel} />}
