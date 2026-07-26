@@ -169,6 +169,12 @@ export interface MoonPhase {
   isWaxing: boolean;
   /** Brief observation hint */
   hintJa: string;
+  /** Moonrise time as JST "HH:MM", or null if moon doesn't rise tonight */
+  riseJST: string | null;
+  /** Moonset time as JST "HH:MM", or null if moon doesn't set tonight */
+  setJST: string | null;
+  /** False when moon is too close to new moon to be observable */
+  isVisibleTonight: boolean;
 }
 
 export function computeMoonPhase(date: Date): MoonPhase {
@@ -209,7 +215,53 @@ export function computeMoonPhase(date: Date): MoonPhase {
   };
 
   const data = PHASE_DATA[phaseKey];
-  return { phase, phaseKey, illumination, isWaxing, daysToFull, ...data };
+
+  // ── Moon rise/set times ────────────────────────────────────────────────────
+  // New moon is invisible (illumination < ~3%)
+  const isVisibleTonight = phase >= 0.033 && phase <= 0.967;
+
+  let riseJST: string | null = null;
+  let setJST: string | null = null;
+
+  if (isVisibleTonight) {
+    // Approximate Moon's ecliptic longitude: Sun's lon + phase*360
+    const doy = getDayOfYear(date);
+    const sunLon = ((doy - 80) / 365.25) * 360; // ecliptic lon, 0° at vernal equinox
+    const moonLon = ((sunLon + phase * 360) % 360 + 360) % 360;
+
+    // Ecliptic → equatorial (obliquity ε = 23.44°)
+    const eps = 23.44 * (Math.PI / 180);
+    const lonRad = moonLon * (Math.PI / 180);
+    const moonRARaw = Math.atan2(Math.cos(eps) * Math.sin(lonRad), Math.cos(lonRad)) * (180 / Math.PI);
+    const moonRA = ((moonRARaw % 360) + 360) % 360;
+    const moonDecRad = Math.asin(Math.sin(eps) * Math.sin(lonRad));
+    const moonDec = moonDecRad * (180 / Math.PI);
+
+    // Hour angle at rise/set: cos(H) = (sin(h0) - sin(lat)·sin(dec)) / (cos(lat)·cos(dec))
+    // h0 = −0.833° accounts for standard refraction + limb
+    const h0Rad = -0.833 * (Math.PI / 180);
+    const latRad = JAPAN_LAT * (Math.PI / 180);
+    const cosH =
+      (Math.sin(h0Rad) - Math.sin(latRad) * Math.sin(moonDecRad)) /
+      (Math.cos(latRad) * Math.cos(moonDecRad));
+
+    if (cosH <= 1 && cosH >= -1) {
+      // Moon rises and sets today
+      const H = Math.acos(cosH) * (180 / Math.PI) / 15; // half-day arc in hours
+
+      // Transit time from midnight (hours)
+      const lstDeg = getMidnightLSTDeg(date);
+      const haAtMidnight = normHA(lstDeg - moonRA);
+      const transitHours = -(haAtMidnight / 15);
+
+      riseJST = formatTransitJST(transitHours - H);
+      setJST  = formatTransitJST(transitHours + H);
+    }
+    // If cosH > 1: moon never rises at this latitude (rare edge case)
+    // If cosH < -1: moon is circumpolar (stays above horizon all day)
+  }
+
+  return { phase, phaseKey, illumination, isWaxing, daysToFull, ...data, riseJST, setJST, isVisibleTonight };
 }
 
 // ── Planet Visibility ─────────────────────────────────────────────────────────

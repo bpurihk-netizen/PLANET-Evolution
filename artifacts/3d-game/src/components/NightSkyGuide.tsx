@@ -99,6 +99,29 @@ function MoonPhaseCard({ moon }: { moon: MoonPhase }) {
             </div>
           )}
 
+          {/* Rise / Set times */}
+          {!moon.isVisibleTonight ? (
+            <div className="flex items-center gap-1.5 text-white/35 text-[10px]">
+              <Moon size={9} className="shrink-0" />
+              今夜は月が見えません
+            </div>
+          ) : moon.riseJST || moon.setJST ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              {moon.riseJST && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-sky-900/40 border border-sky-400/25 rounded-full">
+                  <span className="text-[9px] text-sky-400">🌕↑</span>
+                  <span className="text-[10px] font-mono text-sky-300">月の出 {moon.riseJST}</span>
+                </div>
+              )}
+              {moon.setJST && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-indigo-900/40 border border-indigo-400/25 rounded-full">
+                  <span className="text-[9px] text-indigo-400">🌕↓</span>
+                  <span className="text-[10px] font-mono text-indigo-300">月の入り {moon.setJST}</span>
+                </div>
+              )}
+            </div>
+          ) : null}
+
           {/* Hint */}
           <p className="text-white/55 text-[11px] leading-relaxed">{moon.hintJa}</p>
         </div>
