@@ -367,9 +367,17 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
       })}
 
       {/* Lighting */}
-      <ambientLight intensity={0.12} />
-      <pointLight position={[0, 0, 0]} intensity={6.0} color="#FFF5E0" distance={200} decay={1.2} />
-      <directionalLight position={[50, 30, 50]} intensity={0.3} color="#ffffff" />
+      <ambientLight intensity={0.07} />
+      <pointLight position={[0, 0, 0]} intensity={5.0} color="#FFF5E0" distance={300} decay={1.0} />
+      {/* Detail mode: directional sun-light for authentic day/night terminator */}
+      {state.viewMode === 'detail' && !state.moonDetailMode && (
+        <directionalLight position={[8, 2, 4]} intensity={1.6} color="#FFF8E8" />
+      )}
+      {/* Moon detail: cooler reflected light */}
+      {state.moonDetailMode && (
+        <directionalLight position={[6, 1, 4]} intensity={1.8} color="#F0F4FF" />
+      )}
+      <directionalLight position={[50, 30, 50]} intensity={0.15} color="#ffffff" />
     </>
   );
 };

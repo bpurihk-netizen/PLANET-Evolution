@@ -1,0 +1,4 @@
+- [Hooks-before-early-return](hooks-early-return.md) — useCallback/useEffect must precede any conditional `return null` in React components or you get "Rendered more hooks" crash.
+- [Texture serving path](texture-serving.md) — Planet textures live in `artifacts/3d-game/public/textures/`; URL in code is `${import.meta.env.BASE_URL}textures/<file>.jpg` (BASE_URL already includes trailing slash).
+- [Moon detail architecture](moon-detail-arch.md) — Moon close-up view uses moonDetailMode state; focusBodyId = moonId when true; moon rendered at MOON_DETAIL_RADIUS=0.9 at origin; parent planet stays at orbital position in background.
+- [Polar cap fix](polar-cap-fix.md) — Smoothstep range 0.75-0.85 was too wide; camera looks down at planet so the cap dominated the view. Fixed to 0.90-0.97 for all ice-cap shaders (Earth, Mars, habitable exoplanets).

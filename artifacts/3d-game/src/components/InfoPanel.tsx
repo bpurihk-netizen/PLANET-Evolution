@@ -157,6 +157,14 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
     setQuizKey(k => k + 1);
   }, [bodyId]);
 
+  // Award is always bound to the session's locked constellation ID — never to the current body
+  // Must be before early return to satisfy Rules of Hooks
+  const handleQuizCorrect = useCallback(() => {
+    if (quizSession?.constellationId) {
+      onStampEarned?.(quizSession.constellationId);
+    }
+  }, [quizSession, onStampEarned]);
+
   if (!body) return null;
 
   // Which constellation stamps does this body trigger?
@@ -172,13 +180,6 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
     setQuizSession({ question: q, constellationId: quizConstellationId });
     setQuizKey(k => k + 1);
   };
-
-  // Award is always bound to the session's locked constellation ID — never to the current body
-  const handleQuizCorrect = useCallback(() => {
-    if (quizSession?.constellationId) {
-      onStampEarned?.(quizSession.constellationId);
-    }
-  }, [quizSession, onStampEarned]);
 
   const handleQuizReset = () => {
     if (!quizConstellationId) return;

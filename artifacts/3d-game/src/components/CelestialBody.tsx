@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CelestialBody as CelestialBodyData } from '../data/celestialBodies';
@@ -371,6 +371,31 @@ void main(){
 }
 `;
 
+// ── Enhanced Fresnel atmosphere ─────────────────────────────────────────────
+const ENH_ATM_VERT = `
+varying vec3 vNormal;
+varying vec3 vViewPos;
+void main(){
+  vNormal=normalize(normalMatrix*normal);
+  vec4 mvPos=modelViewMatrix*vec4(position,1.0);
+  vViewPos=mvPos.xyz;
+  gl_Position=projectionMatrix*mvPos;
+}
+`;
+const ENH_ATM_FRAG = `
+uniform vec3 uAtmColor;
+uniform float uOpacity;
+varying vec3 vNormal;
+varying vec3 vViewPos;
+void main(){
+  vec3 viewDir=normalize(-vViewPos);
+  float rim=1.0-max(dot(vNormal,viewDir),0.0);
+  float fresnel=pow(rim,3.0);
+  float alpha=uOpacity*fresnel*2.4;
+  gl_FragColor=vec4(uAtmColor*1.2,clamp(alpha,0.0,0.88));
+}
+`;
+
 // ── Ring shader ────────────────────────────────────────────────────────────
 const RING_VERT = `
 varying vec2 vUv;
@@ -599,6 +624,144 @@ function getDisplace(body: CelestialBodyData): number {
   }
 }
 
+// ── Real texture map (Solar System Scope CC-BY 4.0 textures) ─────────────
+const TEXTURE_FILENAMES: Record<string, string> = {
+  sun: 'sun.jpg',
+  mercury: 'mercury.jpg',
+  venus: 'venus.jpg',
+  earth: 'earth.jpg',
+  moon: 'moon.jpg',
+  mars: 'mars.jpg',
+  jupiter: 'jupiter.jpg',
+  saturn: 'saturn.jpg',
+  uranus: 'uranus.jpg',
+  neptune: 'neptune.jpg',
+  pluto: 'pluto.jpg',
+};
+
+function texturePath(filename: string): string {
+  const base = (import.meta.env.BASE_URL as string) ?? '/';
+  return `${base}textures/${filename}`;
+}
+
+// ── Textured planet mesh (MeshStandardMaterial + real textures) ────────────
+interface TexturedProps {
+  body: CelestialBodyData;
+  radius: number;
+  isOverview: boolean;
+  onClick?: () => void;
+}
+
+const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview, onClick }) => {
+  const meshRef  = useRef<THREE.Mesh>(null);
+  const cloudRef = useRef<THREE.Mesh>(null);
+  const [diffuseTex, setDiffuseTex] = useState<THREE.Texture | null>(null);
+  const [cloudsTex,  setCloudsTex]  = useState<THREE.Texture | null>(null);
+  const [ready, setReady]           = useState(false);
+
+  useEffect(() => {
+    const filename = TEXTURE_FILENAMES[body.id];
+    if (!filename) { setReady(true); return; }
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      texturePath(filename),
+      (tex) => {
+        if (cancelled) { tex.dispose(); return; }
+        tex.colorSpace = THREE.SRGBColorSpace;
+        setDiffuseTex(tex);
+        setReady(true);
+      },
+      undefined,
+      () => setReady(true),
+    );
+    if (body.id === 'earth') {
+      loader.load(texturePath('earth_clouds.jpg'), (tex) => {
+        if (cancelled) { tex.dispose(); return; }
+        tex.colorSpace = THREE.SRGBColorSpace;
+        setCloudsTex(tex);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [body.id]);
+
+  useFrame((_, dt) => {
+    if (meshRef.current)  meshRef.current.rotation.y  += dt * (body.id === 'sun' ? 0.005 : 0.08);
+    if (cloudRef.current) cloudRef.current.rotation.y += dt * 0.095;
+  });
+
+  // Show procedural shader while texture loads (seamless transition)
+  if (!diffuseTex) {
+    return <ShaderBodyMesh body={body} radius={radius} isOverview={isOverview} onClick={onClick} />;
+  }
+
+  const isStar   = body.type === 'STAR';
+  const segments = isOverview ? 32 : 96;
+  const halfSeg  = Math.floor(segments / 2);
+
+  return (
+    <group onClick={onClick}>
+      {/* Main sphere */}
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[radius, segments, halfSeg]} />
+        <meshStandardMaterial
+          map={diffuseTex}
+          roughness={isStar ? 1.0 : body.id === 'earth' ? 0.62 : 0.88}
+          metalness={0}
+          emissive={isStar ? new THREE.Color(body.colorMain) : new THREE.Color(0, 0, 0)}
+          emissiveIntensity={isStar ? 0.75 : 0}
+        />
+      </mesh>
+
+      {/* Earth: cloud layer */}
+      {body.id === 'earth' && cloudsTex && !isOverview && (
+        <mesh ref={cloudRef}>
+          <sphereGeometry args={[radius * 1.013, segments, halfSeg]} />
+          <meshStandardMaterial
+            map={cloudsTex}
+            alphaMap={cloudsTex}
+            transparent
+            opacity={0.88}
+            roughness={1.0}
+            metalness={0}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
+      {/* Enhanced Fresnel atmosphere */}
+      {body.hasAtmosphere && body.atmosphereOpacity > 0 && !isOverview && (
+        <mesh>
+          <sphereGeometry args={[radius * 1.12, 32, 32]} />
+          <shaderMaterial
+            vertexShader={ENH_ATM_VERT}
+            fragmentShader={ENH_ATM_FRAG}
+            uniforms={{
+              uAtmColor: { value: new THREE.Color(body.atmosphereColor) },
+              uOpacity:  { value: body.atmosphereOpacity },
+            }}
+            transparent
+            side={THREE.FrontSide}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+
+      {/* Rings */}
+      {body.hasRings && <SaturnRings body={body} radius={radius} isOverview={isOverview} />}
+
+      {/* Sun corona (overview) */}
+      {isStar && isOverview && (
+        <mesh>
+          <sphereGeometry args={[radius * 1.6, 16, 16]} />
+          <meshBasicMaterial color={body.colorMain} transparent opacity={0.15} side={THREE.FrontSide} depthWrite={false} />
+        </mesh>
+      )}
+    </group>
+  );
+};
+
 // ── CelestialBody component ────────────────────────────────────────────────
 interface Props {
   body: CelestialBodyData;
@@ -607,7 +770,8 @@ interface Props {
   onClick?: () => void;
 }
 
-export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick }) => {
+// Internal shader renderer (procedural GLSL — used for exoplanets, moons, fallback)
+const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
   const r = radius ?? body.displayRadius;
@@ -644,13 +808,13 @@ export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = 
         />
       </mesh>
 
-      {/* Atmosphere glow */}
+      {/* Enhanced Fresnel atmosphere glow */}
       {body.hasAtmosphere && body.atmosphereOpacity > 0 && !isOverview && (
         <mesh>
-          <sphereGeometry args={[r * 1.08, 32, 32]} />
+          <sphereGeometry args={[r * 1.11, 32, 32]} />
           <shaderMaterial
-            vertexShader={ATM_VERT}
-            fragmentShader={ATM_FRAG}
+            vertexShader={ENH_ATM_VERT}
+            fragmentShader={ENH_ATM_FRAG}
             uniforms={{
               uAtmColor: { value: new THREE.Color(body.atmosphereColor) },
               uOpacity: { value: body.atmosphereOpacity },
@@ -683,6 +847,15 @@ export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = 
       )}
     </group>
   );
+};
+
+// ── Public dispatcher: real texture when available, shader fallback ────────
+export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick }) => {
+  const r = radius ?? body.displayRadius;
+  if (TEXTURE_FILENAMES[body.id]) {
+    return <TexturedPlanetMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} />;
+  }
+  return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} />;
 };
 
 // ── Saturn-style rings ─────────────────────────────────────────────────────
