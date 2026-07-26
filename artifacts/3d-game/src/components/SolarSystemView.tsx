@@ -125,28 +125,35 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
   return null;
 };
 
-// ── Pinch-to-zoom controller (touch + mouse wheel) ────────────────────────────
+// ── Pinch-to-zoom + manual rotation controller ────────────────────────────────
 const PinchZoomController: React.FC<{
   enabled: boolean;
   zoomRef: React.MutableRefObject<number>;
-}> = ({ enabled, zoomRef }) => {
+  manualRotationRef: React.MutableRefObject<number>;
+  rotationPausedRef: React.MutableRefObject<boolean>;
+}> = ({ enabled, zoomRef, manualRotationRef, rotationPausedRef }) => {
   const { gl } = useThree();
 
   useEffect(() => {
     if (!enabled) return;
     const el = gl.domElement;
 
-    let lastDist = 0;
-    let lastTap  = 0;
+    let lastDist  = 0;
+    let lastTap   = 0;
+    let lastDragX = 0;
+    let isDragging = false;
 
     const pinchDist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length >= 2) {
-        lastDist = pinchDist(e.touches);
+        lastDist   = pinchDist(e.touches);
+        isDragging = false;
       } else if (e.touches.length === 1) {
-        // Double-tap resets zoom to 1×
+        lastDragX  = e.touches[0].clientX;
+        isDragging = false;
+        // Double-tap resets zoom
         const now = Date.now();
         if (now - lastTap < 280) zoomRef.current = 1.0;
         lastTap = now;
@@ -154,17 +161,36 @@ const PinchZoomController: React.FC<{
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length < 2 || !lastDist) return;
-      const d = pinchDist(e.touches);
-      const scale = d / lastDist;
-      // Pinch out (fingers apart) → zoom in (smaller zoomRef = camera closer)
-      zoomRef.current = Math.max(0.25, Math.min(4.0, zoomRef.current / scale));
-      lastDist = d;
+      if (e.touches.length >= 2) {
+        if (!lastDist) return;
+        const d = pinchDist(e.touches);
+        zoomRef.current = Math.max(0.25, Math.min(4.0, zoomRef.current / (d / lastDist)));
+        lastDist = d;
+        isDragging = false;
+      } else if (e.touches.length === 1 && rotationPausedRef.current) {
+        // Single-finger drag → manual rotation when planet is paused
+        const dx = e.touches[0].clientX - lastDragX;
+        if (Math.abs(dx) > 2) isDragging = true;
+        manualRotationRef.current += dx * 0.008;
+        lastDragX = e.touches[0].clientX;
+      }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) lastDist = 0;
+      if (e.touches.length < 1) isDragging = false;
     };
+
+    // Mouse drag for desktop (when rotation is paused)
+    let mouseDown = false;
+    let lastMouseX = 0;
+    const onMouseDown = (e: MouseEvent) => { mouseDown = true; lastMouseX = e.clientX; };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!mouseDown || !rotationPausedRef.current) return;
+      manualRotationRef.current += (e.clientX - lastMouseX) * 0.006;
+      lastMouseX = e.clientX;
+    };
+    const onMouseUp = () => { mouseDown = false; };
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -175,15 +201,21 @@ const PinchZoomController: React.FC<{
     el.addEventListener('touchstart',  onTouchStart, { passive: true });
     el.addEventListener('touchmove',   onTouchMove,  { passive: true });
     el.addEventListener('touchend',    onTouchEnd,   { passive: true });
+    el.addEventListener('mousedown',   onMouseDown);
+    el.addEventListener('mousemove',   onMouseMove);
+    el.addEventListener('mouseup',     onMouseUp);
     el.addEventListener('wheel',       onWheel,      { passive: false });
 
     return () => {
       el.removeEventListener('touchstart',  onTouchStart);
       el.removeEventListener('touchmove',   onTouchMove);
       el.removeEventListener('touchend',    onTouchEnd);
+      el.removeEventListener('mousedown',   onMouseDown);
+      el.removeEventListener('mousemove',   onMouseMove);
+      el.removeEventListener('mouseup',     onMouseUp);
       el.removeEventListener('wheel',       onWheel);
     };
-  }, [enabled, gl.domElement, zoomRef]);
+  }, [enabled, gl.domElement, zoomRef, manualRotationRef, rotationPausedRef]);
 
   return null;
 };
@@ -195,10 +227,12 @@ interface OrbitingBodyProps {
   viewMode: 'overview' | 'detail';
   onClick: () => void;
   angleRef: React.MutableRefObject<number>;
+  rotationPaused?: boolean;
+  manualRotationRef?: React.MutableRefObject<number>;
 }
 
 const OrbitingBody: React.FC<OrbitingBodyProps> = ({
-  body, isSelected, viewMode, onClick, angleRef
+  body, isSelected, viewMode, onClick, angleRef, rotationPaused, manualRotationRef
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const isDetail = viewMode === 'detail' && isSelected;
@@ -237,7 +271,11 @@ const OrbitingBody: React.FC<OrbitingBodyProps> = ({
         <sphereGeometry args={[Math.max(displayR * 1.3, 0.5), 8, 8]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <CelestialBodyMesh body={body} radius={displayR} isOverview={isOverview} onClick={onClick} />
+      <CelestialBodyMesh
+        body={body} radius={displayR} isOverview={isOverview} onClick={onClick}
+        rotationPaused={isDetail ? rotationPaused : false}
+        manualRotationRef={isDetail ? manualRotationRef : undefined}
+      />
       {body.id === 'halley' && !isOverview && <CometTail radius={displayR} />}
       {isSelected && isOverview && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
@@ -353,10 +391,18 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
 
   // Zoom level for pinch-to-zoom (1.0 = default, <1 = zoomed-in, >1 = zoomed-out)
   const zoomRef = useRef(1.0);
+  // Manual rotation accumulator (set by drag when rotation is paused)
+  const manualRotationRef = useRef(0);
+  // Ref mirror of obsRotationPaused — readable inside closures without re-registering handlers
+  const rotationPausedRef = useRef(false);
+  useEffect(() => { rotationPausedRef.current = state.obsRotationPaused; }, [state.obsRotationPaused]);
 
-  // Reset zoom when a new body is selected
+  // Reset zoom + manual rotation when a new body is selected
   const selectedId = state.selectedBodyId;
-  useEffect(() => { zoomRef.current = 1.0; }, [selectedId]);
+  useEffect(() => {
+    zoomRef.current = 1.0;
+    manualRotationRef.current = 0;
+  }, [selectedId]);
 
   // The body centred in detail mode is the FOCUS body (parent when a child is selected)
   const focusBodies = state.focusBody?.children ?? [];
@@ -364,7 +410,12 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
   return (
     <>
       <Stars />
-      <PinchZoomController enabled={state.viewMode === 'detail'} zoomRef={zoomRef} />
+      <PinchZoomController
+        enabled={state.viewMode === 'detail'}
+        zoomRef={zoomRef}
+        manualRotationRef={manualRotationRef}
+        rotationPausedRef={rotationPausedRef}
+      />
       <CameraController
         viewMode={state.viewMode}
         targetRadius={
@@ -406,16 +457,21 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
       )}
 
       {/* Orbiting bodies — isDetail uses focusBodyId so the parent centres when a child is selected */}
-      {orbitBodies.map(body => (
-        <OrbitingBody
-          key={`${state.currentSystemId}-${body.id}`}
-          body={body}
-          isSelected={state.focusBodyId === body.id}
-          viewMode={state.viewMode}
-          angleRef={angleRefs.current[body.id] ?? { current: body.orbitAngleOffset }}
-          onClick={() => state.enterDetail(body.id)}
-        />
-      ))}
+      {orbitBodies.map(body => {
+        const isSelected = state.focusBodyId === body.id;
+        return (
+          <OrbitingBody
+            key={`${state.currentSystemId}-${body.id}`}
+            body={body}
+            isSelected={isSelected}
+            viewMode={state.viewMode}
+            angleRef={angleRefs.current[body.id] ?? { current: body.orbitAngleOffset }}
+            onClick={() => state.enterDetail(body.id)}
+            rotationPaused={isSelected && state.viewMode === 'detail' ? state.obsRotationPaused : false}
+            manualRotationRef={isSelected && state.viewMode === 'detail' ? manualRotationRef : undefined}
+          />
+        );
+      })}
 
       {/* Moon detail mode: render the selected moon centred at origin */}
       {state.moonDetailMode && state.selectedBody?.type === 'MOON' && (
@@ -424,6 +480,8 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
             body={state.selectedBody}
             radius={MOON_DETAIL_RADIUS}
             isOverview={false}
+            rotationPaused={state.obsRotationPaused}
+            manualRotationRef={manualRotationRef}
           />
         </group>
       )}
@@ -444,18 +502,22 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
         );
       })}
 
-      {/* Lighting */}
-      <ambientLight intensity={0.07} />
-      <pointLight position={[0, 0, 0]} intensity={5.0} color="#FFF5E0" distance={300} decay={1.0} />
-      {/* Detail mode: directional sun-light for authentic day/night terminator */}
-      {state.viewMode === 'detail' && !state.moonDetailMode && (
+      {/* Lighting — flat mode removes directional shadow for observation/sketching */}
+      <ambientLight intensity={state.obsFlatLight ? 1.15 : 0.07} />
+      <pointLight
+        position={[0, 0, 0]}
+        intensity={state.obsFlatLight ? 0 : 5.0}
+        color="#FFF5E0" distance={300} decay={1.0}
+      />
+      {!state.obsFlatLight && state.viewMode === 'detail' && !state.moonDetailMode && (
         <directionalLight position={[8, 2, 4]} intensity={1.6} color="#FFF8E8" />
       )}
-      {/* Moon detail: cooler reflected light */}
-      {state.moonDetailMode && (
+      {!state.obsFlatLight && state.moonDetailMode && (
         <directionalLight position={[6, 1, 4]} intensity={1.8} color="#F0F4FF" />
       )}
-      <directionalLight position={[50, 30, 50]} intensity={0.15} color="#ffffff" />
+      {!state.obsFlatLight && (
+        <directionalLight position={[50, 30, 50]} intensity={0.15} color="#ffffff" />
+      )}
     </>
   );
 };

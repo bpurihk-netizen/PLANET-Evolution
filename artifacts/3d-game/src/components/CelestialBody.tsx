@@ -390,9 +390,9 @@ varying vec3 vViewPos;
 void main(){
   vec3 viewDir=normalize(-vViewPos);
   float rim=1.0-max(dot(vNormal,viewDir),0.0);
-  float fresnel=pow(rim,3.0);
-  float alpha=uOpacity*fresnel*2.4;
-  gl_FragColor=vec4(uAtmColor*1.2,clamp(alpha,0.0,0.88));
+  float fresnel=pow(rim,4.5);
+  float alpha=uOpacity*fresnel*1.3;
+  gl_FragColor=vec4(uAtmColor*1.05,clamp(alpha,0.0,0.60));
 }
 `;
 
@@ -650,9 +650,11 @@ interface TexturedProps {
   radius: number;
   isOverview: boolean;
   onClick?: () => void;
+  rotationPaused?: boolean;
+  manualRotationRef?: React.MutableRefObject<number>;
 }
 
-const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview, onClick }) => {
+const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview, onClick, rotationPaused, manualRotationRef }) => {
   const meshRef  = useRef<THREE.Mesh>(null);
   const cloudRef = useRef<THREE.Mesh>(null);
   const [diffuseTex, setDiffuseTex] = useState<THREE.Texture | null>(null);
@@ -686,8 +688,15 @@ const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview,
   }, [body.id]);
 
   useFrame((_, dt) => {
-    if (meshRef.current)  meshRef.current.rotation.y  += dt * (body.id === 'sun' ? 0.005 : 0.08);
-    if (cloudRef.current) cloudRef.current.rotation.y += dt * 0.095;
+    if (meshRef.current) {
+      if (rotationPaused && manualRotationRef) {
+        meshRef.current.rotation.y = manualRotationRef.current;
+      } else if (!rotationPaused) {
+        meshRef.current.rotation.y += dt * (body.id === 'sun' ? 0.005 : 0.08);
+        if (manualRotationRef) manualRotationRef.current = meshRef.current.rotation.y;
+      }
+    }
+    if (cloudRef.current && !rotationPaused) cloudRef.current.rotation.y += dt * 0.095;
   });
 
   // Show procedural shader while texture loads (seamless transition)
@@ -768,10 +777,12 @@ interface Props {
   radius?: number;      // Override display radius
   isOverview?: boolean; // Simplified rendering for overview map
   onClick?: () => void;
+  rotationPaused?: boolean;
+  manualRotationRef?: React.MutableRefObject<number>;
 }
 
 // Internal shader renderer (procedural GLSL — used for exoplanets, moons, fallback)
-const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick }) => {
+const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
   const r = radius ?? body.displayRadius;
@@ -788,8 +799,13 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
     timeRef.current += dt;
     uniforms.uTime.value = timeRef.current;
     if (meshRef.current) {
-      const speed = body.id === 'sun' ? 0.005 : 0.12;
-      meshRef.current.rotation.y += dt * speed;
+      if (rotationPaused && manualRotationRef) {
+        meshRef.current.rotation.y = manualRotationRef.current;
+      } else if (!rotationPaused) {
+        const speed = body.id === 'sun' ? 0.005 : 0.12;
+        meshRef.current.rotation.y += dt * speed;
+        if (manualRotationRef) manualRotationRef.current = meshRef.current.rotation.y;
+      }
     }
   });
 
@@ -850,12 +866,12 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
 };
 
 // ── Public dispatcher: real texture when available, shader fallback ────────
-export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick }) => {
+export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef }) => {
   const r = radius ?? body.displayRadius;
   if (TEXTURE_FILENAMES[body.id]) {
-    return <TexturedPlanetMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} />;
+    return <TexturedPlanetMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} />;
   }
-  return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} />;
+  return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} />;
 };
 
 // ── Saturn-style rings ─────────────────────────────────────────────────────
