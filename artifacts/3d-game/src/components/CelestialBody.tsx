@@ -710,16 +710,18 @@ const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview,
 
   return (
     <group onClick={onClick}>
-      {/* Main sphere */}
+      {/* Main sphere — stars use BasicMaterial (unlit); planets use StandardMaterial */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[radius, segments, halfSeg]} />
-        <meshStandardMaterial
-          map={diffuseTex}
-          roughness={isStar ? 1.0 : body.id === 'earth' ? 0.62 : 0.88}
-          metalness={0}
-          emissive={isStar ? new THREE.Color(body.colorMain) : new THREE.Color(0, 0, 0)}
-          emissiveIntensity={isStar ? 0.75 : 0}
-        />
+        {isStar ? (
+          <meshBasicMaterial map={diffuseTex} />
+        ) : (
+          <meshStandardMaterial
+            map={diffuseTex}
+            roughness={body.id === 'earth' ? 0.62 : 0.88}
+            metalness={0}
+          />
+        )}
       </mesh>
 
       {/* Earth: cloud layer */}
