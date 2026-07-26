@@ -302,11 +302,17 @@ const GlobeInfoPanel: React.FC<GlobeInfoPanelProps> = ({ constellation, onClose,
 interface ConstellationGlobeProps {
   onExit: () => void;
   onSwitchSystem: (id: string) => void;
+  onConstellationViewed?: (id: string) => void;
 }
 
-export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, onSwitchSystem }) => {
+export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, onSwitchSystem, onConstellationViewed }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = selectedId ? CONSTELLATIONS.find(c => c.id === selectedId) ?? null : null;
+
+  const handleSelect = (id: string | null) => {
+    setSelectedId(id);
+    if (id) onConstellationViewed?.(id);
+  };
 
   const handleSwitchSystem = (id: string) => {
     onSwitchSystem(id);
@@ -322,7 +328,7 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
         style={{ width: '100%', height: '100%' }}
       >
         <color attach="background" args={['#020408']} />
-        <GlobeScene selectedId={selectedId} onSelect={setSelectedId} />
+        <GlobeScene selectedId={selectedId} onSelect={handleSelect} />
         <OrbitControls
           enablePan={false}
           enableZoom={true}

@@ -1,11 +1,14 @@
 import React from 'react';
 import { SolarSystemState } from '../hooks/useSolarSystem';
+import { StampRallyState } from '../hooks/useStampRally';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import { ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ExplorerHUDProps {
   state: SolarSystemState;
+  stampRally: StampRallyState;
+  onOpenStampBook: () => void;
 }
 
 // System emoji icons
@@ -16,7 +19,7 @@ const SYSTEM_ICONS: Record<string, string> = {
   'kepler442':     '🟠',
 };
 
-export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state }) => {
+export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state, stampRally, onOpenStampBook }) => {
   const body         = state.selectedBody;
   const systemBodies = state.currentSystem.bodies;
 
@@ -116,6 +119,19 @@ export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state }) => {
             >
               <span>🌙</span>
               <span>今夜</span>
+            </button>
+            {/* ── スタンプ帳ボタン ── */}
+            <button
+              onClick={onOpenStampBook}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold whitespace-nowrap transition-all active:scale-95 min-h-[36px] bg-amber-500/15 border-amber-400/40 text-amber-200 active:bg-amber-500/30 relative"
+            >
+              <span>🎫</span>
+              <span>スタンプ帳</span>
+              {stampRally.earnedCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-amber-400 text-amber-900 text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {stampRally.earnedCount > 9 ? '9+' : stampRally.earnedCount}
+                </span>
+              )}
             </button>
           </div>
         </div>

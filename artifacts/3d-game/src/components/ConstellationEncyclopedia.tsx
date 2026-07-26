@@ -254,10 +254,11 @@ const AchievementBadge: React.FC<{ count: number }> = ({ count }) => {
 interface ConstellationEncyclopediaProps {
   onExit: () => void;
   onSwitchSystem: (id: string) => void;
+  onConstellationViewed?: (id: string) => void;
 }
 
 export const ConstellationEncyclopedia: React.FC<ConstellationEncyclopediaProps> = ({
-  onExit, onSwitchSystem
+  onExit, onSwitchSystem, onConstellationViewed
 }) => {
   const [activeSeason, setActiveSeason] = useState<Season>('circumpolar');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -303,6 +304,8 @@ export const ConstellationEncyclopedia: React.FC<ConstellationEncyclopediaProps>
       if (next.size === 88) setShowAchievement(true);
       return next;
     });
+    // Award stamp for viewing this constellation
+    onConstellationViewed?.(id);
   };
 
   const handleSwitchSystem = (systemId: string) => {

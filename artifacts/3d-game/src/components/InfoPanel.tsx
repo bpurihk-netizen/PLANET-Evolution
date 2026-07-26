@@ -1,12 +1,93 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
+import { StampRallyState } from '../hooks/useStampRally';
+import { BODY_STAMP_TRIGGERS, pickQuiz, QuizQuestion } from '../data/stampData';
 import { cn } from '@/lib/utils';
-import { X, Footprints, Swords, ChevronLeft } from 'lucide-react';
+import { X, Footprints, Swords, ChevronLeft, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
 
 interface InfoPanelProps {
   state: SolarSystemState;
+  stampRally: StampRallyState;
+  onStampEarned?: (constellationId: string) => void;
 }
+
+// ── Quiz sub-component ────────────────────────────────────────────────────────
+interface QuizWidgetProps {
+  quiz: QuizQuestion;
+  onCorrect: () => void;
+  onReset: () => void;
+}
+type QuizPhase = 'idle' | 'answering' | 'correct' | 'wrong';
+
+const QuizWidget: React.FC<QuizWidgetProps> = ({ quiz, onCorrect, onReset }) => {
+  const [phase, setPhase] = useState<QuizPhase>('answering');
+  const [chosenIdx, setChosenIdx] = useState<number | null>(null);
+
+  const handleChoice = useCallback((idx: number) => {
+    if (phase !== 'answering') return;
+    setChosenIdx(idx);
+    if (idx === quiz.correctIndex) {
+      setPhase('correct');
+      onCorrect();
+    } else {
+      setPhase('wrong');
+    }
+  }, [phase, quiz.correctIndex, onCorrect]);
+
+  return (
+    <div className="bg-indigo-950/60 border border-indigo-400/30 rounded-2xl p-4 space-y-3">
+      <div className="flex items-start gap-2">
+        <HelpCircle size={16} className="text-indigo-300 shrink-0 mt-0.5" />
+        <p className="text-white/85 text-sm leading-relaxed font-medium">{quiz.question}</p>
+      </div>
+
+      <div className="space-y-2">
+        {quiz.choices.map((choice, i) => {
+          const isCorrect = i === quiz.correctIndex;
+          const isChosen = i === chosenIdx;
+          let btnClass = 'w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all min-h-[44px] border ';
+          if (phase === 'answering') {
+            btnClass += 'bg-white/5 border-white/10 text-white/80 active:bg-indigo-800/50';
+          } else if (isCorrect) {
+            btnClass += 'bg-green-900/50 border-green-500/50 text-green-200';
+          } else if (isChosen) {
+            btnClass += 'bg-red-900/40 border-red-500/40 text-red-200';
+          } else {
+            btnClass += 'bg-white/3 border-white/6 text-white/30';
+          }
+
+          return (
+            <button key={i} className={btnClass} onClick={() => handleChoice(i)} disabled={phase !== 'answering'}>
+              <span className="flex items-center gap-2">
+                {phase !== 'answering' && isCorrect && <CheckCircle size={14} className="text-green-400 shrink-0" />}
+                {phase !== 'answering' && isChosen && !isCorrect && <XCircle size={14} className="text-red-400 shrink-0" />}
+                {choice}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {phase === 'correct' && (
+        <div className="flex items-center gap-2 text-green-300 text-sm font-bold">
+          <span>🎉 正解！スタンプをゲットしました！</span>
+        </div>
+      )}
+      {phase === 'wrong' && (
+        <div className="flex flex-col gap-2">
+          <p className="text-red-300 text-sm">😢 残念！もう一度チャレンジしてみよう</p>
+          <button
+            onClick={onReset}
+            className="text-xs text-indigo-300 underline"
+          >
+            別の問題に挑戦する
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const StatRow: React.FC<{ label: string; value: string; unit?: string }> = ({ label, value, unit }) => (
   <div className="flex justify-between items-baseline py-1.5 border-b border-white/5">
@@ -57,12 +138,58 @@ function typeIcon(t: string): string {
   }
 }
 
-export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
+// Immutable quiz session — constellation ID is locked in when quiz starts,
+// so switching bodies mid-quiz cannot award the wrong stamp.
+interface QuizSession {
+  question: QuizQuestion;
+  constellationId: string;
+}
+
+export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStampEarned }) => {
   const body = state.selectedBody;
+  const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
+  const [quizKey, setQuizKey] = useState(0);
+
+  // Reset quiz whenever the selected body changes
+  const bodyId = body?.id ?? null;
+  useEffect(() => {
+    setQuizSession(null);
+    setQuizKey(k => k + 1);
+  }, [bodyId]);
+
   if (!body) return null;
 
-  const isVisible   = state.viewMode === 'detail' || state.selectedBodyId !== null;
-  const isExo       = state.currentSystemId !== 'solar-system';
+  // Which constellation stamps does this body trigger?
+  const triggerIds = BODY_STAMP_TRIGGERS[body.id] ?? [];
+  // Pick first unearned constellation for quiz, or any if all earned
+  const quizConstellationId = triggerIds.find(id => !stampRally.hasStamp(id)) ?? triggerIds[0] ?? null;
+  const hasQuiz = quizConstellationId !== null;
+
+  const handleShowQuiz = () => {
+    if (!quizConstellationId) return;
+    const q = pickQuiz(quizConstellationId);
+    if (!q) return;
+    setQuizSession({ question: q, constellationId: quizConstellationId });
+    setQuizKey(k => k + 1);
+  };
+
+  // Award is always bound to the session's locked constellation ID — never to the current body
+  const handleQuizCorrect = useCallback(() => {
+    if (quizSession?.constellationId) {
+      onStampEarned?.(quizSession.constellationId);
+    }
+  }, [quizSession, onStampEarned]);
+
+  const handleQuizReset = () => {
+    if (!quizConstellationId) return;
+    const q = pickQuiz(quizConstellationId);
+    if (!q) return;
+    setQuizSession({ question: q, constellationId: quizConstellationId });
+    setQuizKey(k => k + 1);
+  };
+
+  const isVisible  = state.viewMode === 'detail' || state.selectedBodyId !== null;
+  const isExo      = state.currentSystemId !== 'solar-system';
   const isHabitable = body.nameJa.includes('★');
   const displayName = body.nameJa.replace(' ★', '');
   const isMoonView  = state.moonDetailMode && body.type === 'MOON';
@@ -216,7 +343,27 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
                 小惑星帯を突破する
               </button>
             )}
+            {/* ── Quiz button ── */}
+            {hasQuiz && !quizSession && (
+              <button
+                onClick={handleShowQuiz}
+                className="w-full py-3.5 bg-indigo-900/50 active:bg-indigo-800/70 border border-indigo-500/50 rounded-2xl text-indigo-200 font-bold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[52px]"
+              >
+                <HelpCircle size={16} />
+                ⭐ 星座クイズでスタンプをゲット！
+              </button>
+            )}
           </div>
+
+          {/* ── Quiz widget — session is immutable: constellation ID locked at start ── */}
+          {quizSession && (
+            <QuizWidget
+              key={quizKey}
+              quiz={quizSession.question}
+              onCorrect={handleQuizCorrect}
+              onReset={handleQuizReset}
+            />
+          )}
         </div>
       </div>
     </div>
