@@ -51,21 +51,62 @@ void main(){
 `;
 
 // ── Fragment shaders per type ──────────────────────────────────────────────
+// ── Realistic G-type star shader (Sun / Alpha Centauri A) ─────────────────
+// Physical effects: limb darkening, granulation, supergranulation, sunspots, faculae
 const FRAG_STAR = `
 uniform float uTime;
 varying vec3 vPos;
 varying vec3 vNormal;
 ${NOISE_GLSL}
+
 void main(){
-  vec3 n=normalize(vPos);
-  float f=fbm(n*2.5+uTime*0.04);
-  float f2=fbm(n*5.0-uTime*0.06);
-  vec3 col=mix(vec3(1.0,0.42,0.0),vec3(1.0,0.92,0.35),f);
-  col=mix(col,vec3(1.0,1.0,0.9),f2*0.4);
-  // Corona glow at limb
-  float limb=1.0-max(dot(vNormal,normalize(vec3(0,0,1))),0.0);
-  col+=vec3(1.0,0.5,0.1)*pow(limb,3.0)*1.5;
-  gl_FragColor=vec4(col,1.0);
+  vec3 n = normalize(vPos);
+
+  // ── 1. Limb darkening (most important realism feature) ──────────────────
+  // mu = cosine of angle between surface normal and camera direction (view-space)
+  // Center of disk: mu ≈ 1 (normal faces camera) → bright, hot, white-yellow
+  // Limb of disk:   mu ≈ 0 (normal grazes camera) → dark, cool, orange-red
+  float mu = clamp(dot(normalize(vNormal), vec3(0.0, 0.0, 1.0)), 0.0, 1.0);
+  // Solar limb darkening law: I(mu) = 1 - u*(1-mu), u≈0.6 for 5800K G-star
+  float ld = 1.0 - 0.62 * (1.0 - mu);
+
+  // ── 2. Color temperature gradient ───────────────────────────────────────
+  // Center ~5800K: near-white with warm tint  rgb(1.00, 0.97, 0.86)
+  // Limb   ~4200K: deep orange-red           rgb(0.95, 0.40, 0.06)
+  vec3 centerCol = vec3(1.00, 0.97, 0.86);
+  vec3 limbCol   = vec3(0.95, 0.40, 0.06);
+  vec3 col = mix(limbCol, centerCol, pow(mu, 0.45));
+  col *= ld * 1.15 + 0.02;
+
+  // ── 3. Supergranulation (large-scale convective cells, ~30Mm, very slow) ─
+  float superG = fbm(n * 3.8 + vec3(uTime * 0.0025, 0.0, 0.0));
+  col *= 0.90 + superG * 0.13;
+
+  // ── 4. Solar granulation (convection cells ~1Mm, bright centres/dark lanes) ─
+  float gran  = fbm(n * 24.0 + vec3(uTime * 0.022, 0.0, 0.0));
+  float gran2 = fbm(n * 48.0 - vec3(uTime * 0.014, 0.0, 0.0));
+  float granMask = smoothstep(0.36, 0.64, gran + gran2 * 0.30);
+  // Bright granule cores (hot rising plasma) vs dark intergranular lanes (cooling descent)
+  col *= mix(0.76, 1.10, granMask);
+
+  // ── 5. Sunspots (active regions near equator, magnetic flux suppresses convection) ─
+  float equatorBias = clamp(1.0 - abs(n.y) * 2.6, 0.0, 1.0);
+  float spotA = fbm(n * 3.1 + vec3(29.3, 7.5, 14.1));
+  float spotB = fbm(n * 6.2 + vec3(14.1, 29.3, 7.5));
+  // Penumbra: moderately dark outer ring
+  float penumbra = smoothstep(0.630, 0.660, spotA * equatorBias);
+  // Umbra: very dark magnetic core
+  float umbra    = smoothstep(0.660, 0.685, spotB * equatorBias * spotA);
+  col = mix(col, col * 0.52, penumbra * 0.60);
+  col = mix(col, col * 0.20, umbra    * 0.82);
+
+  // ── 6. Faculae (bright active regions; most visible near limb) ──────────
+  float faculaeBase = smoothstep(0.595, 0.625, spotA) * (1.0 - penumbra);
+  float limbFactor  = pow(1.0 - mu, 1.2);  // Faculae more visible at limb
+  col += vec3(0.10, 0.055, 0.012) * faculaeBase * limbFactor * 1.3;
+
+  col = clamp(col, 0.0, 1.0);
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
@@ -699,7 +740,13 @@ const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview,
         if (manualRotationRef) manualRotationRef.current = meshRef.current.rotation.y;
       }
     }
-    if (cloudRef.current && !rotationPaused) cloudRef.current.rotation.y += dt * 0.095;
+    if (cloudRef.current) {
+      if (rotationPaused && manualRotationRef) {
+        cloudRef.current.rotation.y = manualRotationRef.current; // Sync clouds to manual drag
+      } else if (!rotationPaused) {
+        cloudRef.current.rotation.y += dt * 0.095; // Slightly faster than earth for realism
+      }
+    }
   });
 
   // Show procedural shader while texture loads (seamless transition)
