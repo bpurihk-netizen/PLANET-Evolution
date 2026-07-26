@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
 import { CelestialBodyMesh, AsteroidBeltRing, CometTail } from './CelestialBody';
+import { SolarFlares } from './SolarFlares';
 
 // ── Stars background ────────────────────────────────────────────────────────
 const Stars: React.FC = () => {
@@ -448,6 +449,8 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
             isOverview={state.viewMode === 'overview'}
             onClick={() => state.enterDetail(starBody.id)}
           />
+          {/* Solar flares + enhanced corona — visible in both overview and detail */}
+          <SolarFlares sunRadius={starBody.displayRadius} />
           {state.viewMode === 'overview' && (
             <StarGlow color={starBody.colorMain} radius={starBody.displayRadius} />
           )}

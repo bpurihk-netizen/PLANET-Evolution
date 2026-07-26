@@ -848,19 +848,7 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
         <SaturnRings body={body} radius={r} isOverview={isOverview} />
       )}
 
-      {/* Sun glow corona (overview) */}
-      {body.id === 'sun' && isOverview && (
-        <mesh>
-          <sphereGeometry args={[r * 1.6, 16, 16]} />
-          <meshBasicMaterial
-            color={body.colorMain}
-            transparent
-            opacity={0.15}
-            side={THREE.FrontSide}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
+      {/* Sun corona handled by SolarFlares component in SolarSystemView */}
     </group>
   );
 };
