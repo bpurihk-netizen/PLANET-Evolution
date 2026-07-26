@@ -42,7 +42,8 @@ function EasyRating({ rating }: { rating: 1 | 2 | 3 }) {
 }
 
 /** Transit time badge */
-function TransitBadge({ transitJST, isPrime }: { transitJST: string; isPrime: boolean }) {
+function TransitBadge({ transitJST, isPrime, latDeg = 35 }: { transitJST: string; isPrime: boolean; latDeg?: number }) {
+  const transitLabel = latDeg < 0 ? '北中' : '南中';
   return (
     <div className={cn(
       'flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono',
@@ -51,7 +52,7 @@ function TransitBadge({ transitJST, isPrime }: { transitJST: string; isPrime: bo
         : 'bg-white/5 border border-white/10 text-white/40',
     )}>
       <Clock size={8} />
-      <span>南中 {transitJST}</span>
+      <span>{transitLabel} {transitJST}</span>
     </div>
   );
 }
@@ -198,11 +199,12 @@ const PlanetRow: React.FC<PlanetRowProps> = ({ planet, onNavigate }) => {
 interface TopCardProps {
   entry: VisibleConstellation;
   rank: number;
+  latDeg: number;
   onOpenEncyclopedia: () => void;
   onSwitchSystem: (id: string) => void;
 }
 
-const TopCard: React.FC<TopCardProps> = ({ entry, rank, onOpenEncyclopedia, onSwitchSystem }) => {
+const TopCard: React.FC<TopCardProps> = ({ entry, rank, latDeg, onOpenEncyclopedia, onSwitchSystem }) => {
   const { constellation: con, transitJST, culminAlt, isPrimeTime, easyRating } = entry;
   const meta = getConstellationMeta(con.id);
   const seasonColor = meta ? SEASON_COLORS[meta.season] : '#ffffff';
@@ -244,10 +246,10 @@ const TopCard: React.FC<TopCardProps> = ({ entry, rank, onOpenEncyclopedia, onSw
 
         {/* Badges row */}
         <div className="flex flex-wrap gap-1.5 mt-1.5">
-          <TransitBadge transitJST={transitJST} isPrime={isPrimeTime} />
+          <TransitBadge transitJST={transitJST} isPrime={isPrimeTime} latDeg={latDeg} />
           <div className="flex items-center gap-1 px-2 py-0.5 bg-white/6 border border-white/10 rounded-full">
             <ArrowUp size={8} className="text-white/40" />
-            <span className="text-[10px] font-mono text-white/50">最大高度 {culminAlt}°</span>
+            <span className="text-[10px] font-mono text-white/50">{entry.transitDirection}天 {culminAlt}°</span>
           </div>
           <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white/6 border border-white/10 rounded-full">
             <EasyRating rating={easyRating} />
@@ -331,10 +333,12 @@ const SEASON_ACCENT: Record<string, string> = {
 interface AnnualCalendarProps {
   calendar: MonthlyCalendarEntry[];
   currentMonth: number;
+  latDeg: number;
   onOpenEncyclopedia: (conId: string) => void;
 }
 
-const AnnualCalendar: React.FC<AnnualCalendarProps> = ({ calendar, currentMonth, onOpenEncyclopedia }) => {
+const AnnualCalendar: React.FC<AnnualCalendarProps> = ({ calendar, currentMonth, latDeg, onOpenEncyclopedia }) => {
+  const transitLabel = latDeg < 0 ? '北中' : '南中';
   const [expandedMonth, setExpandedMonth] = useState<number>(currentMonth);
 
   return (
@@ -431,7 +435,7 @@ const AnnualCalendar: React.FC<AnnualCalendarProps> = ({ calendar, currentMonth,
                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                               <div className="flex items-center gap-1 text-[10px] text-white/40 font-mono">
                                 <Clock size={8} className="shrink-0" />
-                                南中 {v.transitJST}
+                                {transitLabel} {v.transitJST}
                               </div>
                               <div className="flex items-center gap-1 text-[10px] text-white/40 font-mono">
                                 <ArrowUp size={8} className="shrink-0" />
@@ -740,6 +744,9 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
                   <span className="text-indigo-300 font-bold">{season}の夜空</span>
                   {' '}·{' '}{location.flag} {location.nameJa}（{location.latLabel}）
                   {' '}· 日没後〜夜明け前の観察に最適な時間帯
+                  {location.latDeg < 0 && (
+                    <span className="text-violet-300/80"> · 北の空が正面（南半球モード）</span>
+                  )}
                 </div>
                 {linkedTonight.length > 0 && (
                   <div className="flex items-center gap-1 px-2.5 py-1 bg-green-900/40 border border-green-500/30 rounded-full">
@@ -751,6 +758,19 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
                 )}
               </div>
             </div>
+
+            {/* ── Hemisphere orientation banner ── */}
+            {location.latDeg < 0 && (
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-violet-950/50 border border-violet-400/25 rounded-2xl">
+                <div className="text-xl shrink-0">🧭</div>
+                <div>
+                  <div className="text-violet-200 text-xs font-bold">南半球モード：北の空が正面</div>
+                  <p className="text-violet-300/60 text-[10px] leading-snug mt-0.5">
+                    南緯では星は北の空を通って最高点（北中）に達します。星座の高度は北向きで最大になります。
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* ── Moon Phase ── */}
             <MoonPhaseCard moon={moon} />
@@ -780,7 +800,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-white/80 text-sm font-bold">今夜おすすめ TOP 5</h2>
-                <span className="text-white/30 text-[10px]">南中時刻の早い順</span>
+                <span className="text-white/30 text-[10px]">{location.latDeg < 0 ? '北中' : '南中'}時刻の早い順</span>
               </div>
               {result.top5.length > 0 ? (
                 <div className="space-y-2.5">
@@ -789,6 +809,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
                       key={entry.constellation.id}
                       entry={entry}
                       rank={i + 1}
+                      latDeg={location.latDeg}
                       onOpenEncyclopedia={() => handleOpenEncyclopedia()}
                       onSwitchSystem={handleSwitchSystem}
                     />
@@ -829,8 +850,10 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
                 一つの星座が「見ごろ」を迎えるのは、地球が公転して丁度その星座と正対する時季です。
               </p>
               <p className="text-white/60 text-xs leading-relaxed">
-                南中時刻は毎日約4分ずつ早まります（年間で一周）。
-                今夜の「南中」が深夜の星座も、1か月後には夜9時ごろに南中し、より観察しやすくなります。
+                {location.latDeg < 0
+                  ? `北中時刻は毎日約4分ずつ早まります（年間で一周）。今夜の「北中」が深夜の星座も、1か月後には夜9時ごろに北中し、より観察しやすくなります。`
+                  : `南中時刻は毎日約4分ずつ早まります（年間で一周）。今夜の「南中」が深夜の星座も、1か月後には夜9時ごろに南中し、より観察しやすくなります。`
+                }
               </p>
             </div>
 
@@ -840,7 +863,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
               <ul className="space-y-1.5 text-white/50 text-xs">
                 <li>• 光害の少ない場所を選ぶと、より多くの星が見える</li>
                 <li>• 目が暗さに慣れるまで20〜30分かかる（スマホの画面は最小輝度に）</li>
-                <li>• 南中前後の1〜2時間が最も高く見えて観察しやすい</li>
+                <li>• {location.latDeg < 0 ? '北中' : '南中'}前後の1〜2時間が最も高く見えて観察しやすい</li>
                 <li>• 双眼鏡（7×50程度）があると星団・星雲まで楽しめる</li>
               </ul>
             </div>
@@ -867,6 +890,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
             <AnnualCalendar
               calendar={annualCalendar}
               currentMonth={currentMonth}
+              latDeg={location.latDeg}
               onOpenEncyclopedia={() => handleOpenEncyclopedia()}
             />
 
@@ -874,7 +898,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
             <div className="bg-slate-900/40 border border-white/6 rounded-2xl px-4 py-3">
               <p className="text-white/35 text-[10px] leading-relaxed text-center">
                 ※ 見ごろ計算は {location.flag} {location.nameJa}（{location.latLabel}）を基準に、各月15日の午前0時で算出。
-                南中時刻は現地の天候・地形により異なります。
+                {location.latDeg < 0 ? '北中' : '南中'}時刻は現地の天候・地形により異なります。
               </p>
             </div>
           </div>

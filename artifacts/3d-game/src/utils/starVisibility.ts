@@ -40,6 +40,33 @@ export function getMidnightLSTDeg(date: Date): number {
   return (sunRA + 180) % 360;
 }
 
+// ── Hemisphere orientation helpers ────────────────────────────────────────────
+
+/**
+ * For a given latitude, returns the compass direction of the meridian at upper
+ * culmination (the point of highest altitude).
+ *
+ * Northern hemisphere (lat > 0): stars culminate due **south** (azimuth 180°).
+ * Southern hemisphere (lat < 0): stars culminate due **north** (azimuth 0°).
+ * Equator (lat = 0): stars pass the zenith; direction is undefined — treat as south.
+ *
+ * This is the core orientation flag used throughout the UI to switch "南中" ↔ "北中",
+ * "南の空" ↔ "北の空", and "南天" ↔ "北天" for southern-hemisphere users.
+ */
+export function getTransitDirectionLabel(latDeg: number): '南' | '北' {
+  return latDeg < 0 ? '北' : '南';
+}
+
+/** Full transit label: "南中" for northern hemisphere, "北中" for southern. */
+export function getTransitLabel(latDeg: number): string {
+  return `${getTransitDirectionLabel(latDeg)}中`;
+}
+
+/** Sky direction phrase: "南の空" (northern hemisphere) or "北の空" (southern). */
+export function getSkyDirectionLabel(latDeg: number): string {
+  return `${getTransitDirectionLabel(latDeg)}の空`;
+}
+
 // ── Visibility math ────────────────────────────────────────────────────────────
 
 /** Normalise an angle to [-180, 180]. */
@@ -573,6 +600,7 @@ export function computeMonthlyTop3(
         transitHours,
         transitJST: formatTransitJST(transitHours),
         culminAlt: Math.round(getCulmAltitudeDeg(con.decDeg, latDeg)),
+        transitDirection: getTransitDirectionLabel(latDeg),
         isPrimeTime: isPrimeTime(transitHours),
         isCircumpolar: isCircumpolar(con.decDeg, latDeg),
         easyRating: getEasyRating(con),
@@ -610,7 +638,9 @@ export interface VisibleConstellation {
   score: number;
   transitHours: number;     // Hours from midnight (negative = before midnight)
   transitJST: string;       // e.g. "21:30"
-  culminAlt: number;        // Degrees above S horizon at transit
+  culminAlt: number;        // Degrees above horizon at transit
+  /** Compass direction of culmination: '南' for northern hemisphere, '北' for southern */
+  transitDirection: '南' | '北';
   isPrimeTime: boolean;
   isCircumpolar: boolean;
   easyRating: 1 | 2 | 3;   // ★ to ★★★ findability
@@ -642,6 +672,7 @@ export function computeNightSky(
         transitHours,
         transitJST: formatTransitJST(transitHours),
         culminAlt: Math.round(getCulmAltitudeDeg(con.decDeg, latDeg)),
+        transitDirection: getTransitDirectionLabel(latDeg),
         isPrimeTime: isPrimeTime(transitHours),
         isCircumpolar: isCircumpolar(con.decDeg, latDeg),
         easyRating: getEasyRating(con),
