@@ -214,22 +214,87 @@ export function computeMoonPhase(date: Date): MoonPhase {
 
 // ── Planet Visibility ─────────────────────────────────────────────────────────
 
-/** Simplified mean orbital elements at J2000.0 (Jan 1.5, 2000) */
-const PLANET_ELEMENTS: Record<string, { L0: number; rate: number }> = {
-  venus:   { L0: 181.98, rate: 1.6021318 },
-  mars:    { L0: 355.43, rate: 0.5240208 },
-  jupiter: { L0: 34.40,  rate: 0.0830853 },
-  saturn:  { L0: 49.94,  rate: 0.0334985 },
-};
-const EARTH_ELEMENTS = { L0: 100.46, rate: 0.9856474 };
-
 /** J2000 epoch as Julian Date */
 const J2000 = 2451545.0;
 
-/** Compute ecliptic longitude (degrees, mod 360) for a planet/Earth at given JD */
-function eclipticLon(elements: { L0: number; rate: number }, jd: number): number {
-  const days = jd - J2000;
-  return ((elements.L0 + elements.rate * days) % 360 + 360) % 360;
+/**
+ * Keplerian orbital elements at J2000.0, with secular rates per Julian century.
+ * Source: Meeus, "Astronomical Algorithms" 2nd ed., Table 31.a.
+ *
+ * L0   = mean longitude at J2000 (degrees)
+ * Lc   = mean longitude rate (degrees per Julian century)
+ * e0   = eccentricity at J2000 (dimensionless)
+ * ec   = eccentricity rate (per Julian century)
+ * w0   = longitude of perihelion at J2000 (degrees)  [ω̄ = ω + Ω]
+ * wc   = longitude of perihelion rate (degrees per Julian century)
+ * a    = semi-major axis (AU) — assumed constant for the accuracy window we need
+ */
+interface KeplerElements {
+  L0: number; Lc: number;   // mean longitude
+  e0: number; ec: number;   // eccentricity
+  w0: number; wc: number;   // longitude of perihelion
+  a:  number;               // semi-major axis (AU)
+}
+
+const KEPLER_ELEMENTS: Record<string, KeplerElements> = {
+  // Earth (heliocentric; used to derive Sun's geocentric position)
+  earth:   { L0: 100.46457, Lc: 36000.76983, e0: 0.01670862, ec: -0.00004204, w0: 102.93735, wc:  0.71953, a: 1.00000 },
+  // Inner planet
+  venus:   { L0: 181.97973, Lc: 58517.81539, e0: 0.00677188, ec: -0.00004777, w0: 131.53298, wc:  0.96935, a: 0.72333 },
+  // Outer planets
+  mars:    { L0: 355.43296, Lc: 19141.69631, e0: 0.09339410, ec:  0.00009149, w0: 336.04084, wc:  1.06612, a: 1.52366 },
+  jupiter: { L0:  34.35148, Lc:  3034.90567, e0: 0.04849485, ec:  0.00016322, w0:  14.33131, wc:  0.21764, a: 5.20290 },
+  saturn:  { L0:  50.07747, Lc:  1222.11494, e0: 0.05550825, ec: -0.00032044, w0:  93.05723, wc:  0.56046, a: 9.53707 },
+};
+
+/**
+ * Equation of center — converts mean anomaly M (radians) and eccentricity e
+ * into the true-anomaly correction (radians).
+ *
+ * v − M ≈ (2e − e³/4) sin M + (5e²/4) sin 2M + (13e³/12) sin 3M
+ *
+ * Accurate to ~0.01° for e < 0.2 (all solar-system planets qualify).
+ */
+function equationOfCenter(M: number, e: number): number {
+  return (2 * e - (e ** 3) / 4) * Math.sin(M)
+       + (5 / 4) * (e ** 2) * Math.sin(2 * M)
+       + (13 / 12) * (e ** 3) * Math.sin(3 * M);
+}
+
+/**
+ * Compute heliocentric ecliptic position (longitude in degrees 0–360, distance in AU)
+ * for a body described by Keplerian elements at the given Julian Date.
+ *
+ * Algorithm (Meeus Ch. 25 / Ch. 33):
+ *   T  = Julian centuries from J2000
+ *   L  = mean longitude (L0 + Lc·T)
+ *   e  = eccentricity  (e0 + ec·T)
+ *   ω̄  = longitude of perihelion (w0 + wc·T)
+ *   M  = mean anomaly = L − ω̄
+ *   C  = equation of center = eoc(M, e)         [radians]
+ *   ν  = true anomaly = M + C
+ *   λ  = true heliocentric longitude = ω̄ + ν   (= L + C converted to degrees)
+ *   r  = heliocentric distance = a(1−e²)/(1+e·cos ν)
+ */
+function keplerPos(key: string, jd: number): { lon: number; r: number } {
+  const el = KEPLER_ELEMENTS[key];
+  const T = (jd - J2000) / 36525.0;            // Julian centuries
+
+  const L = el.L0 + el.Lc * T;                 // mean longitude (degrees)
+  const e = el.e0 + el.ec * T;                 // eccentricity
+  const w = el.w0 + el.wc * T;                 // longitude of perihelion (degrees)
+
+  const Mrad = ((L - w) % 360 + 360) % 360 * (Math.PI / 180);   // mean anomaly (rad)
+  const C    = equationOfCenter(Mrad, e);       // equation of center (radians)
+  const nuRad = Mrad + C;                       // true anomaly (radians)
+
+  // Heliocentric distance (AU)
+  const r = el.a * (1 - e * e) / (1 + e * Math.cos(nuRad));
+
+  // True heliocentric longitude (degrees, 0–360)
+  const lonDeg = ((L + C * (180 / Math.PI)) % 360 + 360) % 360;
+
+  return { lon: lonDeg, r };
 }
 
 /** Normalize angle to [-180, 180] */
@@ -304,8 +369,12 @@ function elongToNoteJa(nameJa: string, visibility: PlanetVisibility, elongDeg: n
 
 export function computePlanetsTonight(date: Date): PlanetInfo[] {
   const jd = toJD(date);
-  const earthLon = eclipticLon(EARTH_ELEMENTS, jd);
-  const sunLon = (earthLon + 180) % 360; // Sun's apparent longitude from Earth
+
+  // Earth's heliocentric position (ecliptic plane, AU)
+  const earth = keplerPos('earth', jd);
+  const eRad  = earth.lon * (Math.PI / 180);
+  const ex = earth.r * Math.cos(eRad);
+  const ey = earth.r * Math.sin(eRad);
 
   const PLANETS: Array<{
     id: string; nameJa: string; emoji: string; systemId: string; isInner: boolean;
@@ -317,8 +386,26 @@ export function computePlanetsTonight(date: Date): PlanetInfo[] {
   ];
 
   return PLANETS.map(({ id, nameJa, emoji, systemId, isInner }) => {
-    const planetLon = eclipticLon(PLANET_ELEMENTS[id], jd);
-    const elongationDeg = normAngle(planetLon - sunLon);
+    // Planet's heliocentric position
+    const planet = keplerPos(id, jd);
+    const pRad   = planet.lon * (Math.PI / 180);
+    const px = planet.r * Math.cos(pRad);
+    const py = planet.r * Math.sin(pRad);
+
+    // Geocentric vector: planet relative to Earth
+    const gx = px - ex;
+    const gy = py - ey;
+
+    // Sun's geocentric direction from Earth (opposite of Earth's heliocentric pos)
+    const sx = -ex;
+    const sy = -ey;
+
+    // Elongation = signed angle between geocentric Sun direction and geocentric planet
+    // Sign: positive (east) when planet is east of Sun (evening sky), negative = morning
+    const elongationDeg = Math.atan2(
+      sx * gy - sy * gx,   // cross product (sin of angle, with sign)
+      sx * gx + sy * gy,   // dot product   (cos of angle)
+    ) * (180 / Math.PI);
 
     const visibility = isInner
       ? innerPlanetVisibility(elongationDeg)
