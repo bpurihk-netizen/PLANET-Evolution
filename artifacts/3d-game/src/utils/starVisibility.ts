@@ -326,6 +326,136 @@ export function computePlanetsTonight(date: Date): PlanetInfo[] {
   });
 }
 
+// ── Annual Calendar ───────────────────────────────────────────────────────────
+
+/** An astronomical event tied to a specific month */
+export interface AstronomicalEvent {
+  nameJa: string;       // Event name in Japanese
+  dateHintJa: string;   // Approximate date/peak hint e.g. "極大：1月3〜4日ごろ"
+  descJa: string;       // Short description in Japanese
+  emoji: string;
+}
+
+/** One month's calendar entry */
+export interface MonthlyCalendarEntry {
+  month: number;                       // 1–12
+  monthJa: string;                     // e.g. "1月"
+  seasonJa: string;                    // 春/夏/秋/冬
+  top3: VisibleConstellation[];        // Top 3 recommended constellations
+  events: AstronomicalEvent[];         // Notable astronomical events this month
+}
+
+const MONTH_LABELS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function getSeasonJa(month: number): string {
+  if (month >= 3 && month <= 5)  return '春';
+  if (month >= 6 && month <= 8)  return '夏';
+  if (month >= 9 && month <= 11) return '秋';
+  return '冬';
+}
+
+/** Static notable astronomical events per month */
+const MONTHLY_EVENTS: Record<number, AstronomicalEvent[]> = {
+  1: [
+    { nameJa: 'しぶんぎ座流星群', dateHintJa: '極大：1月3〜4日ごろ', descJa: '三大流星群のひとつ。放射点は北天のため、北を向いて観察。1時間に最大120個。', emoji: '☄️' },
+    { nameJa: '冬の大三角が南中', dateHintJa: '20:00〜22:00ごろ', descJa: 'オリオン・おおいぬ・こいぬの3星座が夜空の中央に輝く冬の見ごろ。', emoji: '⭐' },
+  ],
+  2: [
+    { nameJa: '冬の星座シーズン最盛期', dateHintJa: '19:00〜23:00ごろ', descJa: 'オリオン・ふたご・おうし座が高くなり、冬の星座が一番見やすい時期。', emoji: '🌟' },
+    { nameJa: '木星・土星が見やすい年も', dateHintJa: '年による', descJa: '2月は夕方の西天や明け方の東天に外惑星が現れることがある。惑星情報を確認しよう。', emoji: '🪐' },
+  ],
+  3: [
+    { nameJa: '春分', dateHintJa: '3月20〜21日ごろ', descJa: '昼夜の長さが等しくなる日。太陽がみずがめ座方向を通過し、春の星座が夜に登場し始める。', emoji: '🌸' },
+    { nameJa: 'うみへび座南中', dateHintJa: '21:00〜22:00ごろ', descJa: '全天最大の星座うみへびが南の空を長く横切る。アルファルドが孤独に輝く。', emoji: '🐍' },
+  ],
+  4: [
+    { nameJa: 'こと座流星群', dateHintJa: '極大：4月22〜23日ごろ', descJa: '春の流星群。1時間に10〜20個程度。ベガ近くの放射点から飛び出す優雅な流れ星。', emoji: '☄️' },
+    { nameJa: '春の大曲線が見ごろ', dateHintJa: '22:00ごろ', descJa: '北斗七星の柄→アークトゥルス→スピカへ続く「春の大曲線」が天頂付近に輝く。', emoji: '🌿' },
+  ],
+  5: [
+    { nameJa: 'みずがめ座η流星群', dateHintJa: '極大：5月6〜7日ごろ', descJa: 'ハレー彗星のかけらが引き起こす流星群。南半球では年最大級。日本でも夜明け前に見やすい。', emoji: '☄️' },
+    { nameJa: 'おとめ座・しし座が見ごろ', dateHintJa: '21:00〜23:00ごろ', descJa: 'スピカとレグルスが夜空を彩る春の絶好シーズン。天の川銀河の方向を楽しもう。', emoji: '🦁' },
+  ],
+  6: [
+    { nameJa: '夏至', dateHintJa: '6月21〜22日ごろ', descJa: '最も夜が短い日。夜が短いが、さそり座・いて座が南東の空に昇り始める夏の星座シーズン開幕。', emoji: '☀️' },
+    { nameJa: '夏の大三角が昇り始める', dateHintJa: '22:00〜深夜', descJa: 'ベガ・デネブ・アルタイルの夏の大三角が東の空に現れ、銀河観察の季節が近づく。', emoji: '✨' },
+  ],
+  7: [
+    { nameJa: '七夕', dateHintJa: '7月7日（旧暦は8月ごろ）', descJa: 'ベガ（織女星）とアルタイル（牽牛星）が天の川を挟んで輝く。夏の大三角も見ごろ。', emoji: '🎋' },
+    { nameJa: 'やぎ座α流星群', dateHintJa: '極大：7月30日ごろ', descJa: '夏の流星群のひとつ。南の空のやぎ座付近から飛び出す。火球が多いことで知られる。', emoji: '☄️' },
+  ],
+  8: [
+    { nameJa: 'ペルセウス座流星群', dateHintJa: '極大：8月12〜13日ごろ', descJa: '三大流星群で最も観察しやすい。1時間に最大100個以上。夏休みの夜空観察に最適！', emoji: '☄️' },
+    { nameJa: 'さそり・いて座が南中', dateHintJa: '21:00〜23:00ごろ', descJa: '赤いアンタレスを持つさそり座が南の空の低いところに。天の川の中心方向を楽しもう。', emoji: '🦂' },
+  ],
+  9: [
+    { nameJa: '中秋の名月（十五夜）', dateHintJa: '9月中旬〜10月初旬（年による）', descJa: '農歴8月15日の満月。ススキとお月見の日本の伝統行事。月明かりが明るく星座観察には不向き。', emoji: '🎑' },
+    { nameJa: '秋分', dateHintJa: '9月22〜23日ごろ', descJa: '昼夜の長さが等しくなる日。秋の星座（ペガスス・アンドロメダ）が夜空の主役に。', emoji: '🍂' },
+  ],
+  10: [
+    { nameJa: 'オリオン座流星群', dateHintJa: '極大：10月21〜22日ごろ', descJa: 'ハレー彗星のかけら。1時間に20〜25個。速くて明るい流れ星が特徴的。', emoji: '☄️' },
+    { nameJa: '秋の四辺形が南中', dateHintJa: '22:00ごろ', descJa: 'ペガスス座の「秋の大四辺形」が天頂付近へ。アンドロメダ銀河の肉眼観察に最適な時期。', emoji: '⬛' },
+  ],
+  11: [
+    { nameJa: 'しし座流星群', dateHintJa: '極大：11月17〜18日ごろ', descJa: '33年周期で「流星嵐」となる三大流星群。通常でも1時間10〜15個。深夜から明け方が見やすい。', emoji: '☄️' },
+    { nameJa: 'フォーマルハウトが南中', dateHintJa: '21:00ごろ', descJa: '秋の一つ星・フォーマルハウトが南に輝く。みなみのうお座の唯一の一等星。', emoji: '🐟' },
+  ],
+  12: [
+    { nameJa: 'ふたご座流星群', dateHintJa: '極大：12月13〜14日ごろ', descJa: '年間最多の流星群。1時間に最大150個。彗星ではなく小惑星ファエトンが母天体の珍しい流星群。', emoji: '☄️' },
+    { nameJa: '冬至', dateHintJa: '12月21〜22日ごろ', descJa: '最も夜が長い日。オリオン座が深夜に南中し、冬の星座シーズン本格開幕。', emoji: '❄️' },
+  ],
+};
+
+/** Compute the top 3 observable constellations for a given calendar month (1–12).
+ *  Uses the 15th of each month as the representative date. */
+export function computeMonthlyTop3(
+  constellations: Constellation[],
+  month: number,
+  year = new Date().getFullYear(),
+  latDeg = JAPAN_LAT,
+): VisibleConstellation[] {
+  const date = new Date(year, month - 1, 15); // 15th of the month
+  const lstDeg = getMidnightLSTDeg(date);
+
+  const scored: VisibleConstellation[] = constellations
+    .map(con => {
+      const score = computeVisibilityScore(con, lstDeg, latDeg);
+      const transitHours = getTransitHoursFromMidnight(con.raDeg, lstDeg);
+      return {
+        constellation: con,
+        score,
+        transitHours,
+        transitJST: formatTransitJST(transitHours),
+        culminAlt: Math.round(getCulmAltitudeDeg(con.decDeg, latDeg)),
+        isPrimeTime: isPrimeTime(transitHours),
+        isCircumpolar: isCircumpolar(con.decDeg, latDeg),
+        easyRating: getEasyRating(con),
+      };
+    })
+    .filter(v => v.score > 0);
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+/** Build a full 12-month annual calendar */
+export function computeAnnualCalendar(
+  constellations: Constellation[],
+  year = new Date().getFullYear(),
+): MonthlyCalendarEntry[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1;
+    return {
+      month,
+      monthJa: MONTH_LABELS[i],
+      seasonJa: getSeasonJa(month),
+      top3: computeMonthlyTop3(constellations, month, year),
+      events: MONTHLY_EVENTS[month] ?? [],
+    };
+  });
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export interface VisibleConstellation {

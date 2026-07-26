@@ -1,16 +1,18 @@
-import React, { useMemo } from 'react';
-import { ChevronLeft, Moon, Star, Telescope, Clock, ArrowUp, ExternalLink } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ChevronLeft, Moon, Star, Telescope, Clock, ArrowUp, ExternalLink, CalendarDays } from 'lucide-react';
 import { CONSTELLATIONS } from '../data/constellations';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import {
   computeNightSky,
   computeMoonPhase,
   computePlanetsTonight,
+  computeAnnualCalendar,
   VisibleConstellation,
+  MonthlyCalendarEntry,
   MoonPhase,
   PlanetInfo,
 } from '../utils/starVisibility';
-import { CONSTELLATION_META, SEASON_COLORS, getConstellationMeta } from '../data/constellationMeta';
+import { SEASON_COLORS, getConstellationMeta } from '../data/constellationMeta';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -287,6 +289,189 @@ const CircumpolarRow: React.FC<CircumpolarRowProps> = ({ entry, onOpenEncycloped
   );
 };
 
+// ── Annual Calendar ───────────────────────────────────────────────────────────
+
+const SEASON_BG: Record<string, string> = {
+  '春': 'from-green-950/60 to-emerald-950/40 border-green-500/25',
+  '夏': 'from-amber-950/60 to-yellow-950/40 border-amber-500/25',
+  '秋': 'from-orange-950/60 to-red-950/40 border-orange-500/25',
+  '冬': 'from-sky-950/60 to-blue-950/40 border-sky-500/25',
+};
+
+const SEASON_ACCENT: Record<string, string> = {
+  '春': 'text-green-300',
+  '夏': 'text-amber-300',
+  '秋': 'text-orange-300',
+  '冬': 'text-sky-300',
+};
+
+interface AnnualCalendarProps {
+  calendar: MonthlyCalendarEntry[];
+  currentMonth: number;
+  onOpenEncyclopedia: (conId: string) => void;
+}
+
+const AnnualCalendar: React.FC<AnnualCalendarProps> = ({ calendar, currentMonth, onOpenEncyclopedia }) => {
+  const [expandedMonth, setExpandedMonth] = useState<number>(currentMonth);
+
+  return (
+    <div className="space-y-2.5">
+      {calendar.map(entry => {
+        const isExpanded = expandedMonth === entry.month;
+        const isCurrent = currentMonth === entry.month;
+        const bg = SEASON_BG[entry.seasonJa] ?? 'from-white/4 to-white/2 border-white/10';
+        const accent = SEASON_ACCENT[entry.seasonJa] ?? 'text-white/70';
+
+        return (
+          <div
+            key={entry.month}
+            className={cn(
+              'rounded-2xl border bg-gradient-to-br overflow-hidden transition-all',
+              bg,
+              isCurrent && 'ring-1 ring-white/20',
+            )}
+          >
+            {/* Month header — tap to expand */}
+            <button
+              className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5 min-h-[52px]"
+              onClick={() => setExpandedMonth(isExpanded ? -1 : entry.month)}
+            >
+              {/* Month number */}
+              <div className={cn('text-2xl font-black leading-none w-9 shrink-0', accent)}>
+                {entry.month}
+              </div>
+
+              {/* Month + season label */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-white/90 font-bold text-sm">{entry.monthJa}</span>
+                  {isCurrent && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 bg-white/15 border border-white/20 rounded-full text-white/70">
+                      今月
+                    </span>
+                  )}
+                  <span className={cn('text-[10px] font-bold', accent)}>{entry.seasonJa}</span>
+                </div>
+                {/* Preview of top constellation names */}
+                <div className="text-white/35 text-[10px] truncate mt-0.5">
+                  {entry.top3.map(v => v.constellation.nameJa).join(' · ')}
+                </div>
+              </div>
+
+              {/* Event count badge + chevron */}
+              <div className="flex items-center gap-2 shrink-0">
+                {entry.events.length > 0 && (
+                  <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-900/40 border border-amber-500/30 rounded-full">
+                    <span className="text-[9px] text-amber-300 font-bold">☄️ {entry.events.length}</span>
+                  </div>
+                )}
+                <ChevronLeft
+                  size={14}
+                  className={cn('text-white/30 transition-transform', isExpanded ? '-rotate-90' : 'rotate-180')}
+                />
+              </div>
+            </button>
+
+            {/* Expanded detail */}
+            {isExpanded && (
+              <div className="px-4 pb-4 space-y-4 border-t border-white/8 pt-3">
+
+                {/* Top 3 constellations */}
+                <div>
+                  <div className={cn('text-[10px] font-bold tracking-widest uppercase mb-2', accent)}>
+                    ⭐ おすすめ Top 3 星座
+                  </div>
+                  <div className="space-y-2">
+                    {entry.top3.map((v, idx) => {
+                      const meta = getConstellationMeta(v.constellation.id);
+                      const seasonColor = meta ? SEASON_COLORS[meta.season] : '#ffffff';
+                      return (
+                        <button
+                          key={v.constellation.id}
+                          onClick={() => onOpenEncyclopedia(v.constellation.id)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl active:bg-white/10 text-left min-h-[52px]"
+                        >
+                          {/* Rank badge */}
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
+                            style={{ background: `${seasonColor}28`, color: seasonColor, border: `1px solid ${seasonColor}50` }}
+                          >
+                            {idx + 1}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-white/90 font-bold text-sm">{v.constellation.nameJa}</span>
+                              <span className="text-white/30 text-[10px] font-mono">{v.constellation.abbr}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <div className="flex items-center gap-1 text-[10px] text-white/40 font-mono">
+                                <Clock size={8} className="shrink-0" />
+                                南中 {v.transitJST}
+                              </div>
+                              <div className="flex items-center gap-1 text-[10px] text-white/40 font-mono">
+                                <ArrowUp size={8} className="shrink-0" />
+                                {v.culminAlt}°
+                              </div>
+                              <EasyRating rating={v.easyRating} />
+                            </div>
+                            {meta && (
+                              <p className="text-white/40 text-[10px] leading-snug mt-1 line-clamp-1">
+                                {meta.sightingTip}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Encyclopedia link */}
+                          <div className="shrink-0 text-white/25">
+                            <ExternalLink size={12} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {entry.top3.length === 0 && (
+                      <div className="text-white/30 text-xs text-center py-3">
+                        この月は観察しやすい星座が少ない時期です
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Astronomical events */}
+                {entry.events.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-bold tracking-widest uppercase mb-2 text-amber-300/70">
+                      ✨ 天文現象・イベント
+                    </div>
+                    <div className="space-y-2">
+                      {entry.events.map((ev, i) => (
+                        <div
+                          key={i}
+                          className="flex gap-3 px-3 py-2.5 bg-amber-950/25 border border-amber-500/20 rounded-xl"
+                        >
+                          <div className="text-xl shrink-0 leading-none pt-0.5">{ev.emoji}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-amber-200/90 font-bold text-sm">{ev.nameJa}</span>
+                            </div>
+                            <div className="text-amber-300/50 text-[10px] font-mono mt-0.5">{ev.dateHintJa}</div>
+                            <p className="text-white/50 text-[11px] leading-relaxed mt-1">{ev.descJa}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // ── Season summary bar ────────────────────────────────────────────────────────
 function getSeasonLabel(date: Date): string {
   const m = date.getMonth() + 1;
@@ -303,15 +488,21 @@ interface NightSkyGuideProps {
   onSwitchSystem: (id: string) => void;
 }
 
+type Tab = 'tonight' | 'calendar';
+
 export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
   onExit, onOpenEncyclopedia, onSwitchSystem,
 }) => {
   const today = useMemo(() => new Date(), []);
+  const [activeTab, setActiveTab] = useState<Tab>('tonight');
+
   const result = useMemo(() => computeNightSky(CONSTELLATIONS, today), [today]);
   const moon = useMemo(() => computeMoonPhase(today), [today]);
   const planets = useMemo(() => computePlanetsTonight(today), [today]);
+  const annualCalendar = useMemo(() => computeAnnualCalendar(CONSTELLATIONS, today.getFullYear()), [today]);
 
   const season = getSeasonLabel(today);
+  const currentMonth = today.getMonth() + 1;
 
   // How many of top5 have linked systems visible tonight?
   const linkedTonight = result.top5.filter(v => !!v.constellation.linkedSystemId);
@@ -322,6 +513,11 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
   const handleSwitchSystem = (systemId: string) => {
     onSwitchSystem(systemId);
     onExit();
+  };
+
+  // Open encyclopedia — optionally navigate to a specific constellation
+  const handleOpenEncyclopedia = (_conId?: string) => {
+    onOpenEncyclopedia();
   };
 
   return (
@@ -339,128 +535,194 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
           </button>
           <div className="flex items-center gap-2">
             <Moon size={16} className="text-sky-300" />
-            <span className="text-white/90 font-bold tracking-widest text-xs">今夜の星空</span>
+            <span className="text-white/90 font-bold tracking-widest text-xs">星空ガイド</span>
           </div>
           <div className="px-3 py-2 bg-white/8 backdrop-blur-md border border-white/12 rounded-full min-h-[44px] flex items-center shrink-0">
             <span className="text-sky-300 text-xs font-mono">{formatDateJa(today)}</span>
           </div>
         </div>
 
-        {/* Season context bar */}
-        <div className="mx-4 mb-3 px-4 py-2.5 bg-indigo-950/50 border border-indigo-500/20 rounded-2xl">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="text-xs text-indigo-200/70 leading-relaxed">
-              <span className="text-indigo-300 font-bold">{season}の夜空</span>
-              {' '}· 日本全国（北緯35°）基準
-              {' '}· 日没後〜夜明け前の観察に最適な時間帯
-            </div>
-            {linkedTonight.length > 0 && (
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-green-900/40 border border-green-500/30 rounded-full">
-                <Telescope size={10} className="text-green-300" />
-                <span className="text-[10px] text-green-300 font-bold">
-                  探索可能な星系が{linkedTonight.length}つ今夜見える！
-                </span>
-              </div>
+        {/* ── Tab bar ── */}
+        <div className="mx-4 mb-3 flex gap-1.5 p-1 bg-white/5 border border-white/10 rounded-2xl">
+          <button
+            onClick={() => setActiveTab('tonight')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px]',
+              activeTab === 'tonight'
+                ? 'bg-sky-800/70 border border-sky-500/40 text-sky-200'
+                : 'text-white/40 active:bg-white/5',
             )}
-          </div>
+          >
+            <Moon size={14} />
+            今夜
+          </button>
+          <button
+            onClick={() => setActiveTab('calendar')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px]',
+              activeTab === 'calendar'
+                ? 'bg-indigo-800/70 border border-indigo-500/40 text-indigo-200'
+                : 'text-white/40 active:bg-white/5',
+            )}
+          >
+            <CalendarDays size={14} />
+            年間カレンダー
+          </button>
         </div>
       </div>
 
       {/* ── Scrollable Body ── */}
-      <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-5">
+      <div className="flex-1 overflow-y-auto px-4 pb-8">
 
-        {/* ── Moon Phase ── */}
-        <MoonPhaseCard moon={moon} />
-
-        {/* ── Planets Tonight ── */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white/80 text-sm font-bold">今夜の惑星</h2>
-            <span className="text-white/30 text-[10px]">
-              {visiblePlanets.length > 0
-                ? `${visiblePlanets.length}つの惑星が観察可能`
-                : '今夜は惑星の好機なし'}
-            </span>
-          </div>
-          <div className="space-y-2">
-            {planets.map(planet => (
-              <PlanetRow
-                key={planet.id}
-                planet={planet}
-                onNavigate={handleSwitchSystem}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Top 5 ── */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-white/80 text-sm font-bold">今夜おすすめ TOP 5</h2>
-            <span className="text-white/30 text-[10px]">南中時刻の早い順</span>
-          </div>
-          {result.top5.length > 0 ? (
-            <div className="space-y-2.5">
-              {result.top5.map((entry, i) => (
-                <TopCard
-                  key={entry.constellation.id}
-                  entry={entry}
-                  rank={i + 1}
-                  onOpenEncyclopedia={() => onOpenEncyclopedia()}
-                  onSwitchSystem={handleSwitchSystem}
-                />
-              ))}
+        {/* ══════════ TONIGHT TAB ══════════ */}
+        {activeTab === 'tonight' && (
+          <div className="space-y-5">
+            {/* Season context bar */}
+            <div className="px-4 py-2.5 bg-indigo-950/50 border border-indigo-500/20 rounded-2xl">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="text-xs text-indigo-200/70 leading-relaxed">
+                  <span className="text-indigo-300 font-bold">{season}の夜空</span>
+                  {' '}· 日本全国（北緯35°）基準
+                  {' '}· 日没後〜夜明け前の観察に最適な時間帯
+                </div>
+                {linkedTonight.length > 0 && (
+                  <div className="flex items-center gap-1 px-2.5 py-1 bg-green-900/40 border border-green-500/30 rounded-full">
+                    <Telescope size={10} className="text-green-300" />
+                    <span className="text-[10px] text-green-300 font-bold">
+                      探索可能な星系が{linkedTonight.length}つ今夜見える！
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="flex items-center justify-center py-10 text-white/30 text-sm">
-              データを計算中...
-            </div>
-          )}
-        </div>
 
-        {/* ── Circumpolar ── */}
-        {result.circumpolar.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-white/80 text-sm font-bold">周極星座（年中見える）</h2>
-              <span className="text-white/30 text-[10px]">北緯35°以上でつねに地平線上</span>
+            {/* ── Moon Phase ── */}
+            <MoonPhaseCard moon={moon} />
+
+            {/* ── Planets Tonight ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-white/80 text-sm font-bold">今夜の惑星</h2>
+                <span className="text-white/30 text-[10px]">
+                  {visiblePlanets.length > 0
+                    ? `${visiblePlanets.length}つの惑星が観察可能`
+                    : '今夜は惑星の好機なし'}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {planets.map(planet => (
+                  <PlanetRow
+                    key={planet.id}
+                    planet={planet}
+                    onNavigate={handleSwitchSystem}
+                  />
+                ))}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              {result.circumpolar.map(entry => (
-                <CircumpolarRow
-                  key={entry.constellation.id}
-                  entry={entry}
-                  onOpenEncyclopedia={() => onOpenEncyclopedia()}
-                />
-              ))}
+
+            {/* ── Top 5 ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-white/80 text-sm font-bold">今夜おすすめ TOP 5</h2>
+                <span className="text-white/30 text-[10px]">南中時刻の早い順</span>
+              </div>
+              {result.top5.length > 0 ? (
+                <div className="space-y-2.5">
+                  {result.top5.map((entry, i) => (
+                    <TopCard
+                      key={entry.constellation.id}
+                      entry={entry}
+                      rank={i + 1}
+                      onOpenEncyclopedia={() => handleOpenEncyclopedia()}
+                      onSwitchSystem={handleSwitchSystem}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-10 text-white/30 text-sm">
+                  データを計算中...
+                </div>
+              )}
+            </div>
+
+            {/* ── Circumpolar ── */}
+            {result.circumpolar.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <h2 className="text-white/80 text-sm font-bold">周極星座（年中見える）</h2>
+                  <span className="text-white/30 text-[10px]">北緯35°以上でつねに地平線上</span>
+                </div>
+                <div className="space-y-1.5">
+                  {result.circumpolar.map(entry => (
+                    <CircumpolarRow
+                      key={entry.constellation.id}
+                      entry={entry}
+                      onOpenEncyclopedia={() => handleOpenEncyclopedia()}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Educational note ── */}
+            <div className="bg-amber-950/30 border border-amber-500/20 rounded-2xl px-4 py-3.5 space-y-1.5">
+              <h3 className="text-amber-300/80 text-xs font-bold tracking-widest uppercase">📖 星座と季節の関係</h3>
+              <p className="text-white/60 text-xs leading-relaxed">
+                地球が太陽の周りを公転するにつれ、夜に見える星座は少しずつ変わります。
+                今夜見えている星座は、半年後の昼間（太陽の反対方向）にある星座です。
+                一つの星座が「見ごろ」を迎えるのは、地球が公転して丁度その星座と正対する時季です。
+              </p>
+              <p className="text-white/60 text-xs leading-relaxed">
+                南中時刻は毎日約4分ずつ早まります（年間で一周）。
+                今夜の「南中」が深夜の星座も、1か月後には夜9時ごろに南中し、より観察しやすくなります。
+              </p>
+            </div>
+
+            {/* ── Observation tips ── */}
+            <div className="bg-slate-900/50 border border-white/8 rounded-2xl px-4 py-3.5">
+              <h3 className="text-white/60 text-xs font-bold tracking-widest uppercase mb-2">🔭 観察のポイント</h3>
+              <ul className="space-y-1.5 text-white/50 text-xs">
+                <li>• 光害の少ない場所を選ぶと、より多くの星が見える</li>
+                <li>• 目が暗さに慣れるまで20〜30分かかる（スマホの画面は最小輝度に）</li>
+                <li>• 南中前後の1〜2時間が最も高く見えて観察しやすい</li>
+                <li>• 双眼鏡（7×50程度）があると星団・星雲まで楽しめる</li>
+              </ul>
             </div>
           </div>
         )}
 
-        {/* ── Educational note ── */}
-        <div className="bg-amber-950/30 border border-amber-500/20 rounded-2xl px-4 py-3.5 space-y-1.5">
-          <h3 className="text-amber-300/80 text-xs font-bold tracking-widest uppercase">📖 星座と季節の関係</h3>
-          <p className="text-white/60 text-xs leading-relaxed">
-            地球が太陽の周りを公転するにつれ、夜に見える星座は少しずつ変わります。
-            今夜見えている星座は、半年後の昼間（太陽の反対方向）にある星座です。
-            一つの星座が「見ごろ」を迎えるのは、地球が公転して丁度その星座と正対する時季です。
-          </p>
-          <p className="text-white/60 text-xs leading-relaxed">
-            南中時刻は毎日約4分ずつ早まります（年間で一周）。
-            今夜の「南中」が深夜の星座も、1か月後には夜9時ごろに南中し、より観察しやすくなります。
-          </p>
-        </div>
+        {/* ══════════ ANNUAL CALENDAR TAB ══════════ */}
+        {activeTab === 'calendar' && (
+          <div className="space-y-4">
+            {/* Calendar intro */}
+            <div className="px-4 py-3 bg-indigo-950/50 border border-indigo-500/20 rounded-2xl">
+              <div className="flex items-start gap-3">
+                <CalendarDays size={20} className="text-indigo-300 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-indigo-200 font-bold text-sm mb-1">12ヶ月の星空変化</div>
+                  <p className="text-indigo-300/60 text-[11px] leading-relaxed">
+                    各月をタップして、おすすめ星座と天文イベントを確認しよう。
+                    星座名をタップすると図鑑に移動します。
+                  </p>
+                </div>
+              </div>
+            </div>
 
-        {/* ── Observation tips ── */}
-        <div className="bg-slate-900/50 border border-white/8 rounded-2xl px-4 py-3.5">
-          <h3 className="text-white/60 text-xs font-bold tracking-widest uppercase mb-2">🔭 観察のポイント</h3>
-          <ul className="space-y-1.5 text-white/50 text-xs">
-            <li>• 光害の少ない場所を選ぶと、より多くの星が見える</li>
-            <li>• 目が暗さに慣れるまで20〜30分かかる（スマホの画面は最小輝度に）</li>
-            <li>• 南中前後の1〜2時間が最も高く見えて観察しやすい</li>
-            <li>• 双眼鏡（7×50程度）があると星団・星雲まで楽しめる</li>
-          </ul>
-        </div>
+            <AnnualCalendar
+              calendar={annualCalendar}
+              currentMonth={currentMonth}
+              onOpenEncyclopedia={() => handleOpenEncyclopedia()}
+            />
+
+            {/* Footer note */}
+            <div className="bg-slate-900/40 border border-white/6 rounded-2xl px-4 py-3">
+              <p className="text-white/35 text-[10px] leading-relaxed text-center">
+                ※ 見ごろ計算は日本（北緯35°）を基準に、各月15日の午前0時で算出。
+                南中時刻は現地の天候・地形により異なります。
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
