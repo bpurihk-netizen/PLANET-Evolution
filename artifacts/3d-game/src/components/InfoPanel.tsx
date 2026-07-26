@@ -71,7 +71,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
 
   return (
     <div className={cn(
-      'fixed bottom-0 left-0 right-0 z-30 transition-transform duration-500 ease-out',
+      'fixed bottom-0 left-0 right-0 z-30 transition-transform duration-500 ease-out pointer-events-auto',
       isVisible ? 'translate-y-0' : 'translate-y-full'
     )}>
       {/* Handle */}
@@ -82,8 +82,6 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
       <div
         className="bg-[#080c18]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl max-h-[55dvh] overflow-y-scroll"
         style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
-        onTouchStart={e => e.stopPropagation()}
-        onTouchMove={e => e.stopPropagation()}
       >
 
         {/* ── Header ── */}
