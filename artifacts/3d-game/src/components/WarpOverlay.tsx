@@ -184,10 +184,18 @@ const WarpCanvas: React.FC = () => {
 
 // ── Distance formatter ────────────────────────────────────────────────────────
 function formatDistance(ly: number): string {
-  if (ly === 0) return '太陽系（基準）';
-  if (ly < 10) return `${ly.toFixed(2)}光年`;
-  if (ly < 1000) return `${Math.round(ly)}光年`;
-  return `${(ly / 1000).toFixed(1)}千光年`;
+  if (ly === 0) return '宇宙の旅へ';
+  if (ly < 10) return `${ly.toFixed(2)}光年の旅`;
+  if (ly < 1_000) return `${Math.round(ly)}光年の旅`;
+  if (ly < 1_000_000) return `${(ly / 1_000).toFixed(1)}千光年の旅`;
+  if (ly < 100_000_000) return `${(ly / 10_000).toFixed(0)}万光年の旅`;
+  if (ly < 10_000_000_000) return `${(ly / 100_000_000).toFixed(1)}億光年の旅`;
+  return `${(ly / 1_000_000_000).toFixed(1)}十億光年の旅`;
+}
+
+function formatDistanceLine(ly: number, destinationName: string): string {
+  if (ly === 0) return `地球から ${destinationName} へ`;
+  return `地球から ${formatDistance(ly)}`;
 }
 
 // ── Main overlay ──────────────────────────────────────────────────────────────
@@ -307,9 +315,7 @@ export const WarpOverlay: React.FC<WarpOverlayProps> = ({
             textShadow: '0 0 16px rgba(80,130,255,0.6)',
           }}
         >
-          {distanceLy === 0
-            ? '太陽系へ帰還中…'
-            : `地球から ${formatDistance(distanceLy)} の旅`}
+          {formatDistanceLine(distanceLy, destinationName)}
         </div>
 
         {/* Progress bar */}

@@ -14,6 +14,11 @@ import { NightSkyGuide } from './components/NightSkyGuide';
 import { MythologyStorybook } from './components/MythologyStorybook';
 import { WarpOverlay } from './components/WarpOverlay';
 import { StampRallyBook } from './components/StampRallyBook';
+import { LargeScaleStructureView } from './components/LargeScaleStructureView';
+import { CosmicLevelView } from './components/CosmicLevelView';
+import { GalaxyView } from './components/GalaxyView';
+import { CosmicNavigator } from './components/CosmicNavigator';
+import { CosmicInfoPanel } from './components/CosmicInfoPanel';
 import {
   BODY_STAMP_TRIGGERS,
   SYSTEM_STAMP_TRIGGERS,
@@ -53,6 +58,7 @@ function SolarExplorerApp() {
   const [showStampBook, setShowStampBook] = useState(false);
   const [toastIds, setToastIds] = useState<string[]>([]);
   const [infoPanelCollapsed, setInfoPanelCollapsed] = useState(false);
+  const [cosmicInfoPanelCollapsed, setCosmicInfoPanelCollapsed] = useState(false);
   const prevVisitedRef = useRef<string[]>([]);
   const prevSystemRef = useRef<string>(state.currentSystemId);
 
@@ -60,6 +66,11 @@ function SolarExplorerApp() {
   useEffect(() => {
     setInfoPanelCollapsed(false);
   }, [state.selectedBodyId]);
+
+  // Re-show cosmic info panel whenever a different object is selected
+  useEffect(() => {
+    setCosmicInfoPanelCollapsed(false);
+  }, [state.selectedCosmicId]);
 
   // Helper: award stamps and show toast for newly earned ones
   const awardAndToast = useCallback((ids: string[]) => {
@@ -121,6 +132,14 @@ function SolarExplorerApp() {
   return (
     <div className="w-full h-[100dvh] overflow-hidden relative bg-[#020408]">
 
+      {/* ── Cosmic hierarchy warp overlay (always rendered above everything) ── */}
+      <WarpOverlay
+        isActive={state.isCosmicWarping}
+        destinationName={state.cosmicWarpTarget?.nameJa ?? ''}
+        distanceLy={(state.cosmicWarpTarget?.distanceMLy ?? 0) * 1_000_000}
+        onComplete={state.completeCosmicWarp}
+      />
+
       {/* ── Night sky guide mode — full replacement ── */}
       {state.storybookMode ? (
         <MythologyStorybook
@@ -149,6 +168,32 @@ function SolarExplorerApp() {
       ) : state.deilandMode ? (
         /* ── Deiland surface mode — full replacement (frees WebGL context) ── */
         <Deiland state={state} />
+      ) : state.cosmicLevel !== 'system' ? (
+        /* ── Cosmic hierarchy view ── */
+        <>
+          <div className="absolute inset-0 z-0">
+            {state.cosmicLevel === 'lss' && <LargeScaleStructureView state={state} />}
+            {state.cosmicLevel === 'supercluster' && <CosmicLevelView state={state} level="supercluster" />}
+            {state.cosmicLevel === 'cluster' && <CosmicLevelView state={state} level="cluster" />}
+            {state.cosmicLevel === 'group' && <CosmicLevelView state={state} level="group" />}
+            {state.cosmicLevel === 'galaxy' && <GalaxyView state={state} />}
+          </div>
+          {/* Navigator (breadcrumb) sits at top — pointer events inside */}
+          <CosmicNavigator state={state} />
+          {/* Info panel slides up from bottom */}
+          <CosmicInfoPanel
+            state={state}
+            collapsed={cosmicInfoPanelCollapsed}
+            onToggleCollapse={() => setCosmicInfoPanelCollapsed(v => !v)}
+          />
+          {/* Star-system warp can still trigger from galaxy view */}
+          <WarpOverlay
+            isActive={state.isWarping}
+            destinationName={state.warpTarget?.nameJa ?? ''}
+            distanceLy={state.warpTarget?.distanceLy ?? 0}
+            onComplete={state.completeWarp}
+          />
+        </>
       ) : (
         <>
           {/* ── Main 3D solar system canvas ── */}
@@ -242,6 +287,8 @@ function SolarExplorerApp() {
           />
         </>
       )}
+      
+
 
       {/* ── Stamp Book modal (global, above everything) ── */}
       {showStampBook && (
