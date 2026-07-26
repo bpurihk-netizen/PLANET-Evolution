@@ -667,14 +667,15 @@ function getDisplace(body: CelestialBodyData): number {
 
 // ── Real texture map (Solar System Scope CC-BY 4.0 textures) ─────────────
 const TEXTURE_FILENAMES: Record<string, string> = {
-  // sun.jpg (NASA SDO) is a round disk on a black background — when UV-mapped to a sphere
-  // the black corners appear as a "cut", so the sun uses the procedural FRAG_STAR shader instead.
-  // sun: 'sun.jpg',
+  // sun_8k.jpg = Solar System Scope equirectangular texture (4096×2048) — proper sphere mapping
+  sun: 'sun_8k.jpg',
+  'centauri-a': 'sun_8k.jpg', // Alpha Centauri A ≈ G-type, reuse solar texture
   mercury: 'mercury.jpg',
   venus: 'venus.jpg',
   earth: 'earth.jpg',
   moon: 'moon.jpg',
   mars: 'mars.jpg',
+  io: 'io.jpg',
   jupiter: 'jupiter.jpg',
   saturn: 'saturn.jpg',
   uranus: 'uranus.jpg',

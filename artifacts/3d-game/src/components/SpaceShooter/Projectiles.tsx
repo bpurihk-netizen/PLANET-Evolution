@@ -5,14 +5,42 @@ import { Bullet } from '../../hooks/useShooterState';
 
 const BulletMesh: React.FC<{ bullet: Bullet }> = ({ bullet }) => {
   const ref = useRef<THREE.Object3D>(null);
-  
-  useFrame(() => {
+  const colorRef = useRef(new THREE.Color(1, 0.9, 0.2));
+
+  useFrame((state) => {
     if (ref.current) {
       ref.current.position.copy(bullet.pos);
     }
+    // omega rainbow cycling
+    if (bullet.type === 'omega' && ref.current) {
+      const t = state.clock.elapsedTime * 3;
+      colorRef.current.setHSL((t + bullet.id * 0.05) % 1, 1, 0.6);
+      const mesh = ref.current as THREE.Mesh;
+      if (mesh.material instanceof THREE.MeshBasicMaterial) {
+        mesh.material.color.copy(colorRef.current);
+      }
+    }
   });
-  
+
   if (bullet.isDead) return null;
+
+  // Enemy bullet (mine or normal enemy bullet)
+  if (bullet.isEnemy) {
+    if (bullet.type === 'mine') {
+      return (
+        <mesh ref={ref as React.RefObject<THREE.Mesh>}>
+          <sphereGeometry args={[0.18, 6, 6]} />
+          <meshBasicMaterial color={new THREE.Color(1.0, 0.1, 0.8)} />
+        </mesh>
+      );
+    }
+    return (
+      <mesh ref={ref as React.RefObject<THREE.Mesh>}>
+        <sphereGeometry args={[0.12, 6, 6]} />
+        <meshBasicMaterial color={new THREE.Color(1.0, 0.4, 0.0)} />
+      </mesh>
+    );
+  }
 
   if (bullet.type === 'laser') {
     return (
@@ -52,7 +80,61 @@ const BulletMesh: React.FC<{ bullet: Bullet }> = ({ bullet }) => {
       </mesh>
     );
   }
-  
+  if (bullet.type === 'ripple') {
+    return (
+      <mesh ref={ref as React.RefObject<THREE.Mesh>} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.14, 0.04, 4, 12]} />
+        <meshBasicMaterial color={new THREE.Color(0.7, 1.0, 0.1)} blending={THREE.AdditiveBlending} transparent />
+      </mesh>
+    );
+  }
+  if (bullet.type === 'backShot') {
+    return (
+      <mesh ref={ref as React.RefObject<THREE.Mesh>}>
+        <capsuleGeometry args={[0.05, 0.4, 4, 8]} />
+        <meshBasicMaterial color={new THREE.Color(0.1, 1.0, 0.3)} />
+      </mesh>
+    );
+  }
+  if (bullet.type === 'vulcan') {
+    return (
+      <mesh ref={ref as React.RefObject<THREE.Mesh>}>
+        <capsuleGeometry args={[0.02, 0.15, 4, 8]} />
+        <meshBasicMaterial color={new THREE.Color(1.0, 1.0, 1.0)} />
+      </mesh>
+    );
+  }
+  if (bullet.type === 'scatter') {
+    return (
+      <mesh ref={ref as React.RefObject<THREE.Mesh>}>
+        <sphereGeometry args={[0.12, 6, 6]} />
+        <meshBasicMaterial color={new THREE.Color(1.0, 0.4, 0.8)} />
+      </mesh>
+    );
+  }
+  if (bullet.type === 'plasma') {
+    return (
+      <mesh ref={ref as React.RefObject<THREE.Mesh>}>
+        <sphereGeometry args={[0.4, 10, 10]} />
+        <meshStandardMaterial
+          color={new THREE.Color(0.3, 0.1, 1.0)}
+          emissive={new THREE.Color(0.5, 0.0, 1.0)}
+          emissiveIntensity={3}
+          transparent
+          opacity={0.85}
+        />
+      </mesh>
+    );
+  }
+  if (bullet.type === 'omega') {
+    return (
+      <mesh ref={ref as React.RefObject<THREE.Mesh>}>
+        <sphereGeometry args={[0.18, 8, 8]} />
+        <meshBasicMaterial color={colorRef.current} />
+      </mesh>
+    );
+  }
+
   // normal / twin
   return (
     <mesh ref={ref as React.RefObject<THREE.Mesh>}>

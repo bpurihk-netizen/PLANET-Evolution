@@ -10,6 +10,7 @@ import { ShooterHUD } from './ShooterHUD';
 import { PowerCapsules } from './PowerCapsules';
 import { OptionOrbs } from './OptionOrbs';
 import { BossShip } from './BossShip';
+import { GameItems } from './GameItems';
 import { useShooterState } from '../../hooks/useShooterState';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
@@ -18,7 +19,7 @@ import { ExplosionSystem, Explosion } from './ExplosionSystem';
 // ゲームループコンポーネント（Canvas内）
 const GameLoop: React.FC<{ tick: (delta: number) => void }> = ({ tick }) => {
   useFrame((_, delta) => {
-    tick(Math.min(delta, 0.05)); // 最大deltaを制限
+    tick(Math.min(delta, 0.05));
   });
   return null;
 };
@@ -51,6 +52,7 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
     bulletsRef,
     enemiesRef,
     asteroidsRef,
+    gameItemsRef,
     playerHP,
     score,
     killCount,
@@ -70,23 +72,42 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
     bossRef,
     bossActive,
     bossHP,
-    onKillRef
-  } = useShooterState({ 
+    onKillRef,
+    activeEffects,
+  } = useShooterState({
     onVictory, onDefeat, civLevel, metallicCoreRatio,
-    energyEfficiency, averageIntelligence, satelliteCount, startRank
+    energyEfficiency, averageIntelligence, satelliteCount, startRank,
   });
 
   useEffect(() => {
     onKillRef.current = (pos, type) => {
-      if (explosionsRef.current.length >= 10) explosionsRef.current.shift();
+      if (explosionsRef.current.length >= 12) explosionsRef.current.shift();
+      // Color by enemy type
+      const colorMap: Record<string, THREE.Color> = {
+        scout:       new THREE.Color(1, 0.3, 0.1),
+        heavy:       new THREE.Color(1, 0.5, 0.1),
+        disc:        new THREE.Color(1, 0.8, 0.1),
+        bomber:      new THREE.Color(0.6, 0.1, 1.0),
+        elite:       new THREE.Color(1, 0.1, 0.1),
+        swarm:       new THREE.Color(1, 1, 0.1),
+        splitter:    new THREE.Color(1, 0.5, 0.0),
+        carrier:     new THREE.Color(0.4, 0.4, 0.4),
+        ramjet:      new THREE.Color(0.9, 0.9, 1.0),
+        sentinel:    new THREE.Color(0.3, 0.8, 0.3),
+        phantom:     new THREE.Color(0.2, 0.4, 1.0),
+        crystal:     new THREE.Color(0.0, 1.0, 1.0),
+        dreadnought: new THREE.Color(0.8, 0.0, 1.0),
+      };
+      const scaleMap: Record<string, number> = {
+        carrier: 2.2, dreadnought: 3.0, heavy: 1.8,
+        disc: 1.3, splitter: 1.4, sentinel: 1.4,
+      };
       explosionsRef.current.push({
         id: Date.now() + Math.random(),
         pos,
         time: 0,
-        color: type === 'scout' ? new THREE.Color(1, 0.3, 0.1)
-             : type === 'heavy' ? new THREE.Color(1, 0.5, 0.1)
-             : new THREE.Color(1, 0.8, 0.1),
-        scale: type === 'heavy' ? 1.8 : type === 'disc' ? 1.3 : 1.0,
+        color: colorMap[type] ?? new THREE.Color(1, 0.8, 0.1),
+        scale: scaleMap[type] ?? 1.0,
         isDead: false,
       });
     };
@@ -111,16 +132,14 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
       <Canvas
         camera={{ position: [0, 10, 5], fov: 55 }}
         gl={{ antialias: true, alpha: false }}
-        onCreated={({ camera }) => {
-          camera.lookAt(0, 0, -2);
-        }}
+        onCreated={({ camera }) => { camera.lookAt(0, 0, -2); }}
       >
         <color attach="background" args={['#010812']} />
         <ambientLight intensity={0.15} />
         <directionalLight position={[0, 5, 5]} intensity={1.2} color="#88ccff" />
 
         <GameLoop tick={tick} />
-        <ShooterBackground 
+        <ShooterBackground
           temperature={temperature}
           waterAmount={waterAmount}
           co2={co2}
@@ -128,14 +147,14 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
         />
         <PlayerShip posRef={playerPosRef} />
         <BossShip bossRef={bossRef} />
-        {/* killCount変化時に再レンダー → 敵配列が更新される */}
         <EnemyShips key={killCount} enemiesRef={enemiesRef} />
         <ExplosionSystem explosionsRef={explosionsRef} />
         <Projectiles bulletsRef={bulletsRef} />
         <AsteroidField asteroidsRef={asteroidsRef} />
         <PowerCapsules capsulesRef={powerCapsules} count={killCount} />
+        <GameItems gameItemsRef={gameItemsRef} />
         <OptionOrbs orb1Ref={optionOrb1PosRef} orb2Ref={optionOrb2PosRef} playerPosRef={playerPosRef} powerRank={powerRank} />
-        
+
         <EffectComposer>
           <Bloom
             luminanceThreshold={0.4}
@@ -158,6 +177,7 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
         specialAvailable={specialAvailable}
         bossActive={bossActive}
         bossHP={bossHP}
+        activeEffects={activeEffects}
       />
     </div>
   );
