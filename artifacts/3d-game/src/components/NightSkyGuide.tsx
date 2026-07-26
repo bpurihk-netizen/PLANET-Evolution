@@ -523,8 +523,34 @@ interface LocationPreset {
   nameJa: string;
   flag: string;
   latDeg: number;
+  lonDeg: number;     // degrees E (positive = East, negative = West)
   latLabel: string;   // e.g. "北緯35°"
   circumpolarNote: string; // label for circumpolar section
+}
+
+/** Build a LocationPreset for an arbitrary lat/lon. */
+function makeCustomPreset(latDeg: number, lonDeg: number): LocationPreset {
+  const lat = Math.max(-90, Math.min(90, Math.round(latDeg)));
+  const lon = Math.max(-180, Math.min(180, Math.round(lonDeg)));
+  const absLat = Math.abs(lat);
+  const absLon = Math.abs(lon);
+  const latDir = lat > 0 ? '北緯' : lat < 0 ? '南緯' : '';
+  const lonDir = lon >= 0 ? '東経' : '西経';
+  const latLabel = lat === 0 ? '赤道（0°）' : `${latDir}${absLat}°`;
+  const lonLabel = `${lonDir}${absLon}°`;
+  const circumpolarNote =
+    lat > 0 ? `北緯${absLat}°以上でつねに地平線上` :
+    lat < 0 ? `南緯${absLat}°以南でつねに地平線上` :
+    '赤道では周極星座なし';
+  return {
+    id: 'custom',
+    nameJa: 'カスタム',
+    flag: '📍',
+    latDeg: lat,
+    lonDeg: lon,
+    latLabel: `${latLabel} / ${lonLabel}`,
+    circumpolarNote,
+  };
 }
 
 const LOCATION_PRESETS: LocationPreset[] = [
@@ -533,7 +559,8 @@ const LOCATION_PRESETS: LocationPreset[] = [
     nameJa: '日本',
     flag: '🇯🇵',
     latDeg: 35,
-    latLabel: '北緯35°',
+    lonDeg: 135,
+    latLabel: '北緯35° / 東経135°',
     circumpolarNote: '北緯35°以上でつねに地平線上',
   },
   {
@@ -541,7 +568,8 @@ const LOCATION_PRESETS: LocationPreset[] = [
     nameJa: '北欧',
     flag: '🇸🇪',
     latDeg: 60,
-    latLabel: '北緯60°',
+    lonDeg: 18,
+    latLabel: '北緯60° / 東経18°',
     circumpolarNote: '北緯60°以上でつねに地平線上',
   },
   {
@@ -549,7 +577,8 @@ const LOCATION_PRESETS: LocationPreset[] = [
     nameJa: 'イギリス',
     flag: '🇬🇧',
     latDeg: 52,
-    latLabel: '北緯52°',
+    lonDeg: 0,
+    latLabel: '北緯52° / 東経0°',
     circumpolarNote: '北緯52°以上でつねに地平線上',
   },
   {
@@ -557,7 +586,8 @@ const LOCATION_PRESETS: LocationPreset[] = [
     nameJa: 'ハワイ',
     flag: '🌺',
     latDeg: 21,
-    latLabel: '北緯21°',
+    lonDeg: -158,
+    latLabel: '北緯21° / 西経158°',
     circumpolarNote: '北緯21°以上でつねに地平線上',
   },
   {
@@ -565,7 +595,8 @@ const LOCATION_PRESETS: LocationPreset[] = [
     nameJa: '赤道',
     flag: '🌍',
     latDeg: 0,
-    latLabel: '赤道（0°）',
+    lonDeg: 0,
+    latLabel: '赤道（0°） / 東経0°',
     circumpolarNote: '赤道では周極星座なし',
   },
   {
@@ -573,10 +604,142 @@ const LOCATION_PRESETS: LocationPreset[] = [
     nameJa: 'オーストラリア',
     flag: '🇦🇺',
     latDeg: -33,
-    latLabel: '南緯33°',
+    lonDeg: 151,
+    latLabel: '南緯33° / 東経151°',
     circumpolarNote: '南緯33°以南でつねに地平線上',
   },
 ];
+
+// ── World Map Picker ──────────────────────────────────────────────────────────
+
+const MAP_W = 360;
+const MAP_H = 180;
+const latToY = (lat: number) => ((90 - lat) / 180) * MAP_H;
+const lonToX = (lon: number) => ((lon + 180) / 360) * MAP_W;
+
+/** Very simplified continent outlines (lon, lat pairs, equirectangular) */
+const CONTINENTS: [number, number][][] = [
+  // North America
+  [[-165,72],[-130,72],[-80,72],[-50,70],[-55,10],[-80,8],[-95,16],[-120,20],[-130,50],[-165,60]],
+  // Greenland
+  [[-70,85],[-15,85],[-18,72],[-70,72]],
+  // South America
+  [[-82,12],[-38,8],[-35,-5],[-40,-55],[-74,-55],[-82,0]],
+  // Europe
+  [[-10,72],[30,72],[45,40],[35,30],[-10,35]],
+  // Africa
+  [[-18,38],[55,38],[50,-35],[-20,-35],[-18,10]],
+  // Asia (simplified, combined with Middle East)
+  [[30,72],[180,72],[180,10],[100,0],[60,12],[30,40]],
+  // Australia
+  [[113,-17],[155,-17],[150,-39],[114,-39]],
+  // Antarctica
+  [[-180,-68],[180,-68],[180,-90],[-180,-90]],
+];
+
+interface WorldMapPickerProps {
+  latDeg: number;
+  lonDeg: number;
+  onChange: (lat: number, lon: number) => void;
+}
+
+const WorldMapPicker: React.FC<WorldMapPickerProps> = ({ latDeg, lonDeg, onChange }) => {
+  const pinX = lonToX(lonDeg);
+  const pinY = latToY(latDeg);
+
+  const pickCoords = (clientX: number, clientY: number, rect: DOMRect) => {
+    const rx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const ry = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    const lon = Math.round(rx * 360 - 180);
+    const lat = Math.round(90 - ry * 180);
+    onChange(
+      Math.max(-90, Math.min(90, lat)),
+      Math.max(-180, Math.min(180, lon)),
+    );
+  };
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-violet-500/30 touch-none select-none">
+      <svg
+        viewBox={`0 0 ${MAP_W} ${MAP_H}`}
+        className="w-full cursor-crosshair block"
+        onClick={e => pickCoords(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect())}
+        onTouchStart={e => {
+          e.preventDefault();
+          const t = e.touches[0];
+          pickCoords(t.clientX, t.clientY, e.currentTarget.getBoundingClientRect());
+        }}
+        onTouchMove={e => {
+          e.preventDefault();
+          const t = e.touches[0];
+          pickCoords(t.clientX, t.clientY, e.currentTarget.getBoundingClientRect());
+        }}
+      >
+        {/* Ocean */}
+        <rect width={MAP_W} height={MAP_H} fill="#060c1f" />
+
+        {/* Grid — 30° intervals */}
+        {[-60, -30, 0, 30, 60].map(lat => (
+          <line key={`lat${lat}`}
+            x1={0} y1={latToY(lat)} x2={MAP_W} y2={latToY(lat)}
+            stroke={lat === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.07)'}
+            strokeWidth={lat === 0 ? 1 : 0.5}
+          />
+        ))}
+        {[-120, -60, 0, 60, 120].map(lon => (
+          <line key={`lon${lon}`}
+            x1={lonToX(lon)} y1={0} x2={lonToX(lon)} y2={MAP_H}
+            stroke={lon === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.07)'}
+            strokeWidth={lon === 0 ? 1 : 0.5}
+          />
+        ))}
+
+        {/* Tropics (23.5°) */}
+        <line x1={0} y1={latToY(23.5)} x2={MAP_W} y2={latToY(23.5)}
+          stroke="rgba(255,200,80,0.12)" strokeDasharray="3,5" />
+        <line x1={0} y1={latToY(-23.5)} x2={MAP_W} y2={latToY(-23.5)}
+          stroke="rgba(255,200,80,0.12)" strokeDasharray="3,5" />
+
+        {/* Continents */}
+        {CONTINENTS.map((pts, i) => (
+          <polygon
+            key={i}
+            points={pts.map(([lo, la]) => `${lonToX(lo)},${latToY(la)}`).join(' ')}
+            fill="rgba(100,120,160,0.35)"
+            stroke="rgba(140,160,200,0.2)"
+            strokeWidth={0.5}
+          />
+        ))}
+
+        {/* Grid labels */}
+        {[60, 0, -60].map(lat => (
+          <text key={`ll${lat}`}
+            x={2} y={latToY(lat) + (lat === -60 ? -2 : 4)}
+            fill="rgba(255,255,255,0.22)" fontSize={7} fontFamily="monospace">
+            {lat > 0 ? `N${lat}` : lat < 0 ? `S${Math.abs(lat)}` : 'EQ'}
+          </text>
+        ))}
+
+        {/* Pin crosshair */}
+        <circle cx={pinX} cy={pinY} r={10} fill="rgba(124,58,237,0.2)" />
+        <circle cx={pinX} cy={pinY} r={4} fill="#a78bfa" />
+        <line x1={pinX - 12} y1={pinY} x2={pinX + 12} y2={pinY} stroke="#a78bfa" strokeWidth={0.8} opacity={0.7} />
+        <line x1={pinX} y1={pinY - 12} x2={pinX} y2={pinY + 12} stroke="#a78bfa" strokeWidth={0.8} opacity={0.7} />
+
+        {/* Coordinate label next to pin */}
+        <text
+          x={Math.min(pinX + 7, MAP_W - 55)} y={Math.max(pinY - 6, 10)}
+          fill="#c4b5fd" fontSize={7} fontFamily="monospace"
+        >
+          {latDeg >= 0 ? `N${latDeg}` : `S${Math.abs(latDeg)}`},{lonDeg >= 0 ? `E${lonDeg}` : `W${Math.abs(lonDeg)}`}
+        </text>
+      </svg>
+      <div className="px-2 py-1 bg-violet-950/60 text-center text-[9px] text-violet-300/50 font-mono">
+        タップ・ドラッグで観察地点を選択
+      </div>
+    </div>
+  );
+};
 
 // ── Location Selector ─────────────────────────────────────────────────────────
 interface LocationSelectorProps {
@@ -587,8 +750,30 @@ interface LocationSelectorProps {
 const LocationSelector: React.FC<LocationSelectorProps> = ({ selected, onSelect }) => {
   const [open, setOpen] = useState(false);
 
+  // Custom lat/lon state — initialised from current selection if already custom
+  const [customLat, setCustomLat] = useState<number>(
+    selected.id === 'custom' ? selected.latDeg : 35,
+  );
+  const [customLon, setCustomLon] = useState<number>(
+    selected.id === 'custom' ? selected.lonDeg : 135,
+  );
+
+  const fireCustom = (lat: number, lon: number) => {
+    setCustomLat(lat);
+    setCustomLon(lon);
+    onSelect(makeCustomPreset(lat, lon));
+  };
+
+  const latDisplayLabel = customLat === 0 ? '赤道（0°）'
+    : customLat > 0 ? `北緯${customLat}°`
+    : `南緯${Math.abs(customLat)}°`;
+
+  const lonDisplayLabel = customLon === 0 ? '東経0°（本初子午線）'
+    : customLon > 0 ? `東経${customLon}°`
+    : `西経${Math.abs(customLon)}°`;
+
   return (
-    <div className="relative">
+    <div className="space-y-2">
       {/* Trigger button */}
       <button
         onClick={() => setOpen(v => !v)}
@@ -611,7 +796,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ selected, onSelect 
 
       {/* Dropdown */}
       {open && (
-        <div className="mt-1.5 rounded-2xl border border-violet-500/25 bg-[#0a0515]/95 backdrop-blur-lg overflow-hidden shadow-xl z-10 relative">
+        <div className="rounded-2xl border border-violet-500/25 bg-[#0a0515]/95 backdrop-blur-lg overflow-hidden shadow-xl z-10">
           {LOCATION_PRESETS.map(preset => {
             const isSelected = preset.id === selected.id;
             return (
@@ -619,7 +804,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ selected, onSelect 
                 key={preset.id}
                 onClick={() => { onSelect(preset); setOpen(false); }}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5 min-h-[52px] border-b border-white/5 last:border-0',
+                  'w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5 min-h-[52px] border-b border-white/5',
                   isSelected ? 'bg-violet-900/40' : 'bg-transparent',
                 )}
               >
@@ -634,6 +819,148 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ selected, onSelect 
               </button>
             );
           })}
+
+          {/* Custom option */}
+          <button
+            onClick={() => { fireCustom(customLat, customLon); setOpen(false); }}
+            className={cn(
+              'w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5 min-h-[52px]',
+              selected.id === 'custom' ? 'bg-violet-900/40' : 'bg-transparent',
+            )}
+          >
+            <span className="text-xl leading-none shrink-0">📍</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-white/90 font-bold text-sm">カスタム</div>
+              <div className="text-white/40 text-[10px] font-mono">地図タップ・スライダーで自由入力</div>
+            </div>
+            {selected.id === 'custom' && (
+              <div className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* ── Custom location panel — visible whenever custom is selected ── */}
+      {selected.id === 'custom' && (
+        <div className="bg-violet-950/40 border border-violet-500/25 rounded-2xl overflow-hidden">
+
+          {/* World map tap picker */}
+          <WorldMapPicker
+            latDeg={customLat}
+            lonDeg={customLon}
+            onChange={(lat, lon) => fireCustom(lat, lon)}
+          />
+
+          <div className="px-4 pt-3 pb-4 space-y-4">
+
+            {/* Coordinate display */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-violet-300/60 text-[10px] font-mono">緯度</span>
+                <span className="text-white/90 font-mono text-sm font-bold">{latDisplayLabel}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-violet-300/60 text-[10px] font-mono">経度</span>
+                <span className="text-white/90 font-mono text-sm font-bold">{lonDisplayLabel}</span>
+              </div>
+            </div>
+
+            {/* Latitude slider */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[9px] text-violet-300/50 font-mono">
+                <span>緯度</span>
+                <span>{latDisplayLabel}</span>
+              </div>
+              <input
+                type="range"
+                min={-90} max={90} step={1}
+                value={customLat}
+                onChange={e => fireCustom(Number(e.target.value), customLon)}
+                className="w-full h-2 rounded-full appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right,
+                    #7c3aed ${((customLat + 90) / 180) * 100}%,
+                    rgba(255,255,255,0.10) ${((customLat + 90) / 180) * 100}%)`,
+                }}
+              />
+              <div className="flex justify-between text-[9px] text-white/25 font-mono">
+                <span>S90°</span><span>S45°</span><span>EQ</span><span>N45°</span><span>N90°</span>
+              </div>
+            </div>
+
+            {/* Longitude slider */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[9px] text-violet-300/50 font-mono">
+                <span>経度</span>
+                <span>{lonDisplayLabel}</span>
+              </div>
+              <input
+                type="range"
+                min={-180} max={180} step={1}
+                value={customLon}
+                onChange={e => fireCustom(customLat, Number(e.target.value))}
+                className="w-full h-2 rounded-full appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right,
+                    #7c3aed ${((customLon + 180) / 360) * 100}%,
+                    rgba(255,255,255,0.10) ${((customLon + 180) / 360) * 100}%)`,
+                }}
+              />
+              <div className="flex justify-between text-[9px] text-white/25 font-mono">
+                <span>W180°</span><span>W90°</span><span>0°</span><span>E90°</span><span>E180°</span>
+              </div>
+            </div>
+
+            {/* Quick-jump presets by city (lat, lon) */}
+            <div>
+              <div className="text-[9px] text-violet-300/40 font-mono mb-1.5">主要都市</div>
+              <div className="flex gap-1.5 flex-wrap">
+                {([
+                  ['東京', 35, 139],
+                  ['ニューヨーク', 41, -74],
+                  ['ロンドン', 51, 0],
+                  ['シドニー', -34, 151],
+                  ['ケープタウン', -34, 18],
+                  ['赤道', 0, 0],
+                ] as [string, number, number][]).map(([name, lat, lon]) => (
+                  <button
+                    key={name}
+                    onClick={() => fireCustom(lat, lon)}
+                    className={cn(
+                      'px-2 py-1 rounded-lg text-[10px] font-mono border min-h-[28px]',
+                      customLat === lat && customLon === lon
+                        ? 'bg-violet-600/60 border-violet-400/60 text-violet-200'
+                        : 'bg-white/5 border-white/10 text-white/45 active:bg-white/10',
+                    )}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Numeric inputs for precise entry */}
+            <div className="flex gap-3">
+              <div className="flex items-center gap-1.5 flex-1">
+                <span className="text-white/40 text-[10px] shrink-0">緯度°</span>
+                <input
+                  type="number" min={-90} max={90}
+                  value={customLat}
+                  onChange={e => fireCustom(Number(e.target.value), customLon)}
+                  className="flex-1 px-2 py-1 bg-white/8 border border-white/15 rounded-lg text-white/80 text-xs font-mono text-center focus:outline-none focus:border-violet-400/50 min-w-0"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 flex-1">
+                <span className="text-white/40 text-[10px] shrink-0">経度°</span>
+                <input
+                  type="number" min={-180} max={180}
+                  value={customLon}
+                  onChange={e => fireCustom(customLat, Number(e.target.value))}
+                  className="flex-1 px-2 py-1 bg-white/8 border border-white/15 rounded-lg text-white/80 text-xs font-mono text-center focus:outline-none focus:border-violet-400/50 min-w-0"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -666,14 +993,14 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
   };
 
   const result = useMemo(
-    () => computeNightSky(CONSTELLATIONS, today, location.latDeg),
-    [today, location.latDeg],
+    () => computeNightSky(CONSTELLATIONS, today, location.latDeg, location.lonDeg),
+    [today, location.latDeg, location.lonDeg],
   );
   const moon = useMemo(() => computeMoonPhase(today), [today]);
   const planets = useMemo(() => computePlanetsTonight(today), [today]);
   const annualCalendar = useMemo(
-    () => computeAnnualCalendar(CONSTELLATIONS, today.getFullYear(), location.latDeg),
-    [today, location.latDeg],
+    () => computeAnnualCalendar(CONSTELLATIONS, today.getFullYear(), location.latDeg, location.lonDeg),
+    [today, location.latDeg, location.lonDeg],
   );
 
   const season = getSeasonLabel(today);

@@ -7,6 +7,11 @@ import { Constellation } from '../data/constellations';
 export const JAPAN_LAT = 35.0;    // degrees N
 export const JAPAN_LON = 135.0;   // degrees E  (JST meridian)
 
+/** Timezone offset in hours for a given longitude (rounds to nearest whole hour). */
+export function lonToTzOffsetHours(lonDeg: number): number {
+  return Math.round(lonDeg / 15);
+}
+
 // ── Day/year helpers ──────────────────────────────────────────────────────────
 
 /** Day of year: Jan 1 = 1, Dec 31 = 365/366 */
@@ -32,12 +37,22 @@ export function getSunRADeg(date: Date): number {
   return ra;
 }
 
-/** Local Sidereal Time at local midnight for Japan (degrees).
- *  At local midnight, the point OPPOSITE the Sun is on the meridian. */
-export function getMidnightLSTDeg(date: Date): number {
+/**
+ * Local Sidereal Time at local midnight for the observer (degrees).
+ * At local solar midnight the point OPPOSITE the Sun is on the meridian,
+ * giving LST = sunRA + 180°.  Adding a longitude correction shifts the LST
+ * to clock midnight (00:00 standard time) for better transit-time accuracy
+ * when the observer is far from Japan's reference meridian (135°E).
+ *
+ * @param lonDeg  Observer's geographic longitude in degrees (default: JAPAN_LON=135)
+ */
+export function getMidnightLSTDeg(date: Date, lonDeg = JAPAN_LON): number {
   const sunRA = getSunRADeg(date);
-  // Midnight LST = sunRA + 180°
-  return (sunRA + 180) % 360;
+  // Base: solar midnight LST = sunRA + 180°
+  // Longitude correction: shift from Japan reference meridian to observer meridian
+  // Each degree of longitude difference = 1° of sidereal time difference
+  const lonCorrection = lonDeg - JAPAN_LON;
+  return ((sunRA + 180 + lonCorrection) % 360 + 360) % 360;
 }
 
 // ── Hemisphere orientation helpers ────────────────────────────────────────────
@@ -586,9 +601,10 @@ export function computeMonthlyTop3(
   month: number,
   year = new Date().getFullYear(),
   latDeg = JAPAN_LAT,
+  lonDeg = JAPAN_LON,
 ): VisibleConstellation[] {
   const date = new Date(year, month - 1, 15); // 15th of the month
-  const lstDeg = getMidnightLSTDeg(date);
+  const lstDeg = getMidnightLSTDeg(date, lonDeg);
 
   const scored: VisibleConstellation[] = constellations
     .map(con => {
@@ -618,6 +634,7 @@ export function computeAnnualCalendar(
   constellations: Constellation[],
   year = new Date().getFullYear(),
   latDeg = JAPAN_LAT,
+  lonDeg = JAPAN_LON,
 ): MonthlyCalendarEntry[] {
   return Array.from({ length: 12 }, (_, i) => {
     const month = i + 1;
@@ -625,7 +642,7 @@ export function computeAnnualCalendar(
       month,
       monthJa: MONTH_LABELS[i],
       seasonJa: getSeasonJa(month),
-      top3: computeMonthlyTop3(constellations, month, year, latDeg),
+      top3: computeMonthlyTop3(constellations, month, year, latDeg, lonDeg),
       events: MONTHLY_EVENTS[month] ?? [],
     };
   });
@@ -658,8 +675,9 @@ export function computeNightSky(
   constellations: Constellation[],
   date: Date = new Date(),
   latDeg = JAPAN_LAT,
+  lonDeg = JAPAN_LON,
 ): NightSkyResult {
-  const lstDeg = getMidnightLSTDeg(date);
+  const lstDeg = getMidnightLSTDeg(date, lonDeg);
   const sunRADeg = getSunRADeg(date);
 
   const scored: VisibleConstellation[] = constellations

@@ -312,6 +312,34 @@
     @apply hidden;
   }
 
+  /* Latitude range slider thumb styling */
+  input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #a78bfa;
+    border: 2px solid #7c3aed;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(124,58,237,0.6);
+  }
+  input[type='range']::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #a78bfa;
+    border: 2px solid #7c3aed;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(124,58,237,0.6);
+  }
+  input[type='range'] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 9999px;
+    outline: none;
+  }
+
   /* Placeholder styling for contentEditable div */
   [contenteditable][data-placeholder]:empty::before {
     content: attr(data-placeholder);
