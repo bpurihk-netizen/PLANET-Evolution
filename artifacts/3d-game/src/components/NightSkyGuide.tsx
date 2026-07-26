@@ -2,7 +2,14 @@ import React, { useMemo } from 'react';
 import { ChevronLeft, Moon, Star, Telescope, Clock, ArrowUp, ExternalLink } from 'lucide-react';
 import { CONSTELLATIONS } from '../data/constellations';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
-import { computeNightSky, VisibleConstellation, getEasyRating } from '../utils/starVisibility';
+import {
+  computeNightSky,
+  computeMoonPhase,
+  computePlanetsTonight,
+  VisibleConstellation,
+  MoonPhase,
+  PlanetInfo,
+} from '../utils/starVisibility';
 import { CONSTELLATION_META, SEASON_COLORS, getConstellationMeta } from '../data/constellationMeta';
 import { cn } from '@/lib/utils';
 
@@ -46,6 +53,121 @@ function TransitBadge({ transitJST, isPrime }: { transitJST: string; isPrime: bo
     </div>
   );
 }
+
+// ── Moon Phase Card ───────────────────────────────────────────────────────────
+function MoonPhaseCard({ moon }: { moon: MoonPhase }) {
+  const illuminationPct = Math.round(moon.illumination * 100);
+  const daysToFull = Math.round(moon.daysToFull * 10) / 10;
+
+  return (
+    <div className="rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-950/50 to-indigo-950/40 px-4 py-3.5">
+      <h2 className="text-white/70 text-xs font-bold tracking-widest uppercase mb-3 flex items-center gap-1.5">
+        <Moon size={12} className="text-sky-300" />
+        今夜の月
+      </h2>
+
+      <div className="flex items-center gap-4">
+        {/* Big emoji */}
+        <div className="text-5xl shrink-0 leading-none">{moon.emoji}</div>
+
+        {/* Details */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-white/95 font-bold text-lg leading-tight">{moon.nameJa}</span>
+            <span className="text-sky-300/70 text-[11px]">
+              {moon.isWaxing ? '月齢↑ 満ちていく' : '月齢↓ 欠けていく'}
+            </span>
+          </div>
+
+          {/* Illumination bar */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-sky-400 to-white rounded-full transition-all"
+                style={{ width: `${illuminationPct}%` }}
+              />
+            </div>
+            <span className="text-white/50 text-[10px] font-mono shrink-0">{illuminationPct}%照</span>
+          </div>
+
+          {/* Days to full */}
+          {moon.phaseKey !== 'full' && (
+            <div className="text-white/40 text-[10px]">
+              満月まで約{daysToFull}日
+            </div>
+          )}
+
+          {/* Hint */}
+          <p className="text-white/55 text-[11px] leading-relaxed">{moon.hintJa}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Planet Row ────────────────────────────────────────────────────────────────
+interface PlanetRowProps {
+  planet: PlanetInfo;
+  onNavigate: (systemId: string) => void;
+}
+
+const VISIBILITY_STYLE: Record<string, { bg: string; border: string; text: string; badge: string }> = {
+  evening:    { bg: 'from-orange-950/50 to-amber-950/30', border: 'border-orange-500/30', text: 'text-orange-300', badge: '夕方' },
+  morning:    { bg: 'from-blue-950/50 to-cyan-950/30',   border: 'border-blue-500/30',   text: 'text-blue-300',   badge: '明け方' },
+  opposition: { bg: 'from-green-950/50 to-emerald-950/30', border: 'border-green-500/40', text: 'text-green-300', badge: '衝・最高' },
+  hidden:     { bg: 'from-slate-950/40 to-slate-900/20', border: 'border-white/8',        text: 'text-white/30',  badge: '観察不可' },
+};
+
+const PlanetRow: React.FC<PlanetRowProps> = ({ planet, onNavigate }) => {
+  const style = VISIBILITY_STYLE[planet.visibility];
+  const isVisible = planet.visibility !== 'hidden';
+
+  return (
+    <div className={cn(
+      'rounded-xl border bg-gradient-to-br',
+      style.bg, style.border,
+      isVisible ? 'opacity-100' : 'opacity-50',
+    )}>
+      <div className="flex items-center gap-3 px-3.5 py-2.5">
+        {/* Planet emoji */}
+        <div className="text-2xl shrink-0 leading-none">{planet.emoji}</div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-white/90 font-bold text-sm">{planet.nameJa}</span>
+            <span className={cn(
+              'text-[9px] font-bold px-1.5 py-0.5 rounded-full border',
+              style.text,
+              `bg-current/10 border-current/30`,
+            )}
+              style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.15)' }}
+            >
+              <span className={style.text}>{style.badge}</span>
+            </span>
+          </div>
+          <p className="text-white/45 text-[10px] leading-snug mt-0.5 line-clamp-1">{planet.noteJa}</p>
+          {isVisible && (
+            <div className="text-[10px] font-mono mt-0.5">
+              <span className={style.text}>{planet.bestTimeJa}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Navigate button */}
+        {isVisible && (
+          <button
+            onClick={() => onNavigate(planet.systemId)}
+            className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-white/8 border border-white/15 rounded-xl text-white/60 text-[10px] font-bold active:bg-white/15 min-h-[36px]"
+          >
+            探索
+            <ExternalLink size={9} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // ── Top5 Card ─────────────────────────────────────────────────────────────────
 interface TopCardProps {
@@ -186,11 +308,16 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
 }) => {
   const today = useMemo(() => new Date(), []);
   const result = useMemo(() => computeNightSky(CONSTELLATIONS, today), [today]);
+  const moon = useMemo(() => computeMoonPhase(today), [today]);
+  const planets = useMemo(() => computePlanetsTonight(today), [today]);
 
   const season = getSeasonLabel(today);
 
   // How many of top5 have linked systems visible tonight?
   const linkedTonight = result.top5.filter(v => !!v.constellation.linkedSystemId);
+
+  // Visible planets tonight (not hidden)
+  const visiblePlanets = planets.filter(p => p.visibility !== 'hidden');
 
   const handleSwitchSystem = (systemId: string) => {
     onSwitchSystem(systemId);
@@ -241,6 +368,30 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
 
       {/* ── Scrollable Body ── */}
       <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-5">
+
+        {/* ── Moon Phase ── */}
+        <MoonPhaseCard moon={moon} />
+
+        {/* ── Planets Tonight ── */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-white/80 text-sm font-bold">今夜の惑星</h2>
+            <span className="text-white/30 text-[10px]">
+              {visiblePlanets.length > 0
+                ? `${visiblePlanets.length}つの惑星が観察可能`
+                : '今夜は惑星の好機なし'}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {planets.map(planet => (
+              <PlanetRow
+                key={planet.id}
+                planet={planet}
+                onNavigate={handleSwitchSystem}
+              />
+            ))}
+          </div>
+        </div>
 
         {/* ── Top 5 ── */}
         <div>
