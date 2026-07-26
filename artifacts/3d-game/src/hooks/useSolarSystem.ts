@@ -39,6 +39,10 @@ export interface SolarSystemState {
   focusBodyId: string | null;
   focusBody: CelestialBody | null;
 
+  // Moon detail mode — selected moon centred at origin like a planet
+  moonDetailMode: boolean;
+  moonDetailParentId: string | null;
+
   // Deiland surface mode (solar system only)
   deilandMode: boolean;
   deilandBodyId: string | null;
@@ -60,6 +64,8 @@ export interface SolarSystemState {
   exitEncyclopedia: () => void;
   enterNightSky: () => void;
   exitNightSky: () => void;
+  enterMoonDetail: (moonId: string, parentId: string) => void;
+  exitMoonDetail: () => void;
   switchSystem: (id: string) => void;
   completeWarp: () => void;
   selectBody: (id: string | null) => void;
@@ -115,6 +121,8 @@ export function useSolarSystem(): SolarSystemState {
   const [deilandBodyId, setDeilandBodyId] = useState<string | null>(null);
   const [shooterMode, setShooterMode] = useState<ShooterMode>('off');
   const [warpTarget, setWarpTarget] = useState<WarpTarget | null>(null);
+  const [moonDetailMode, setMoonDetailMode] = useState(false);
+  const [moonDetailParentId, setMoonDetailParentId] = useState<string | null>(null);
 
   const currentSystem = getSystemById(currentSystemId);
   const visitedBodyIds = visitedBySystem[currentSystemId] ?? [];
@@ -201,12 +209,31 @@ export function useSolarSystem(): SolarSystemState {
   const enterDetail = useCallback((id: string) => {
     setSelectedBodyId(id);
     setViewMode('detail');
+    setMoonDetailMode(false);
+    setMoonDetailParentId(null);
     markVisited(id, currentSystemId);
   }, [markVisited, currentSystemId]);
+
+  const enterMoonDetail = useCallback((moonId: string, parentId: string) => {
+    setSelectedBodyId(moonId);
+    setViewMode('detail');
+    setMoonDetailMode(true);
+    setMoonDetailParentId(parentId);
+    markVisited(moonId, currentSystemId);
+  }, [markVisited, currentSystemId]);
+
+  const exitMoonDetail = useCallback(() => {
+    setMoonDetailMode(false);
+    setSelectedBodyId(moonDetailParentId);
+    setMoonDetailParentId(null);
+    // stay in detail viewMode — returns to parent planet detail
+  }, [moonDetailParentId]);
 
   const backToOverview = useCallback(() => {
     setViewMode('overview');
     setSelectedBodyId(null);
+    setMoonDetailMode(false);
+    setMoonDetailParentId(null);
   }, []);
 
   const activateDeiland = useCallback((bodyId: string) => {
@@ -231,7 +258,10 @@ export function useSolarSystem(): SolarSystemState {
   const systemBodies = currentSystem.bodies;
   const selectedBody = selectedBodyId ? (getAnyBodyById(selectedBodyId, systemBodies) ?? null) : null;
   const deilandBody  = deilandBodyId  ? (getAnyBodyById(deilandBodyId)  ?? null) : null;
-  const focusBodyId  = selectedBodyId ? resolveFocusId(selectedBodyId, systemBodies) : null;
+  // In moonDetailMode the moon itself is the focus (not the parent planet)
+  const focusBodyId  = selectedBodyId
+    ? (moonDetailMode ? selectedBodyId : resolveFocusId(selectedBodyId, systemBodies))
+    : null;
   const focusBody    = focusBodyId    ? (getAnyBodyById(focusBodyId, systemBodies) ?? null) : null;
 
   return {
@@ -246,6 +276,8 @@ export function useSolarSystem(): SolarSystemState {
     viewMode,
     focusBodyId,
     focusBody,
+    moonDetailMode,
+    moonDetailParentId,
     deilandMode,
     deilandBodyId,
     shooterMode,
@@ -258,6 +290,8 @@ export function useSolarSystem(): SolarSystemState {
     exitEncyclopedia,
     enterNightSky,
     exitNightSky,
+    enterMoonDetail,
+    exitMoonDetail,
     switchSystem,
     completeWarp,
     selectBody,

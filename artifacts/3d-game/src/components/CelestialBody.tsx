@@ -87,8 +87,8 @@ void main(){
   float elev=smoothstep(0.5,0.8,t);
   vec3 lowland=mix(vec3(0.12,0.48,0.15),vec3(0.35,0.28,0.12),elev);
   vec3 highland=mix(lowland,vec3(0.85,0.82,0.80),smoothstep(0.7,0.9,elev));
-  // Polar ice
-  float polar=smoothstep(0.75,0.85,abs(n.y));
+  // Polar ice — narrow cap confined to pole tips
+  float polar=smoothstep(0.90,0.97,abs(n.y));
   highland=mix(highland,vec3(0.95,0.97,1.0),polar);
   ocean=mix(ocean,vec3(0.95,0.97,1.0),polar);
   vec3 col=mix(ocean,highland,land);
@@ -116,8 +116,8 @@ void main(){
   // Darker volcanic regions
   float dark=smoothstep(0.6,0.7,t2);
   col=mix(col,vec3(0.3,0.1,0.05),dark*0.5);
-  // Polar ice caps
-  float polar=smoothstep(0.78,0.88,abs(n.y));
+  // Polar ice caps — narrow, confined to pole tips
+  float polar=smoothstep(0.90,0.97,abs(n.y));
   col=mix(col,vec3(0.9,0.92,0.95),polar);
   float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.8+0.2;
   gl_FragColor=vec4(col*diff,1.0);
@@ -450,7 +450,7 @@ void main(){
   float elev=smoothstep(0.5,0.8,t);
   vec3 ground=mix(vec3(0.35,0.45,0.22),vec3(0.50,0.38,0.20),elev);
   ground=mix(ground,vec3(0.80,0.78,0.76),smoothstep(0.75,0.92,elev));
-  float polar=smoothstep(0.8,0.9,abs(n.y));
+  float polar=smoothstep(0.90,0.97,abs(n.y));
   ground=mix(ground,vec3(0.95,0.95,1.0),polar);
   ocean=mix(ocean,vec3(0.95,0.95,1.0),polar);
   vec3 col=mix(ocean,ground,land);
@@ -487,6 +487,49 @@ void main(){
 }
 `;
 
+// ── Ganymede: dark cratered terrain + bright icy grooves ─────────────────
+const FRAG_GANYMEDE = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*3.0);
+  float t2=fbm(n*8.0+vec3(5.));
+  vec3 dark=mix(vec3(0.28,0.26,0.23),vec3(0.42,0.40,0.36),t);
+  vec3 bright=mix(vec3(0.68,0.66,0.64),vec3(0.82,0.80,0.78),t2);
+  float iceRegion=smoothstep(0.42,0.58,fbm(n*1.8+vec3(3.)));
+  vec3 col=mix(dark,bright,iceRegion);
+  float crater=abs(t2-0.5)*2.0;
+  col=mix(col,vec3(0.88,0.85,0.82),smoothstep(0.88,0.95,crater)*0.35);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.85+0.15;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Triton: pinkish nitrogen ice + dark geyser streaks ────────────────────
+const FRAG_TRITON = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*4.0);
+  float t2=fbm(n*9.0+vec3(7.));
+  vec3 col=mix(vec3(0.78,0.65,0.58),vec3(0.88,0.76,0.70),t);
+  col=mix(col,vec3(0.42,0.36,0.32),smoothstep(0.55,0.72,t2)*0.55);
+  float streak=fbm(n*16.0+vec3(uTime*0.01));
+  col=mix(col,vec3(0.12,0.10,0.09),smoothstep(0.62,0.68,streak)*0.45);
+  // Southern polar nitrogen frost
+  float polar=smoothstep(0.55,0.80,-n.y);
+  col=mix(col,vec3(0.95,0.91,0.88),polar*0.65);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.80+0.20;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
 // ── Helper: choose frag shader by id ──────────────────────────────────────
 function getFragShader(body: CelestialBodyData): string {
   switch (body.id) {
@@ -506,6 +549,13 @@ function getFragShader(body: CelestialBodyData): string {
     case 'io': return FRAG_VOLCANIC;
     case 'europa': return FRAG_MOON_ICE;
     case 'titan': return FRAG_TITAN;
+    case 'ganymede': return FRAG_GANYMEDE;
+    case 'callisto': return FRAG_MOON;
+    case 'phobos': return FRAG_MOON;
+    case 'deimos': return FRAG_MOON;
+    case 'miranda': return FRAG_MOON_ICE;
+    case 'triton': return FRAG_TRITON;
+    case 'charon': return FRAG_MOON;
     case 'halley': return FRAG_COMET;
     // Exoplanet systems
     case 'trappist1-star':

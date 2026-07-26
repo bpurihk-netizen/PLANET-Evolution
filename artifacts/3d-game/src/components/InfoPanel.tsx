@@ -2,7 +2,7 @@ import React from 'react';
 import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
 import { cn } from '@/lib/utils';
-import { X, Footprints, Swords } from 'lucide-react';
+import { X, Footprints, Swords, ChevronLeft } from 'lucide-react';
 
 interface InfoPanelProps {
   state: SolarSystemState;
@@ -61,10 +61,14 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
   const body = state.selectedBody;
   if (!body) return null;
 
-  const isVisible  = state.viewMode === 'detail' || state.selectedBodyId !== null;
-  const isExo      = state.currentSystemId !== 'solar-system';
+  const isVisible   = state.viewMode === 'detail' || state.selectedBodyId !== null;
+  const isExo       = state.currentSystemId !== 'solar-system';
   const isHabitable = body.nameJa.includes('★');
   const displayName = body.nameJa.replace(' ★', '');
+  const isMoonView  = state.moonDetailMode && body.type === 'MOON';
+  const parentBody  = isMoonView && state.moonDetailParentId
+    ? state.currentSystem.bodies.find(b => b.id === state.moonDetailParentId) ?? null
+    : null;
 
   // Distance label depends on system
   const distLabel = isExo ? '恒星からの距離' : '太陽からの距離';
@@ -86,6 +90,16 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
 
         {/* ── Header ── */}
         <div className="sticky top-0 bg-[#080c18]/95 backdrop-blur-xl z-10 px-5 pt-4 pb-3 border-b border-white/8">
+          {/* Moon detail: back-to-parent breadcrumb */}
+          {isMoonView && parentBody && (
+            <button
+              onClick={state.exitMoonDetail}
+              className="flex items-center gap-1 mb-2 text-sky-400/80 text-xs font-mono active:text-sky-300 transition-colors min-h-[32px]"
+            >
+              <ChevronLeft size={14} />
+              <span>{parentBody.nameJa}の衛星</span>
+            </button>
+          )}
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5 flex-wrap">
@@ -98,7 +112,6 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
                 )}
               </div>
               <div className="text-xs text-white/40 font-mono ml-10 truncate">{body.nameEn} — {body.classification}</div>
-              {/* System context badge for exoplanets */}
               {isExo && (
                 <div className="ml-10 mt-1 flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] text-white/30 font-mono">
@@ -108,7 +121,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
               )}
             </div>
             <button
-              onClick={state.backToOverview}
+              onClick={isMoonView ? state.exitMoonDetail : state.backToOverview}
               className="mt-1 ml-2 p-2.5 rounded-full bg-white/8 active:bg-white/20 text-white/60 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
             >
               <X size={18} />
@@ -158,7 +171,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
             </div>
           </div>
 
-          {/* Children (moons / sub-bodies) — enterDetail so scene centres on parent */}
+          {/* Children (moons / sub-bodies) */}
           {body.children && body.children.length > 0 && (
             <div>
               <h3 className="text-xs text-sky-400/80 font-bold tracking-widest uppercase mb-2">
@@ -168,7 +181,11 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
                 {body.children.map(child => (
                   <button
                     key={child.id}
-                    onClick={() => state.enterDetail(child.id)}
+                    onClick={() =>
+                      body.type === 'STAR'
+                        ? state.enterDetail(child.id)
+                        : state.enterMoonDetail(child.id, body.id)
+                    }
                     className="px-3 py-2 bg-sky-900/30 border border-sky-500/30 rounded-full text-sky-200 text-xs font-mono active:bg-sky-800/40 transition-colors min-h-[36px]"
                   >
                     {typeIcon(child.type)} {child.nameJa.replace(' ★', '')}

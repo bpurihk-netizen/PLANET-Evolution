@@ -69,8 +69,9 @@ interface CameraControllerProps {
   targetRadius: number;
   systemId: string;
 }
-const OVERVIEW_CAM  = new THREE.Vector3(0, 55, 32);
-const OVERVIEW_LOOK = new THREE.Vector3(0, 0, 0);
+const OVERVIEW_CAM      = new THREE.Vector3(0, 55, 32);
+const OVERVIEW_LOOK     = new THREE.Vector3(0, 0, 0);
+const MOON_DETAIL_RADIUS = 0.9; // fixed visual radius for any moon in detail mode
 
 const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRadius, systemId }) => {
   const { camera } = useThree();
@@ -289,7 +290,11 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
       <Stars />
       <CameraController
         viewMode={state.viewMode}
-        targetRadius={(state.focusBody?.displayRadius ?? state.selectedBody?.displayRadius ?? 0.5) * 4}
+        targetRadius={
+          state.moonDetailMode
+            ? MOON_DETAIL_RADIUS
+            : (state.focusBody?.displayRadius ?? state.selectedBody?.displayRadius ?? 0.5) * 4
+        }
         systemId={state.currentSystemId}
       />
 
@@ -334,8 +339,19 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
         />
       ))}
 
-      {/* Detail: show children (moons/sub-planets) around the FOCUSED body */}
-      {state.viewMode === 'detail' && focusBodies.length > 0 && focusBodies.map((child, i) => {
+      {/* Moon detail mode: render the selected moon centred at origin */}
+      {state.moonDetailMode && state.selectedBody?.type === 'MOON' && (
+        <group>
+          <CelestialBodyMesh
+            body={state.selectedBody}
+            radius={MOON_DETAIL_RADIUS}
+            isOverview={false}
+          />
+        </group>
+      )}
+
+      {/* Detail: show moons orbiting the focused planet (not active in moonDetailMode) */}
+      {state.viewMode === 'detail' && !state.moonDetailMode && focusBodies.length > 0 && focusBodies.map((child, i) => {
         const moonAngle = (i / focusBodies.length) * Math.PI * 2;
         const moonR = (state.focusBody!.displayRadius) * 4 * (1.8 + i * 0.6);
         return (
@@ -344,7 +360,7 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
             moon={child}
             orbitRadius={moonR}
             initialAngle={moonAngle}
-            onClick={() => state.enterDetail(child.id)}
+            onClick={() => state.enterMoonDetail(child.id, state.focusBodyId!)}
             isSelected={state.selectedBodyId === child.id}
           />
         );
