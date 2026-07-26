@@ -4,12 +4,14 @@ import { SolarSystemState } from '../hooks/useSolarSystem';
 import { StampRallyState } from '../hooks/useStampRally';
 import { BODY_STAMP_TRIGGERS, pickQuiz, QuizQuestion } from '../data/stampData';
 import { cn } from '@/lib/utils';
-import { X, Footprints, Swords, ChevronLeft, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
+import { X, Footprints, Swords, ChevronLeft, ChevronDown, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
 
 interface InfoPanelProps {
   state: SolarSystemState;
   stampRally: StampRallyState;
   onStampEarned?: (constellationId: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 // ── Quiz sub-component ────────────────────────────────────────────────────────
@@ -145,7 +147,7 @@ interface QuizSession {
   constellationId: string;
 }
 
-export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStampEarned }) => {
+export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStampEarned, collapsed = false, onToggleCollapse }) => {
   const body = state.selectedBody;
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
   const [quizKey, setQuizKey] = useState(0);
@@ -191,6 +193,12 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
 
   const isVisible  = state.viewMode === 'detail' || state.selectedBodyId !== null;
   const isExo      = state.currentSystemId !== 'solar-system';
+  // Translate class: hidden → full slide-out, visible+collapsed → peek 48px, visible → normal
+  const translateClass = !isVisible
+    ? 'translate-y-full'
+    : collapsed
+      ? 'translate-y-[calc(100%-48px)]'
+      : 'translate-y-0';
   const isHabitable = body.nameJa.includes('★');
   const displayName = body.nameJa.replace(' ★', '');
   const isMoonView  = state.moonDetailMode && body.type === 'MOON';
@@ -204,12 +212,23 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
   return (
     <div className={cn(
       'fixed bottom-0 left-0 right-0 z-30 transition-transform duration-500 ease-out pointer-events-auto',
-      isVisible ? 'translate-y-0' : 'translate-y-full'
+      translateClass
     )}>
-      {/* Handle */}
-      <div className="flex justify-center pt-2 pb-1">
-        <div className="w-10 h-1 rounded-full bg-white/20" />
-      </div>
+      {/* Handle — tap to collapse / expand */}
+      <button
+        onClick={onToggleCollapse}
+        className="w-full flex flex-col items-center pt-2 pb-0.5 min-h-[48px] justify-center gap-1 active:opacity-70 transition-opacity"
+        aria-label={collapsed ? '情報を表示' : '情報を隠す'}
+      >
+        <div className="w-10 h-1 rounded-full bg-white/25" />
+        <ChevronDown
+          size={14}
+          className={cn(
+            'text-white/35 transition-transform duration-300',
+            collapsed ? 'rotate-180' : ''
+          )}
+        />
+      </button>
 
       <div
         className="bg-[#080c18]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl max-h-[55dvh] overflow-y-scroll"

@@ -68,44 +68,50 @@ interface CameraControllerProps {
   /** Display radius of the FOCUSED body (parent if a child is selected). */
   targetRadius: number;
   systemId: string;
+  zoomRef: React.MutableRefObject<number>;
 }
 const OVERVIEW_CAM      = new THREE.Vector3(0, 55, 32);
 const OVERVIEW_LOOK     = new THREE.Vector3(0, 0, 0);
 const MOON_DETAIL_RADIUS = 0.9; // fixed visual radius for any moon in detail mode
 
-const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRadius, systemId }) => {
+const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRadius, systemId, zoomRef }) => {
   const { camera } = useThree();
   const targetCamPos  = useRef(OVERVIEW_CAM.clone());
   const targetLookAt  = useRef(OVERVIEW_LOOK.clone());
   const currentLook   = useRef(OVERVIEW_LOOK.clone());
   const transitioning = useRef(false);
 
-  // Reset to overview whenever viewMode goes to overview OR when system changes
+  // Reset to overview whenever system changes
   useEffect(() => {
     targetCamPos.current.copy(OVERVIEW_CAM);
     targetLookAt.current.copy(OVERVIEW_LOOK);
     transitioning.current = true;
-  }, [systemId]);
+    zoomRef.current = 1.0;
+  }, [systemId, zoomRef]);
 
   useEffect(() => {
     if (viewMode === 'overview') {
       targetCamPos.current.copy(OVERVIEW_CAM);
       targetLookAt.current.copy(OVERVIEW_LOOK);
       transitioning.current = true;
+      zoomRef.current = 1.0;
     } else {
-      // Detail: planet at world origin — camera above+behind, lookAt below centre
-      const yOff = Math.max(targetRadius * 3.0, 2.5);
-      const zOff = Math.max(targetRadius * 7.0, 6.0);
-      targetCamPos.current.set(0, yOff, zOff);
+      // Detail: lookAt below centre; camera position is computed per-frame with zoom
       targetLookAt.current.set(0, -targetRadius * 1.2, 0);
       transitioning.current = true;
     }
-  }, [viewMode, targetRadius]);
+  }, [viewMode, targetRadius, zoomRef]);
 
   useFrame(() => {
     if (viewMode === 'detail') {
-      camera.position.lerp(targetCamPos.current, 0.07);
-      currentLook.current.lerp(targetLookAt.current, 0.07);
+      // Recompute target every frame so pinch-zoom applies immediately
+      const z = zoomRef.current;
+      const yOff = Math.max(targetRadius * 3.0, 2.5) * z;
+      const zOff = Math.max(targetRadius * 7.0, 6.0) * z;
+      targetCamPos.current.set(0, yOff, zOff);
+
+      camera.position.lerp(targetCamPos.current, 0.08);
+      currentLook.current.lerp(targetLookAt.current, 0.08);
       camera.lookAt(currentLook.current);
     } else if (transitioning.current) {
       camera.position.lerp(targetCamPos.current, 0.06);
@@ -116,6 +122,69 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
       }
     }
   });
+  return null;
+};
+
+// ── Pinch-to-zoom controller (touch + mouse wheel) ────────────────────────────
+const PinchZoomController: React.FC<{
+  enabled: boolean;
+  zoomRef: React.MutableRefObject<number>;
+}> = ({ enabled, zoomRef }) => {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    if (!enabled) return;
+    const el = gl.domElement;
+
+    let lastDist = 0;
+    let lastTap  = 0;
+
+    const pinchDist = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        lastDist = pinchDist(e.touches);
+      } else if (e.touches.length === 1) {
+        // Double-tap resets zoom to 1×
+        const now = Date.now();
+        if (now - lastTap < 280) zoomRef.current = 1.0;
+        lastTap = now;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length < 2 || !lastDist) return;
+      const d = pinchDist(e.touches);
+      const scale = d / lastDist;
+      // Pinch out (fingers apart) → zoom in (smaller zoomRef = camera closer)
+      zoomRef.current = Math.max(0.25, Math.min(4.0, zoomRef.current / scale));
+      lastDist = d;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) lastDist = 0;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+      zoomRef.current = Math.max(0.25, Math.min(4.0, zoomRef.current * factor));
+    };
+
+    el.addEventListener('touchstart',  onTouchStart, { passive: true });
+    el.addEventListener('touchmove',   onTouchMove,  { passive: true });
+    el.addEventListener('touchend',    onTouchEnd,   { passive: true });
+    el.addEventListener('wheel',       onWheel,      { passive: false });
+
+    return () => {
+      el.removeEventListener('touchstart',  onTouchStart);
+      el.removeEventListener('touchmove',   onTouchMove);
+      el.removeEventListener('touchend',    onTouchEnd);
+      el.removeEventListener('wheel',       onWheel);
+    };
+  }, [enabled, gl.domElement, zoomRef]);
+
   return null;
 };
 
@@ -282,12 +351,20 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
     }
   });
 
+  // Zoom level for pinch-to-zoom (1.0 = default, <1 = zoomed-in, >1 = zoomed-out)
+  const zoomRef = useRef(1.0);
+
+  // Reset zoom when a new body is selected
+  const selectedId = state.selectedBodyId;
+  useEffect(() => { zoomRef.current = 1.0; }, [selectedId]);
+
   // The body centred in detail mode is the FOCUS body (parent when a child is selected)
   const focusBodies = state.focusBody?.children ?? [];
 
   return (
     <>
       <Stars />
+      <PinchZoomController enabled={state.viewMode === 'detail'} zoomRef={zoomRef} />
       <CameraController
         viewMode={state.viewMode}
         targetRadius={
@@ -296,6 +373,7 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
             : (state.focusBody?.displayRadius ?? state.selectedBody?.displayRadius ?? 0.5) * 4
         }
         systemId={state.currentSystemId}
+        zoomRef={zoomRef}
       />
 
       {/* Orbit lines (overview only) */}

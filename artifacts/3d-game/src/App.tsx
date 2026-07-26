@@ -51,8 +51,14 @@ function SolarExplorerApp() {
   const stampRally = useStampRally();
   const [showStampBook, setShowStampBook] = useState(false);
   const [toastIds, setToastIds] = useState<string[]>([]);
+  const [infoPanelCollapsed, setInfoPanelCollapsed] = useState(false);
   const prevVisitedRef = useRef<string[]>([]);
   const prevSystemRef = useRef<string>(state.currentSystemId);
+
+  // Re-show info panel whenever a different body is selected
+  useEffect(() => {
+    setInfoPanelCollapsed(false);
+  }, [state.selectedBodyId]);
 
   // Helper: award stamps and show toast for newly earned ones
   const awardAndToast = useCallback((ids: string[]) => {
@@ -159,6 +165,8 @@ function SolarExplorerApp() {
               state={state}
               stampRally={stampRally}
               onStampEarned={handleStampEarned}
+              collapsed={infoPanelCollapsed}
+              onToggleCollapse={() => setInfoPanelCollapsed(v => !v)}
             />
           </div>
 
