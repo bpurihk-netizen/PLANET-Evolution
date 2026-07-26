@@ -1,7 +1,6 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
@@ -234,10 +233,11 @@ interface OrbitingBodyProps {
   angleRef: React.MutableRefObject<number>;
   rotationPaused?: boolean;
   manualRotationRef?: React.MutableRefObject<number>;
+  showAtmosphere?: boolean;
 }
 
 const OrbitingBody: React.FC<OrbitingBodyProps> = ({
-  body, isSelected, viewMode, onClick, angleRef, rotationPaused, manualRotationRef
+  body, isSelected, viewMode, onClick, angleRef, rotationPaused, manualRotationRef, showAtmosphere = true
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const isDetail = viewMode === 'detail' && isSelected;
@@ -280,6 +280,7 @@ const OrbitingBody: React.FC<OrbitingBodyProps> = ({
         body={body} radius={displayR} isOverview={isOverview} onClick={onClick}
         rotationPaused={isDetail ? rotationPaused : false}
         manualRotationRef={isDetail ? manualRotationRef : undefined}
+        showAtmosphere={showAtmosphere}
       />
       {body.id === 'halley' && !isOverview && <CometTail radius={displayR} />}
       {isSelected && isOverview && (
@@ -347,7 +348,8 @@ const MoonOrbit: React.FC<{
   initialAngle: number;
   onClick: () => void;
   isSelected: boolean;
-}> = ({ moon, orbitRadius, initialAngle, onClick, isSelected }) => {
+  showAtmosphere?: boolean;
+}> = ({ moon, orbitRadius, initialAngle, onClick, isSelected, showAtmosphere = true }) => {
   const groupRef = useRef<THREE.Group>(null);
   const angleRef = useRef(initialAngle);
 
@@ -366,7 +368,7 @@ const MoonOrbit: React.FC<{
         <sphereGeometry args={[Math.max(moon.displayRadius * 7, 1.2), 8, 8]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <CelestialBodyMesh body={moon} radius={Math.max(moon.displayRadius * 4, 0.18)} isOverview={false} onClick={onClick} />
+      <CelestialBodyMesh body={moon} radius={Math.max(moon.displayRadius * 4, 0.18)} isOverview={false} onClick={onClick} showAtmosphere={showAtmosphere} />
       {isSelected && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[moon.displayRadius * 4 * 1.4, moon.displayRadius * 4 * 1.7, 24]} />
@@ -381,9 +383,10 @@ const MoonOrbit: React.FC<{
 interface SceneProps {
   state: SolarSystemState;
   activityLevel: number;
+  showAtmosphere: boolean;
 }
 
-const Scene: React.FC<SceneProps> = ({ state, activityLevel }) => {
+const Scene: React.FC<SceneProps> = ({ state, activityLevel, showAtmosphere }) => {
   const bodies = state.currentSystem.bodies;
   const starBody = bodies[0]; // Always the central star
   const orbitBodies = bodies.slice(1);
@@ -453,10 +456,11 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel }) => {
             body={starBody}
             isOverview={state.viewMode === 'overview'}
             onClick={() => state.enterDetail(starBody.id)}
+            showAtmosphere={showAtmosphere}
           />
-          {/* Solar flares + enhanced corona — driven by live NOAA activity */}
-          <SolarFlares sunRadius={starBody.displayRadius} activityLevel={activityLevel} />
-          {state.viewMode === 'overview' && (
+          {/* Solar flares + enhanced corona — toggled by atmosphere switch */}
+          {showAtmosphere && <SolarFlares sunRadius={starBody.displayRadius} activityLevel={activityLevel} />}
+          {showAtmosphere && state.viewMode === 'overview' && (
             <StarGlow color={starBody.colorMain} radius={starBody.displayRadius} />
           )}
           {state.viewMode === 'overview' && (
@@ -478,6 +482,7 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel }) => {
             onClick={() => state.enterDetail(body.id)}
             rotationPaused={isSelected && state.viewMode === 'detail' ? state.obsRotationPaused : false}
             manualRotationRef={isSelected && state.viewMode === 'detail' ? manualRotationRef : undefined}
+            showAtmosphere={showAtmosphere}
           />
         );
       })}
@@ -491,6 +496,7 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel }) => {
             isOverview={false}
             rotationPaused={state.obsRotationPaused}
             manualRotationRef={manualRotationRef}
+            showAtmosphere={showAtmosphere}
           />
         </group>
       )}
@@ -507,6 +513,7 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel }) => {
             initialAngle={moonAngle}
             onClick={() => state.enterMoonDetail(child.id, state.focusBodyId!)}
             isSelected={state.selectedBodyId === child.id}
+            showAtmosphere={showAtmosphere}
           />
         );
       })}
@@ -541,9 +548,10 @@ const BADGE_BG: Record<FlareClass, string> = {
 
 // ── Exported canvas component ────────────────────────────────────────────────
 export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }) => {
-  const weather = useNoaaSpaceWeather();
-  const isSun   = state.viewMode === 'detail' && state.currentSystem.bodies[0]?.id === 'sun'
-                  && state.focusBodyId === 'sun';
+  const weather          = useNoaaSpaceWeather();
+  const [showAtmosphere, setShowAtmosphere] = useState(true);
+  const isSun = state.viewMode === 'detail' && state.currentSystem.bodies[0]?.id === 'sun'
+                && state.focusBodyId === 'sun';
 
   return (
     <div className="relative w-full h-full">
@@ -554,7 +562,7 @@ export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }
         style={{ width: '100%', height: '100%', background: '#020408' }}
       >
         <color attach="background" args={['#020408']} />
-        <Scene state={state} activityLevel={weather.activityLevel} />
+        <Scene state={state} activityLevel={weather.activityLevel} showAtmosphere={showAtmosphere} />
         {state.viewMode === 'overview' && (
           <OrbitControls
             enablePan={false}
@@ -567,16 +575,24 @@ export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }
             touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
           />
         )}
-        {/* Bloom — only bright pixels (sun surface + corona) exceed threshold */}
-        <EffectComposer enableNormalPass={false}>
-          <Bloom
-            luminanceThreshold={0.55}
-            luminanceSmoothing={0.3}
-            intensity={0.9}
-            mipmapBlur
-          />
-        </EffectComposer>
       </Canvas>
+
+      {/* ── 大気圏 ON/OFF トグル ── */}
+      <button
+        onClick={() => setShowAtmosphere(v => !v)}
+        className="absolute top-3 right-3 z-30 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border backdrop-blur-md transition-all"
+        style={{
+          background: showAtmosphere ? 'rgba(56,189,248,0.15)' : 'rgba(30,30,40,0.55)',
+          borderColor: showAtmosphere ? 'rgba(56,189,248,0.45)' : 'rgba(255,255,255,0.12)',
+          color: showAtmosphere ? '#7dd3fc' : 'rgba(255,255,255,0.35)',
+        }}
+        title={showAtmosphere ? '大気圏・コロナを非表示' : '大気圏・コロナを表示'}
+      >
+        <span className="text-base leading-none">🌫</span>
+        <span className="text-[11px] font-mono tracking-wide">
+          {showAtmosphere ? '大気 ON' : '大気 OFF'}
+        </span>
+      </button>
 
       {/* ── NOAA Solar Activity Badge (sun detail view only) ── */}
       {isSun && !weather.loading && (

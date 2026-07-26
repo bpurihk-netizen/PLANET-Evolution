@@ -652,9 +652,10 @@ interface TexturedProps {
   onClick?: () => void;
   rotationPaused?: boolean;
   manualRotationRef?: React.MutableRefObject<number>;
+  showAtmosphere?: boolean;
 }
 
-const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview, onClick, rotationPaused, manualRotationRef }) => {
+const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview, onClick, rotationPaused, manualRotationRef, showAtmosphere = true }) => {
   const meshRef  = useRef<THREE.Mesh>(null);
   const cloudRef = useRef<THREE.Mesh>(null);
   const [diffuseTex, setDiffuseTex] = useState<THREE.Texture | null>(null);
@@ -741,7 +742,7 @@ const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview,
       )}
 
       {/* Enhanced Fresnel atmosphere */}
-      {body.hasAtmosphere && body.atmosphereOpacity > 0 && !isOverview && (
+      {showAtmosphere && body.hasAtmosphere && body.atmosphereOpacity > 0 && !isOverview && (
         <mesh>
           <sphereGeometry args={[radius * 1.12, 32, 32]} />
           <shaderMaterial
@@ -763,7 +764,7 @@ const TexturedPlanetMesh: React.FC<TexturedProps> = ({ body, radius, isOverview,
       {body.hasRings && <SaturnRings body={body} radius={radius} isOverview={isOverview} />}
 
       {/* Sun corona (overview) */}
-      {isStar && isOverview && (
+      {showAtmosphere && isStar && isOverview && (
         <mesh>
           <sphereGeometry args={[radius * 1.6, 16, 16]} />
           <meshBasicMaterial color={body.colorMain} transparent opacity={0.15} side={THREE.FrontSide} depthWrite={false} />
@@ -781,10 +782,11 @@ interface Props {
   onClick?: () => void;
   rotationPaused?: boolean;
   manualRotationRef?: React.MutableRefObject<number>;
+  showAtmosphere?: boolean; // Global atmosphere toggle
 }
 
 // Internal shader renderer (procedural GLSL — used for exoplanets, moons, fallback)
-const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef }) => {
+const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef, showAtmosphere = true }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
   const r = radius ?? body.displayRadius;
@@ -827,7 +829,7 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
       </mesh>
 
       {/* Enhanced Fresnel atmosphere glow */}
-      {body.hasAtmosphere && body.atmosphereOpacity > 0 && !isOverview && (
+      {showAtmosphere && body.hasAtmosphere && body.atmosphereOpacity > 0 && !isOverview && (
         <mesh>
           <sphereGeometry args={[r * 1.11, 32, 32]} />
           <shaderMaterial
@@ -856,12 +858,12 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
 };
 
 // ── Public dispatcher: real texture when available, shader fallback ────────
-export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef }) => {
+export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef, showAtmosphere = true }) => {
   const r = radius ?? body.displayRadius;
   if (TEXTURE_FILENAMES[body.id]) {
-    return <TexturedPlanetMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} />;
+    return <TexturedPlanetMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} showAtmosphere={showAtmosphere} />;
   }
-  return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} />;
+  return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} showAtmosphere={showAtmosphere} />;
 };
 
 // ── Saturn-style rings ─────────────────────────────────────────────────────
