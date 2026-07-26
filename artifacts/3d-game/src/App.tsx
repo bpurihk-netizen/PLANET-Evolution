@@ -8,6 +8,7 @@ import { Deiland } from './components/Deiland';
 import { SpaceShooter } from './components/SpaceShooter';
 import { ConstellationGlobe } from './components/ConstellationGlobe';
 import { ConstellationEncyclopedia } from './components/ConstellationEncyclopedia';
+import { NightSkyGuide } from './components/NightSkyGuide';
 import { WarpOverlay } from './components/WarpOverlay';
 import NotFound from '@/pages/not-found';
 
@@ -19,8 +20,14 @@ function SolarExplorerApp() {
   return (
     <div className="w-full h-[100dvh] overflow-hidden relative bg-[#020408]">
 
-      {/* ── Constellation encyclopedia mode — full replacement ── */}
-      {state.encyclopediaMode ? (
+      {/* ── Night sky guide mode — full replacement ── */}
+      {state.nightSkyMode ? (
+        <NightSkyGuide
+          onExit={state.exitNightSky}
+          onOpenEncyclopedia={() => { state.exitNightSky(); state.enterEncyclopedia(); }}
+          onSwitchSystem={(id) => { state.exitNightSky(); state.switchSystem(id); }}
+        />
+      ) : state.encyclopediaMode ? (
         <ConstellationEncyclopedia
           onExit={state.exitEncyclopedia}
           onSwitchSystem={(id) => { state.exitEncyclopedia(); state.switchSystem(id); }}

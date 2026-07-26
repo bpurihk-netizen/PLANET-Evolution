@@ -304,20 +304,23 @@ const Scene: React.FC<SceneProps> = ({ state }) => {
         ) : null
       )}
 
-      {/* Central star */}
-      <group>
-        <CelestialBodyMesh
-          body={starBody}
-          isOverview={state.viewMode === 'overview'}
-          onClick={() => state.enterDetail(starBody.id)}
-        />
-        {state.viewMode === 'overview' && (
-          <StarGlow color={starBody.colorMain} radius={starBody.displayRadius} />
-        )}
-        {state.viewMode === 'overview' && (
-          <BodyLabel body={starBody} radius={starBody.displayRadius} isSelected={state.selectedBodyId === starBody.id} />
-        )}
-      </group>
+      {/* Central star — hidden in detail mode when viewing a planet to prevent it from
+           filling the frame. Lighting is provided by pointLight at origin regardless. */}
+      {(state.viewMode === 'overview' || state.focusBodyId === starBody.id) && (
+        <group>
+          <CelestialBodyMesh
+            body={starBody}
+            isOverview={state.viewMode === 'overview'}
+            onClick={() => state.enterDetail(starBody.id)}
+          />
+          {state.viewMode === 'overview' && (
+            <StarGlow color={starBody.colorMain} radius={starBody.displayRadius} />
+          )}
+          {state.viewMode === 'overview' && (
+            <BodyLabel body={starBody} radius={starBody.displayRadius} isSelected={state.selectedBodyId === starBody.id} />
+          )}
+        </group>
+      )}
 
       {/* Orbiting bodies — isDetail uses focusBodyId so the parent centres when a child is selected */}
       {orbitBodies.map(body => (

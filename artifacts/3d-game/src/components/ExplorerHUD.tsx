@@ -109,6 +109,14 @@ export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state }) => {
               <span>📚</span>
               <span>図鑑</span>
             </button>
+            {/* ── 今夜の星空ボタン ── */}
+            <button
+              onClick={state.enterNightSky}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold whitespace-nowrap transition-all active:scale-95 min-h-[36px] bg-sky-500/15 border-sky-400/40 text-sky-200 active:bg-sky-500/30"
+            >
+              <span>🌙</span>
+              <span>今夜</span>
+            </button>
           </div>
         </div>
       </div>
