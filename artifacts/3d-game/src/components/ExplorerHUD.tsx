@@ -120,6 +120,14 @@ export const ExplorerHUD: React.FC<ExplorerHUDProps> = ({ state, stampRally, onO
               <span>🌙</span>
               <span>今夜</span>
             </button>
+            {/* ── 星座神話ボタン ── */}
+            <button
+              onClick={state.enterStorybook}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold whitespace-nowrap transition-all active:scale-95 min-h-[36px] bg-rose-500/15 border-rose-400/40 text-rose-200 active:bg-rose-500/30"
+            >
+              <span>📖</span>
+              <span>星座神話</span>
+            </button>
             {/* ── スタンプ帳ボタン ── */}
             <button
               onClick={onOpenStampBook}

@@ -21,6 +21,9 @@ export interface SolarSystemState {
   // Night sky guide mode
   nightSkyMode: boolean;
 
+  // Mythology storybook mode
+  storybookMode: boolean;
+
   // Current star system
   currentSystemId: string;
   currentSystem: StarSystem;
@@ -64,6 +67,8 @@ export interface SolarSystemState {
   exitEncyclopedia: () => void;
   enterNightSky: () => void;
   exitNightSky: () => void;
+  enterStorybook: () => void;
+  exitStorybook: () => void;
   enterMoonDetail: (moonId: string, parentId: string) => void;
   exitMoonDetail: () => void;
   switchSystem: (id: string) => void;
@@ -113,6 +118,7 @@ export function useSolarSystem(): SolarSystemState {
   const [globeMode, setGlobeMode] = useState(false);
   const [encyclopediaMode, setEncyclopediaMode] = useState(false);
   const [nightSkyMode, setNightSkyMode] = useState(false);
+  const [storybookMode, setStorybookMode] = useState(false);
   const [currentSystemId, setCurrentSystemId] = useState<string>('solar-system');
   const [visitedBySystem, setVisitedBySystem] = useState<Record<string, string[]>>(save.visitedBySystem);
   const [selectedBodyId, setSelectedBodyId] = useState<string | null>(null);
@@ -169,12 +175,26 @@ export function useSolarSystem(): SolarSystemState {
     setNightSkyMode(true);
     setGlobeMode(false);
     setEncyclopediaMode(false);
+    setStorybookMode(false);
     setViewMode('overview');
     setSelectedBodyId(null);
   }, []);
 
   const exitNightSky = useCallback(() => {
     setNightSkyMode(false);
+  }, []);
+
+  const enterStorybook = useCallback(() => {
+    setStorybookMode(true);
+    setGlobeMode(false);
+    setEncyclopediaMode(false);
+    setNightSkyMode(false);
+    setViewMode('overview');
+    setSelectedBodyId(null);
+  }, []);
+
+  const exitStorybook = useCallback(() => {
+    setStorybookMode(false);
   }, []);
 
   const switchSystem = useCallback((id: string) => {
@@ -193,6 +213,7 @@ export function useSolarSystem(): SolarSystemState {
     setGlobeMode(false);
     setEncyclopediaMode(false);
     setNightSkyMode(false);
+    setStorybookMode(false);
   }, [currentSystemId]);
 
   const completeWarp = useCallback(() => {
@@ -268,6 +289,7 @@ export function useSolarSystem(): SolarSystemState {
     globeMode,
     encyclopediaMode,
     nightSkyMode,
+    storybookMode,
     currentSystemId,
     currentSystem,
     isWarping: warpTarget !== null,
@@ -290,6 +312,8 @@ export function useSolarSystem(): SolarSystemState {
     exitEncyclopedia,
     enterNightSky,
     exitNightSky,
+    enterStorybook,
+    exitStorybook,
     enterMoonDetail,
     exitMoonDetail,
     switchSystem,
