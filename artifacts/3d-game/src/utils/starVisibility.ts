@@ -291,7 +291,8 @@ interface KeplerElements {
 const KEPLER_ELEMENTS: Record<string, KeplerElements> = {
   // Earth (heliocentric; used to derive Sun's geocentric position)
   earth:   { L0: 100.46457, Lc: 36000.76983, e0: 0.01670862, ec: -0.00004204, w0: 102.93735, wc:  0.71953, a: 1.00000 },
-  // Inner planet
+  // Inner planets
+  mercury: { L0: 252.25084, Lc: 149472.67411, e0: 0.20563069, ec:  0.00002527, w0:  77.45645, wc:  0.15969, a: 0.38710 },
   venus:   { L0: 181.97973, Lc: 58517.81539, e0: 0.00677188, ec: -0.00004777, w0: 131.53298, wc:  0.96935, a: 0.72333 },
   // Outer planets
   mars:    { L0: 355.43296, Lc: 19141.69631, e0: 0.09339410, ec:  0.00009149, w0: 336.04084, wc:  1.06612, a: 1.52366 },
@@ -431,6 +432,7 @@ export function computePlanetsTonight(date: Date): PlanetInfo[] {
   const PLANETS: Array<{
     id: string; nameJa: string; emoji: string; systemId: string; isInner: boolean;
   }> = [
+    { id: 'mercury', nameJa: '水星', emoji: '⚫', systemId: 'solar-system', isInner: true },
     { id: 'venus',   nameJa: '金星', emoji: '✨', systemId: 'solar-system', isInner: true },
     { id: 'mars',    nameJa: '火星', emoji: '🔴', systemId: 'solar-system', isInner: false },
     { id: 'jupiter', nameJa: '木星', emoji: '🟠', systemId: 'solar-system', isInner: false },
