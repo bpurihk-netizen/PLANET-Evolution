@@ -144,6 +144,103 @@ const VISIBILITY_STYLE: Record<string, { bg: string; border: string; text: strin
   hidden:     { bg: 'from-slate-950/40 to-slate-900/20', border: 'border-white/8',        text: 'text-white/30',  badge: '観察不可' },
 };
 
+/** Ring tilt badge + description for Saturn */
+function SaturnRingInfo({ tilt }: { tilt: number }) {
+  const abs = Math.abs(tilt);
+  const face = tilt >= 0 ? '北面' : '南面';
+  let qualityJa: string;
+  let qualityColor: string;
+  if (abs < 4) {
+    qualityJa = '輪がほぼ横向き（edge-on）';
+    qualityColor = 'text-yellow-400';
+  } else if (abs < 14) {
+    qualityJa = '輪がやや傾いて見える';
+    qualityColor = 'text-amber-300';
+  } else {
+    qualityJa = '輪が大きく傾いて見える';
+    qualityColor = 'text-green-300';
+  }
+  return (
+    <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10">
+      <div className="flex items-center gap-2">
+        {/* Mini ring diagram */}
+        <div className="shrink-0 flex flex-col items-center justify-center w-8 h-6">
+          <div
+            className="rounded-full border-2 border-amber-400/70"
+            style={{
+              width: 14,
+              height: 14,
+              boxShadow: '0 0 0 3px transparent',
+              position: 'relative',
+            }}
+          />
+          <div
+            className="border border-amber-300/60 rounded-full"
+            style={{
+              width: 24,
+              height: Math.max(2, Math.round(abs / 27 * 8)),
+              marginTop: -9,
+              borderRadius: '50%',
+            }}
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-bold ${qualityColor}`}>
+              輪の傾き {abs.toFixed(1)}°（{face}）
+            </span>
+          </div>
+          <p className={`text-[9px] leading-tight ${qualityColor} opacity-80`}>{qualityJa}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** East-west diagram + list for Jupiter's Galilean moons */
+function JupiterMoonInfo({ moons }: { moons: import('../utils/starVisibility').GalileanMoon[] }) {
+  // Sort to render visual diagram: west moons left, east moons right, closest to Jupiter first per side
+  const west = [...moons].filter(m => m.side === 'west').sort((a, b) => b.elongationRj - a.elongationRj);
+  const east = [...moons].filter(m => m.side === 'east').sort((a, b) => a.elongationRj - b.elongationRj);
+
+  const MOON_COLOR: Record<string, string> = {
+    Io: 'bg-yellow-400',
+    Europa: 'bg-blue-300',
+    Ganymede: 'bg-orange-300',
+    Callisto: 'bg-slate-400',
+  };
+
+  const renderDot = (m: import('../utils/starVisibility').GalileanMoon) => (
+    <div key={m.name} className="flex flex-col items-center gap-0.5">
+      <div className={`w-1.5 h-1.5 rounded-full ${MOON_COLOR[m.name] ?? 'bg-white'}`} />
+      <span className="text-[7px] text-white/40 leading-none">{m.nameJa[0]}</span>
+    </div>
+  );
+
+  return (
+    <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10">
+      {/* Visual diagram */}
+      <div className="flex items-center justify-center gap-1 mb-1.5">
+        {/* West side (left in sky) */}
+        <div className="flex items-end gap-1">{west.map(renderDot)}</div>
+        {/* Jupiter */}
+        <div className="text-base leading-none mx-1">🟠</div>
+        {/* East side (right in sky) */}
+        <div className="flex items-end gap-1">{east.map(renderDot)}</div>
+      </div>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-2 gap-y-0.5 justify-center">
+        {moons.map(m => (
+          <span key={m.name} className="text-[8px] text-white/50 leading-tight">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle ${MOON_COLOR[m.name] ?? 'bg-white'}`} />
+            {m.nameJa}：{m.side === 'east' ? '東' : '西'} {m.elongationRj.toFixed(1)}Rj
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const PlanetRow: React.FC<PlanetRowProps> = ({ planet, onNavigate }) => {
   const style = VISIBILITY_STYLE[planet.visibility];
   const isVisible = planet.visibility !== 'hidden';
@@ -178,13 +275,21 @@ const PlanetRow: React.FC<PlanetRowProps> = ({ planet, onNavigate }) => {
               <span className={style.text}>{planet.bestTimeJa}</span>
             </div>
           )}
+          {/* Saturn ring tilt */}
+          {planet.ringTiltDeg !== undefined && isVisible && (
+            <SaturnRingInfo tilt={planet.ringTiltDeg} />
+          )}
+          {/* Jupiter Galilean moons */}
+          {planet.galileanMoons && planet.galileanMoons.length > 0 && isVisible && (
+            <JupiterMoonInfo moons={planet.galileanMoons} />
+          )}
         </div>
 
         {/* Navigate button */}
         {isVisible && (
           <button
             onClick={() => onNavigate(planet.systemId)}
-            className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-white/8 border border-white/15 rounded-xl text-white/60 text-[10px] font-bold active:bg-white/15 min-h-[36px]"
+            className="shrink-0 self-start flex items-center gap-1 px-2.5 py-1.5 bg-white/8 border border-white/15 rounded-xl text-white/60 text-[10px] font-bold active:bg-white/15 min-h-[36px]"
           >
             探索
             <ExternalLink size={9} />
