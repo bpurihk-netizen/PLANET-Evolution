@@ -1,5 +1,5 @@
-import React from 'react';
-import { getConstellationArt } from '../data/constellationArt';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { getConstellationArt, StarName } from '../data/constellationArt';
 
 interface ConstellationSilhouetteProps {
   constellationId: string;
@@ -7,6 +7,8 @@ interface ConstellationSilhouetteProps {
   /** Width/height of the SVG element (square). Default 200 */
   size?: number;
   className?: string;
+  /** Enable tap-to-show-star-name interaction. Default true. */
+  interactive?: boolean;
 }
 
 export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = ({
@@ -14,107 +16,277 @@ export const ConstellationSilhouette: React.FC<ConstellationSilhouetteProps> = (
   accentColor = '#7eb8ff',
   size = 200,
   className,
+  interactive = true,
 }) => {
-  const art = getConstellationArt(constellationId);
+  const art = useMemo(() => getConstellationArt(constellationId), [constellationId]);
+  // Stable random suffix per constellationId (avoids filter ID collisions in multi-instance renders)
+  const idSuffix = useMemo(() => Math.random().toString(36).slice(2, 7), [constellationId]);
+  const svgId = `cs-${constellationId}-${idSuffix}`;
 
-  // Derive glow / muted colors from the accent
-  const starColor = accentColor;
-  const lineColor = accentColor;
-  const silhouetteColor = accentColor;
+  const [activeStar, setActiveStar] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const id = `cs-${constellationId}-${Math.random().toString(36).slice(2, 7)}`;
+  // Reset when constellation changes
+  useEffect(() => {
+    setActiveStar(null);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [constellationId]);
+
+  const handleStarClick = useCallback((e: React.MouseEvent | React.TouchEvent, index: number) => {
+    if (!interactive) return;
+    const starName = art.starNames?.[index];
+    if (!starName) return;
+    e.stopPropagation();
+    setActiveStar(prev => (prev === index ? null : index));
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setActiveStar(null), 3500);
+  }, [art, interactive]);
+
+  const dismissPopup = useCallback(() => {
+    setActiveStar(null);
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  // Popup positioning: keep tooltip inside bounds
+  const popupStyle = useMemo((): React.CSSProperties => {
+    if (activeStar === null) return {};
+    const [x, y] = art.stars[activeStar];
+    const flipUp = y > 58;
+    const clampedX = Math.min(Math.max(x, 12), 88);
+    return {
+      position: 'absolute',
+      left: `${clampedX}%`,
+      top: `${y}%`,
+      transform: flipUp ? 'translate(-50%, calc(-100% - 8px))' : 'translate(-50%, 8px)',
+      pointerEvents: 'none',
+      zIndex: 10,
+    };
+  }, [activeStar, art.stars]);
+
+  const activeStarData = activeStar !== null ? (art.starNames?.[activeStar] ?? null) : null;
 
   return (
-    <svg
-      viewBox="0 0 100 100"
-      width={size}
-      height={size}
-      className={className}
-      style={{ display: 'block' }}
-      aria-hidden="true"
+    <div
+      style={{ position: 'relative', display: 'inline-block', width: size, height: size }}
+      onClick={dismissPopup}
     >
-      <defs>
-        {/* Radial background */}
-        <radialGradient id={`${id}-bg`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={accentColor} stopOpacity="0.08" />
-          <stop offset="100%" stopColor="#000" stopOpacity="0.0" />
-        </radialGradient>
+      <svg
+        viewBox="0 0 100 100"
+        width={size}
+        height={size}
+        className={className}
+        style={{ display: 'block' }}
+        aria-hidden="true"
+      >
+        <defs>
+          <radialGradient id={`${svgId}-bg`} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={accentColor} stopOpacity="0.08" />
+            <stop offset="100%" stopColor="#000" stopOpacity="0.0" />
+          </radialGradient>
 
-        {/* Star glow */}
-        <filter id={`${id}-glow`} x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
+          <filter id={`${svgId}-glow`} x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
 
-        {/* Subtle silhouette glow */}
-        <filter id={`${id}-sfx`} x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
+          <filter id={`${svgId}-active-glow`} x="-150%" y="-150%" width="400%" height="400%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2.2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
 
-      {/* Background radial glow */}
-      <circle cx="50" cy="50" r="50" fill={`url(#${id}-bg)`} />
+          <filter id={`${svgId}-sfx`} x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
 
-      {/* Tiny background star field */}
-      {BACKGROUND_STARS.map((s, i) => (
-        <circle
-          key={i}
-          cx={s[0]}
-          cy={s[1]}
-          r={s[2]}
-          fill="white"
-          opacity={s[3]}
-        />
-      ))}
+        {/* Background radial glow */}
+        <circle cx="50" cy="50" r="50" fill={`url(#${svgId}-bg)`} />
 
-      {/* Mythological silhouette (behind lines) */}
-      {art.silhouette && (
-        <path
-          d={art.silhouette}
-          fill={silhouetteColor}
-          opacity={0.06}
-          filter={`url(#${id}-sfx)`}
-        />
-      )}
+        {/* Tiny background star field */}
+        {BACKGROUND_STARS.map((s, i) => (
+          <circle key={i} cx={s[0]} cy={s[1]} r={s[2]} fill="white" opacity={s[3]} />
+        ))}
 
-      {/* Constellation lines */}
-      {art.lines.map(([a, b], i) => {
-        const [x1, y1] = art.stars[a];
-        const [x2, y2] = art.stars[b];
-        return (
-          <line
-            key={i}
-            x1={x1} y1={y1}
-            x2={x2} y2={y2}
-            stroke={lineColor}
-            strokeWidth="0.6"
-            strokeOpacity="0.45"
-            strokeLinecap="round"
+        {/* Mythological silhouette (behind lines) */}
+        {art.silhouette && (
+          <path
+            d={art.silhouette}
+            fill={accentColor}
+            opacity={0.06}
+            filter={`url(#${svgId}-sfx)`}
           />
-        );
-      })}
+        )}
 
-      {/* Stars */}
-      {art.stars.map(([x, y], i) => (
-        <g key={i} filter={`url(#${id}-glow)`}>
-          {/* Outer glow ring */}
-          <circle cx={x} cy={y} r={2.2} fill={starColor} opacity={0.18} />
-          {/* Core */}
-          <circle cx={x} cy={y} r={1.1} fill={starColor} opacity={0.9} />
-          {/* Hot center */}
-          <circle cx={x} cy={y} r={0.45} fill="white" opacity={0.95} />
-        </g>
-      ))}
-    </svg>
+        {/* Constellation lines */}
+        {art.lines.map(([a, b], i) => {
+          const [x1, y1] = art.stars[a];
+          const [x2, y2] = art.stars[b];
+          return (
+            <line
+              key={i}
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke={accentColor}
+              strokeWidth="0.6"
+              strokeOpacity="0.45"
+              strokeLinecap="round"
+            />
+          );
+        })}
+
+        {/* Stars */}
+        {art.stars.map(([x, y], i) => {
+          const starName = art.starNames?.[i];
+          const hasName = !!starName;
+          const isActive = activeStar === i;
+          const isBrightest = !!starName?.isBrightest;
+
+          return (
+            <g
+              key={i}
+              filter={isActive ? `url(#${svgId}-active-glow)` : `url(#${svgId}-glow)`}
+              onClick={hasName && interactive ? (e) => handleStarClick(e, i) : undefined}
+              style={hasName && interactive ? { cursor: 'pointer' } : undefined}
+            >
+              {/* Invisible tap-friendly hit area */}
+              {hasName && interactive && (
+                <circle cx={x} cy={y} r={6} fill="transparent" />
+              )}
+
+              {/* Outer glow ring */}
+              <circle
+                cx={x} cy={y}
+                r={isActive ? 3.8 : (isBrightest ? 2.8 : 2.2)}
+                fill={accentColor}
+                opacity={isActive ? 0.5 : (isBrightest ? 0.28 : 0.18)}
+              />
+              {/* Core */}
+              <circle
+                cx={x} cy={y}
+                r={isActive ? 1.9 : (isBrightest ? 1.5 : 1.1)}
+                fill={isActive ? 'white' : accentColor}
+                opacity={isActive ? 1.0 : 0.9}
+              />
+              {/* Hot white center */}
+              <circle
+                cx={x} cy={y}
+                r={isActive ? 0.75 : 0.45}
+                fill="white"
+                opacity={0.95}
+              />
+
+              {/* Subtle dashed ring hint for named stars (shows they're tappable) */}
+              {hasName && !isActive && interactive && (
+                <circle
+                  cx={x} cy={y} r={3.0}
+                  fill="none"
+                  stroke={accentColor}
+                  strokeWidth="0.22"
+                  strokeOpacity="0.32"
+                  strokeDasharray="0.9 0.7"
+                />
+              )}
+
+              {/* Brightest star 4-point sparkle */}
+              {isBrightest && !isActive && (
+                <g opacity={0.55}>
+                  <line x1={x} y1={y - 3.5} x2={x} y2={y - 1.9} stroke="white" strokeWidth="0.35" />
+                  <line x1={x} y1={y + 1.9} x2={x} y2={y + 3.5} stroke="white" strokeWidth="0.35" />
+                  <line x1={x - 3.5} y1={y} x2={x - 1.9} y2={y} stroke="white" strokeWidth="0.35" />
+                  <line x1={x + 1.9} y1={y} x2={x + 3.5} y2={y} stroke="white" strokeWidth="0.35" />
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Star name popup — rendered as an overlay div for legibility */}
+      {activeStarData && activeStar !== null && (
+        <div style={popupStyle}>
+          <StarNamePopup starName={activeStarData} accentColor={accentColor} />
+        </div>
+      )}
+    </div>
   );
 };
+
+// ── Star Name Popup ────────────────────────────────────────────────────────────
+interface StarNamePopupProps {
+  starName: StarName;
+  accentColor: string;
+}
+
+const StarNamePopup: React.FC<StarNamePopupProps> = ({ starName, accentColor }) => (
+  <div
+    style={{
+      background: 'rgba(4, 8, 18, 0.93)',
+      border: `1px solid ${accentColor}55`,
+      borderRadius: 10,
+      padding: '7px 11px',
+      minWidth: 96,
+      maxWidth: 160,
+      boxShadow: `0 0 18px ${accentColor}25, 0 6px 24px rgba(0,0,0,0.8)`,
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
+      whiteSpace: 'nowrap',
+    }}
+  >
+    {/* Japanese name row */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+      {starName.isBrightest && (
+        <span style={{ color: '#fbbf24', fontSize: 9, lineHeight: 1, flexShrink: 0 }}>★</span>
+      )}
+      <span style={{
+        color: 'rgba(255,255,255,0.96)',
+        fontSize: 12.5,
+        fontWeight: 700,
+        letterSpacing: '0.01em',
+        lineHeight: 1.3,
+        whiteSpace: 'nowrap',
+      }}>
+        {starName.nameJa}
+      </span>
+    </div>
+
+    {/* English name */}
+    <div style={{
+      color: accentColor,
+      fontSize: 9.5,
+      fontFamily: 'monospace',
+      opacity: 0.9,
+      marginBottom: starName.meaning ? 4 : 0,
+      whiteSpace: 'nowrap',
+    }}>
+      {starName.nameEn}
+    </div>
+
+    {/* Meaning / origin note */}
+    {starName.meaning && (
+      <div style={{
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 8.5,
+        lineHeight: 1.5,
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        paddingTop: 4,
+        marginTop: 1,
+        whiteSpace: 'normal',
+        maxWidth: 148,
+      }}>
+        {starName.meaning}
+      </div>
+    )}
+  </div>
+);
 
 // Decorative background star positions [x, y, radius, opacity]
 const BACKGROUND_STARS: [number, number, number, number][] = [

@@ -4,6 +4,17 @@
 // Lines connect stars to form the traditional stick figure shape
 // Silhouette is an optional SVG path representing the mythological figure
 
+export interface StarName {
+  /** Japanese name / transliteration */
+  nameJa: string;
+  /** English / Latin name */
+  nameEn: string;
+  /** Arabic / Greek origin meaning, if notable */
+  meaning?: string;
+  /** True for the single brightest star in the constellation */
+  isBrightest?: boolean;
+}
+
 export interface ConstellationArt {
   /** Key star positions [x, y] in 0-100 space */
   stars: [number, number][];
@@ -11,6 +22,8 @@ export interface ConstellationArt {
   lines: [number, number][];
   /** Optional SVG path string for the mythological silhouette */
   silhouette?: string;
+  /** Names for each star (null = unnamed). Index aligns with stars[]. */
+  starNames?: (StarName | null)[];
 }
 
 export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
@@ -38,6 +51,18 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [5, 8], [8, 9],
     ],
     silhouette: 'M50,8 C55,10 62,12 65,15 C68,20 65,25 60,28 C68,32 72,45 72,55 C72,65 68,72 65,75 C62,78 58,80 55,79 C52,88 50,92 50,92 C48,92 47,88 45,79 C42,80 38,78 35,75 C32,72 28,65 28,55 C28,45 32,32 40,28 C35,25 32,20 35,15 C38,12 45,10 50,8 Z M38,48 C40,46 45,45 50,45 C55,45 60,46 62,48 C60,52 55,53 50,53 C45,53 40,52 38,48 Z',
+    starNames: [
+      { nameJa: 'ベテルギウス', nameEn: 'Betelgeuse', meaning: 'アラビア語で「巨人の脇の下」', isBrightest: true },
+      { nameJa: 'ベラトリックス', nameEn: 'Bellatrix', meaning: 'ラテン語で「女性の戦士」' },
+      { nameJa: 'リゲル', nameEn: 'Rigel', meaning: 'アラビア語で「巨人の左足」' },
+      { nameJa: 'サイフ', nameEn: 'Saiph', meaning: 'アラビア語で「剣」' },
+      { nameJa: 'ミンタカ', nameEn: 'Mintaka', meaning: 'アラビア語で「帯」' },
+      { nameJa: 'アルニラム', nameEn: 'Alnilam', meaning: 'アラビア語で「真珠の帯」' },
+      { nameJa: 'アルニタク', nameEn: 'Alnitak', meaning: 'アラビア語で「帯」' },
+      { nameJa: 'メイッサ', nameEn: 'Meissa', meaning: 'アラビア語で「輝く者」' },
+      null,
+      null,
+    ],
   },
 
   // ── しし座 (Leo) ─────────────────────────────────────────────────────────
@@ -59,6 +84,17 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [2, 7],
     ],
     silhouette: 'M85,28 C88,22 85,15 78,12 C72,10 65,14 62,20 C58,15 50,12 42,15 C35,18 30,25 28,32 C20,30 14,35 15,42 C16,48 22,50 28,48 C28,55 30,62 35,65 C38,68 42,68 45,65 C48,70 50,75 50,78 C55,78 60,75 62,70 C65,72 68,75 72,75 C76,75 80,72 82,68 C82,60 78,55 75,52 C80,48 85,42 85,35 Z',
+    starNames: [
+      { nameJa: 'レグルス', nameEn: 'Regulus', meaning: 'ラテン語で「小さな王」', isBrightest: true },
+      { nameJa: 'デネボラ', nameEn: 'Denebola', meaning: 'アラビア語で「ライオンの尾」' },
+      { nameJa: 'アルギエバ', nameEn: 'Algieba', meaning: 'アラビア語で「額」' },
+      { nameJa: 'ゾスマ', nameEn: 'Zosma', meaning: 'ギリシャ語で「腰帯」' },
+      { nameJa: 'アドハフェラ', nameEn: 'Adhafera', meaning: 'アラビア語で「巻き毛」' },
+      { nameJa: 'ラサラス', nameEn: 'Rasalas', meaning: 'アラビア語で「頭部の南の星」' },
+      null,
+      { nameJa: 'ケルタン', nameEn: 'Chertan', meaning: 'アラビア語で「小さな肋骨」' },
+      null,
+    ],
   },
 
   // ── さそり座 (Scorpius) ──────────────────────────────────────────────────
@@ -88,6 +124,17 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [10, 11], [11, 12],
     ],
     silhouette: 'M22,28 C18,20 20,12 28,10 C35,8 40,12 42,18 C46,14 50,12 50,12 C55,14 60,20 58,28 C62,32 64,42 62,52 C64,60 66,68 70,74 C74,78 78,76 80,70 C82,64 78,58 74,56 C76,50 76,44 72,42 C68,40 64,42 62,44 C58,38 54,30 50,28 C46,30 42,32 38,28 C34,24 30,20 26,22 Z',
+    starNames: [
+      { nameJa: 'アンタレス', nameEn: 'Antares', meaning: 'ギリシャ語で「火星に対抗するもの」', isBrightest: true },
+      { nameJa: 'グラフィアス', nameEn: 'Graffias', meaning: 'ギリシャ語で「かに」' },
+      { nameJa: 'ジュバ', nameEn: 'Dschubba', meaning: 'アラビア語で「さそりの額」' },
+      { nameJa: 'アルニヤト', nameEn: 'Alniyat', meaning: 'アラビア語で「心臓の近くの星」' },
+      null, null, null, null, null, null,
+      { nameJa: 'シャウラ', nameEn: 'Shaula', meaning: 'アラビア語で「上げた尻尾」' },
+      null,
+      { nameJa: 'レサト', nameEn: 'Lesath', meaning: 'アラビア語で「毒液」' },
+      null, null,
+    ],
   },
 
   // ── ふたご座 (Gemini) ────────────────────────────────────────────────────
@@ -110,6 +157,17 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 1], [2, 3], [4, 5],
     ],
     silhouette: 'M30,8 C24,8 18,12 20,20 C18,28 22,35 26,40 C22,45 20,52 22,60 C24,68 28,75 32,80 C36,82 40,80 42,75 C44,80 46,82 50,82 C54,82 56,78 58,72 C62,76 66,78 70,75 C74,68 72,58 68,50 C72,42 74,32 72,22 C70,14 64,8 58,8 C52,10 48,15 44,20 C40,15 36,10 30,8 Z',
+    starNames: [
+      { nameJa: 'カストル', nameEn: 'Castor', meaning: 'ギリシャ神話の双子の一人（馬術の名手）' },
+      { nameJa: 'ポルックス', nameEn: 'Pollux', meaning: 'ギリシャ神話の双子の一人（拳闘の名手）', isBrightest: true },
+      { nameJa: 'メブスダ', nameEn: 'Mebsuda', meaning: 'アラビア語で「伸ばした腕」' },
+      { nameJa: 'ワサト', nameEn: 'Wasat', meaning: 'アラビア語で「中央」' },
+      { nameJa: 'メクブダ', nameEn: 'Mekbuda', meaning: 'アラビア語で「折り曲げた腕」' },
+      { nameJa: 'アルジル', nameEn: 'Alzirr', meaning: 'アラビア語で「ボタン」' },
+      null, null,
+      { nameJa: 'プロプス', nameEn: 'Propus', meaning: 'ギリシャ語で「前足」' },
+      null,
+    ],
   },
 
   // ── おうし座 (Taurus) ────────────────────────────────────────────────────
@@ -134,6 +192,15 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 5],
     ],
     silhouette: 'M72,20 C78,16 82,20 80,28 C78,35 70,38 65,35 C62,30 58,25 52,22 C48,25 42,30 38,28 C32,25 25,28 20,35 C15,42 18,50 25,52 C20,58 18,65 22,70 C26,75 32,75 38,70 C40,75 42,80 45,82 C48,80 50,75 52,70 C55,75 58,78 62,75 C66,72 68,65 65,60 C70,58 78,55 82,50 C85,42 82,35 78,30 C82,25 80,18 76,18 Z',
+    starNames: [
+      { nameJa: 'アルデバラン', nameEn: 'Aldebaran', meaning: 'アラビア語で「追いかけるもの」（プレアデスを追う）', isBrightest: true },
+      { nameJa: 'エルナト', nameEn: 'Elnath', meaning: 'アラビア語で「角を突く者」' },
+      null,
+      null, null,
+      { nameJa: 'プレアデス', nameEn: 'Pleiades', meaning: '七姉妹星団（昴）' },
+      null, null,
+      null, null,
+    ],
   },
 
   // ── うお座 (Pisces) ──────────────────────────────────────────────────────
@@ -160,6 +227,10 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13], [13, 14], [14, 8],
     ],
     silhouette: 'M25,20 C18,15 12,20 14,28 C16,35 22,38 28,36 C25,42 25,48 28,52 C32,55 38,55 42,52 C44,58 46,62 50,62 C54,62 56,58 58,52 C62,55 68,56 72,52 C76,48 75,42 72,36 C78,38 84,35 86,28 C88,20 82,15 76,18 C72,12 65,10 60,14 C58,10 54,8 50,10 C46,8 42,10 40,14 C35,10 28,12 25,20 Z',
+    starNames: [
+      { nameJa: 'アル・リシャ', nameEn: 'Al Rischa', meaning: 'アラビア語で「縄」。二匹の魚をつなぐ結び目', isBrightest: true },
+      null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+    ],
   },
 
   // ── みずがめ座 (Aquarius) ────────────────────────────────────────────────
@@ -184,6 +255,12 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [3, 5], [5, 7], [5, 8],
     ],
     silhouette: 'M28,15 C22,15 18,20 20,28 C22,35 28,38 35,36 C38,40 40,45 38,50 C35,55 32,60 35,65 C38,70 42,72 45,70 C45,75 48,80 50,82 C52,80 54,75 55,70 C58,72 62,72 65,68 C68,64 65,58 62,55 C65,50 68,45 65,40 C62,35 58,32 55,30 C58,25 60,18 55,14 C50,10 44,12 42,18 C40,12 35,10 28,15 Z',
+    starNames: [
+      { nameJa: 'サダルスウド', nameEn: 'Sadalsuud', meaning: 'アラビア語で「幸運の中の幸運の星」', isBrightest: true },
+      { nameJa: 'サダルメリク', nameEn: 'Sadalmelik', meaning: 'アラビア語で「幸運な星たちの一つ」' },
+      { nameJa: 'サダキア', nameEn: 'Sadachbia', meaning: 'アラビア語で「テントの幸運な星」' },
+      null, null, null, null, null, null, null, null,
+    ],
   },
 
   // ── やぎ座 (Capricornus) ─────────────────────────────────────────────────
@@ -207,6 +284,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [10, 0], [10, 9], [1, 10],
     ],
     silhouette: 'M20,28 C14,22 12,28 16,36 C12,40 12,48 18,52 C15,58 18,65 24,66 C28,68 32,65 34,60 C38,65 42,68 48,66 C52,64 55,60 55,55 C60,58 65,58 68,54 C72,50 72,42 70,36 C74,32 75,25 72,20 C68,15 62,14 58,18 C55,14 50,12 45,15 C42,10 35,10 30,15 C26,10 20,12 20,20 Z',
+    starNames: [
+      { nameJa: 'アルゲディ', nameEn: 'Algedi', meaning: 'アラビア語で「山羊の角」' },
+      { nameJa: 'ダビ', nameEn: 'Dabih', meaning: 'アラビア語で「幸運な屠殺者」', isBrightest: true },
+      null, null, null, null, null, null, null, null, null,
+    ],
   },
 
   // ── いて座 (Sagittarius) ─────────────────────────────────────────────────
@@ -233,6 +315,14 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [2, 10],
     ],
     silhouette: 'M28,40 C22,35 20,28 25,22 C30,15 38,14 42,20 C46,15 52,12 58,14 C64,16 68,22 68,28 C72,25 78,28 80,35 C82,42 78,50 72,52 C75,58 75,65 70,68 C65,72 58,72 55,68 C52,72 48,75 44,73 C40,71 38,65 40,58 C35,62 28,62 25,58 C22,54 22,46 28,42 Z',
+    starNames: [
+      { nameJa: 'カウス・メディア', nameEn: 'Kaus Media', meaning: 'アラビア語＋ラテン語で「弓の中央」' },
+      { nameJa: 'カウス・ボレアリス', nameEn: 'Kaus Borealis', meaning: 'アラビア語＋ラテン語で「弓の北部」', isBrightest: true },
+      { nameJa: 'カウス・アウストラリス', nameEn: 'Kaus Australis', meaning: 'アラビア語＋ラテン語で「弓の南部」' },
+      null, null, null,
+      { nameJa: 'ヌンキ', nameEn: 'Nunki', meaning: 'バビロニア語で「海の星」' },
+      null, null, null, null, null,
+    ],
   },
 
   // ── おとめ座 (Virgo) ─────────────────────────────────────────────────────
@@ -257,6 +347,15 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 9], [9, 10],
     ],
     silhouette: 'M50,12 C55,10 62,12 65,18 C68,24 65,32 60,35 C65,38 68,44 68,50 C68,58 62,65 55,68 C52,72 50,78 50,82 C48,78 46,72 44,68 C38,66 32,60 30,52 C28,44 32,38 38,35 C32,30 28,22 32,18 C36,14 44,12 50,12 Z',
+    starNames: [
+      { nameJa: 'スピカ', nameEn: 'Spica', meaning: 'ラテン語で「麦の穂」。秋の夜空に輝く一等星', isBrightest: true },
+      { nameJa: 'ポリマ', nameEn: 'Porrima', meaning: 'ローマ神話の予言の女神の名' },
+      null,
+      null,
+      null,
+      { nameJa: 'ヴィンデミアトリックス', nameEn: 'Vindemiatrix', meaning: 'ラテン語で「葡萄の収穫者」' },
+      null, null, null, null, null,
+    ],
   },
 
   // ── てんびん座 (Libra) ───────────────────────────────────────────────────
@@ -276,6 +375,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [1, 3], [2, 4],
     ],
     silhouette: 'M50,18 C52,14 58,12 62,16 C66,20 65,28 60,30 C70,30 78,32 80,38 C80,44 72,48 65,46 C68,52 68,60 62,64 C58,66 52,64 50,60 C48,64 42,66 38,64 C32,60 32,52 35,46 C28,48 20,44 20,38 C22,32 30,30 40,30 C35,28 34,20 38,16 C42,12 48,14 50,18 Z',
+    starNames: [
+      { nameJa: 'ズベン・エル・ゲヌビ', nameEn: 'Zubenelgenubi', meaning: 'アラビア語で「蠍の南のはさみ」' },
+      { nameJa: 'ズベン・エッシャマリ', nameEn: 'Zubeneschamali', meaning: 'アラビア語で「蠍の北のはさみ」。わずかに緑がかった星', isBrightest: true },
+      null, null, null, null,
+    ],
   },
 
   // ── かに座 (Cancer) ──────────────────────────────────────────────────────
@@ -293,6 +397,12 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [1, 3], [2, 4],
     ],
     silhouette: 'M50,15 C56,12 62,15 65,22 C68,28 65,35 58,38 C65,40 72,45 72,52 C72,60 65,65 58,65 C62,70 65,78 62,82 C58,84 52,82 50,78 C48,82 42,84 38,82 C35,78 38,70 42,65 C35,65 28,60 28,52 C28,45 35,40 42,38 C35,35 32,28 35,22 C38,15 44,12 50,15 Z',
+    starNames: [
+      { nameJa: 'プレセペ（蜂の巣星団）', nameEn: 'Praesepe M44', meaning: 'ラテン語で「飼い葉おけ」。肉眼でも見える散開星団' },
+      { nameJa: 'アクベンス', nameEn: 'Acubens', meaning: 'アラビア語で「かにのはさみ」', isBrightest: true },
+      { nameJa: 'アル・タルフ', nameEn: 'Al Tarf', meaning: 'アラビア語で「かにの目の先端」' },
+      null, null, null,
+    ],
   },
 
   // ── おおぐま座 (Ursa Major) ──────────────────────────────────────────────
@@ -317,6 +427,16 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [2, 9], [9, 10],
     ],
     silhouette: 'M65,60 C70,55 75,48 72,40 C70,32 62,28 55,30 C58,22 55,15 48,12 C40,10 34,15 32,22 C26,18 18,20 15,28 C12,35 15,42 20,45 C15,50 12,58 15,65 C18,72 26,75 32,72 C28,78 28,85 35,88 C42,90 48,85 50,78 C55,82 62,82 66,78 C70,74 70,66 65,62 Z',
+    starNames: [
+      { nameJa: 'ドゥブ', nameEn: 'Dubhe', meaning: 'アラビア語で「大熊の背中」', isBrightest: true },
+      { nameJa: 'メラク', nameEn: 'Merak', meaning: 'アラビア語で「腰部」' },
+      { nameJa: 'フェクダ', nameEn: 'Phecda', meaning: 'アラビア語で「太股」' },
+      { nameJa: 'メグレズ', nameEn: 'Megrez', meaning: 'アラビア語で「尾の付け根」' },
+      { nameJa: 'アリオト', nameEn: 'Alioth', meaning: 'アラビア語で「黒い馬」' },
+      { nameJa: 'ミザール', nameEn: 'Mizar', meaning: 'アラビア語で「腰布」' },
+      { nameJa: 'アルカイド', nameEn: 'Alkaid', meaning: 'アラビア語で「嘆く娘たちの首長」' },
+      null, null, null, null,
+    ],
   },
 
   // ── こぐま座 (Ursa Minor) ────────────────────────────────────────────────
@@ -335,6 +455,15 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [4, 3],
     ],
     silhouette: 'M50,5 C55,8 60,12 62,18 C65,15 70,18 70,25 C70,32 65,38 60,40 C65,44 68,50 65,56 C62,62 55,64 50,62 C48,68 48,75 50,80 C45,78 42,70 42,62 C38,65 32,62 30,56 C28,50 32,44 38,40 C32,38 28,32 28,25 C28,18 34,15 38,18 C38,12 44,8 50,5 Z',
+    starNames: [
+      { nameJa: 'ポラリス', nameEn: 'Polaris', meaning: 'ラテン語で「北極星」。地球の自転軸が指す星', isBrightest: true },
+      null,
+      null,
+      null,
+      null,
+      { nameJa: 'コカブ', nameEn: 'Kochab', meaning: 'アラビア語で「星」。かつての北極星' },
+      { nameJa: 'フェルカド', nameEn: 'Pherkad', meaning: 'アラビア語で「二頭の小熊のうち薄い方」' },
+    ],
   },
 
   // ── カシオペヤ座 (Cassiopeia) ────────────────────────────────────────────
@@ -352,6 +481,14 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [1, 5], [2, 5],
     ],
     silhouette: 'M50,15 C55,12 62,14 65,20 C68,26 65,34 60,38 C65,42 70,48 68,55 C66,62 58,65 52,62 C55,68 55,75 52,80 C48,75 48,68 50,62 C42,65 34,62 32,55 C30,48 35,42 40,38 C35,34 32,26 35,20 C38,14 45,12 50,15 Z M18,42 C15,38 15,32 20,28 C25,25 32,28 34,34 C30,36 26,40 28,46 C24,46 20,44 18,42 Z M82,38 C80,32 78,26 82,22 C86,20 90,25 90,32 C88,38 84,42 80,44 Z',
+    starNames: [
+      { nameJa: 'カフ', nameEn: 'Caph', meaning: 'アラビア語で「手のひら」' },
+      { nameJa: 'シェダル', nameEn: 'Schedar', meaning: 'アラビア語で「胸」', isBrightest: true },
+      { nameJa: 'ガンマ・カシオペヤ', nameEn: 'Gamma Cas', meaning: '爆発変光星として有名' },
+      { nameJa: 'ルフバ', nameEn: 'Ruchbah', meaning: 'アラビア語で「膝」' },
+      { nameJa: 'セギン', nameEn: 'Segin', meaning: '由来不詳' },
+      null,
+    ],
   },
 
   // ── はくちょう座 (Cygnus) ────────────────────────────────────────────────
@@ -371,6 +508,13 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [5, 3], [4, 6],
     ],
     silhouette: 'M50,8 C53,10 56,14 55,20 C58,18 62,18 65,22 C68,26 65,32 60,35 C70,35 80,38 85,44 C88,50 85,56 80,56 C72,56 65,50 58,46 C56,55 54,65 52,72 C55,75 58,80 55,85 C52,88 48,88 45,85 C42,80 45,75 48,72 C46,65 44,55 42,46 C35,50 28,56 20,56 C15,56 12,50 15,44 C20,38 30,35 40,35 C35,32 32,26 35,22 C38,18 42,18 45,20 C44,14 47,10 50,8 Z',
+    starNames: [
+      { nameJa: 'デネブ', nameEn: 'Deneb', meaning: 'アラビア語で「尾」。夏の大三角の一つ', isBrightest: true },
+      { nameJa: 'サドル', nameEn: 'Sadr', meaning: 'アラビア語で「胸」' },
+      { nameJa: 'アルビレオ', nameEn: 'Albireo', meaning: '美しい二重星（金と青）。由来は諸説あり' },
+      { nameJa: 'ジェナ', nameEn: 'Gienah', meaning: 'アラビア語で「翼」' },
+      null, null, null,
+    ],
   },
 
   // ── わし座 (Aquila) ──────────────────────────────────────────────────────
@@ -393,6 +537,12 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 7], [7, 8],
     ],
     silhouette: 'M50,12 C55,10 60,12 62,18 C65,15 70,18 72,24 C74,30 70,38 65,40 C72,42 78,48 76,55 C74,62 65,65 58,60 C56,68 54,75 50,80 C46,75 44,68 42,60 C35,65 26,62 24,55 C22,48 28,42 35,40 C30,38 26,30 28,24 C30,18 35,15 38,18 C40,12 45,10 50,12 Z',
+    starNames: [
+      { nameJa: 'アルタイル', nameEn: 'Altair', meaning: 'アラビア語で「飛ぶ鷲」。夏の大三角の一つ', isBrightest: true },
+      { nameJa: 'タラゼド', nameEn: 'Tarazed', meaning: 'ペルシャ語で「天秤の梁」' },
+      { nameJa: 'アルシャイン', nameEn: 'Alshain', meaning: 'ペルシャ語で「鷹・鷲」' },
+      null, null, null, null, null, null,
+    ],
   },
 
   // ── こと座 (Lyra) ────────────────────────────────────────────────────────
@@ -413,6 +563,12 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [3, 4],
     ],
     silhouette: 'M50,10 C54,8 58,10 60,15 C62,10 68,8 72,12 C76,16 74,24 68,28 C72,32 74,40 70,46 C66,52 60,54 55,52 C58,58 60,65 58,72 C56,78 52,82 50,84 C48,82 44,78 42,72 C40,65 42,58 45,52 C40,54 34,52 30,46 C26,40 28,32 32,28 C26,24 24,16 28,12 C32,8 38,10 40,15 C42,10 46,8 50,10 Z',
+    starNames: [
+      { nameJa: 'ベガ', nameEn: 'Vega', meaning: 'アラビア語で「急降下する鷲」。夏の大三角の一つ', isBrightest: true },
+      { nameJa: 'エプシロン・ライ', nameEn: 'ε Lyrae', meaning: '有名な二重星（ε¹・ε²）' },
+      null, null, null,
+      { nameJa: 'シェリャク', nameEn: 'Sheliak', meaning: 'アラビア語で「竪琴」' },
+    ],
   },
 
   // ── ヘルクレス座 (Hercules) ──────────────────────────────────────────────
@@ -440,6 +596,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [1, 10], [2, 11],
     ],
     silhouette: 'M50,15 C55,12 60,15 62,20 C65,15 70,16 72,22 C74,28 70,35 65,38 C70,42 75,50 72,58 C70,65 62,68 58,65 C62,70 65,78 62,84 C58,88 52,88 50,85 C48,88 42,88 38,84 C35,78 38,70 42,65 C38,68 30,65 28,58 C25,50 30,42 35,38 C30,35 26,28 28,22 C30,16 35,15 38,20 C40,15 45,12 50,15 Z',
+    starNames: [
+      null,
+      { nameJa: 'コルネフォロス', nameEn: 'Kornephoros', meaning: 'ギリシャ語で「棍棒を持つ者」', isBrightest: true },
+      null, null, null, null, null, null, null, null, null, null,
+    ],
   },
 
   // ── うしかい座 (Boötes) ──────────────────────────────────────────────────
@@ -462,6 +623,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [5, 6],
     ],
     silhouette: 'M50,10 C55,8 62,10 65,18 C68,12 74,12 76,20 C78,28 74,36 68,40 C72,44 74,52 70,58 C66,64 58,66 52,62 C56,68 58,76 55,82 C52,86 48,86 45,82 C42,76 44,68 48,62 C42,66 34,64 30,58 C26,52 28,44 32,40 C26,36 22,28 24,20 C26,12 32,8 38,12 C40,10 45,8 50,10 Z',
+    starNames: [
+      { nameJa: 'アークトゥルス', nameEn: 'Arcturus', meaning: 'ギリシャ語で「熊の番人」。北天最明星', isBrightest: true },
+      { nameJa: 'イザール', nameEn: 'Izar', meaning: 'アラビア語で「帯」。美しい二重星' },
+      null, null, null, null, null, null,
+    ],
   },
 
   // ── ペガスス座 (Pegasus) ─────────────────────────────────────────────────
@@ -481,6 +647,13 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 6], [6, 7], [7, 5], [5, 4], [4, 0],
     ],
     silhouette: 'M8,18 C5,15 5,22 8,26 C5,28 3,35 6,42 C3,45 3,52 8,56 C12,60 18,60 22,56 C28,62 35,65 42,62 C48,68 52,72 55,70 C58,68 58,62 55,58 C62,58 68,55 70,50 C72,45 70,38 65,35 C70,32 72,25 68,20 C64,15 58,15 55,20 C52,15 46,12 40,15 C35,12 28,12 25,18 C22,12 15,12 8,18 Z',
+    starNames: [
+      { nameJa: 'シェアト', nameEn: 'Scheat', meaning: 'アラビア語で「肩」', isBrightest: true },
+      { nameJa: 'マルカブ', nameEn: 'Markab', meaning: 'アラビア語で「馬の鞍」' },
+      { nameJa: 'アルゲニブ', nameEn: 'Algenib', meaning: 'アラビア語で「翼の側面」' },
+      { nameJa: 'アルフェラッツ', nameEn: 'Alpheratz', meaning: 'アラビア語で「馬の臍」。アンドロメダ座と共有' },
+      null, null, null, null,
+    ],
   },
 
   // ── アンドロメダ座 (Andromeda) ───────────────────────────────────────────
@@ -502,6 +675,14 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 7], [7, 8],
     ],
     silhouette: 'M78,50 C82,45 85,38 82,30 C80,22 74,18 68,20 C65,15 60,12 54,14 C48,16 44,22 44,28 C38,24 30,22 24,26 C18,30 16,38 18,45 C14,48 10,54 12,62 C14,70 22,74 28,72 C25,78 26,85 32,88 C38,90 44,86 46,80 C50,84 55,86 60,84 C66,82 68,76 66,70 C72,72 78,70 82,66 C86,62 84,56 78,52 Z',
+    starNames: [
+      { nameJa: 'アルフェラッツ', nameEn: 'Alpheratz', meaning: 'アラビア語で「馬の臍」。ペガスス座と共有', isBrightest: true },
+      null,
+      { nameJa: 'ミラク', nameEn: 'Mirach', meaning: 'アラビア語で「腰帯」' },
+      null,
+      { nameJa: 'アルマク', nameEn: 'Almach', meaning: 'アラビア語で「砂漠の小動物」。美しい二重星' },
+      null, null, null, null,
+    ],
   },
 
   // ── ペルセウス座 (Perseus) ───────────────────────────────────────────────
@@ -527,6 +708,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [6, 8], [7, 9],
     ],
     silhouette: 'M50,5 C54,3 58,6 60,12 C65,10 70,12 72,18 C74,24 70,30 65,33 C70,36 74,44 70,52 C66,60 58,62 52,58 C56,65 58,72 55,78 C52,82 48,82 45,78 C42,72 44,65 48,58 C42,62 34,60 30,52 C26,44 30,36 35,33 C30,30 26,24 28,18 C30,12 35,10 40,12 C42,6 46,3 50,5 Z',
+    starNames: [
+      { nameJa: 'ミルファク', nameEn: 'Mirfak', meaning: 'アラビア語で「肘」', isBrightest: true },
+      { nameJa: 'アルゴル', nameEn: 'Algol', meaning: 'アラビア語で「悪魔の頭」。有名な食連星' },
+      null, null, null, null, null, null, null, null, null,
+    ],
   },
 
   // ── くじら座 (Cetus) ─────────────────────────────────────────────────────
@@ -553,6 +739,12 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [5, 10],
     ],
     silhouette: 'M80,22 C85,18 88,25 85,32 C90,35 90,45 85,50 C80,55 72,56 68,52 C65,58 60,62 55,60 C50,65 45,70 40,68 C35,72 28,70 25,65 C22,60 24,52 28,48 C22,44 18,36 20,28 C22,20 30,16 38,18 C35,12 38,6 45,6 C52,6 56,12 55,18 C58,14 65,12 70,15 C75,18 78,22 80,22 Z',
+    starNames: [
+      { nameJa: 'メンカル', nameEn: 'Menkar', meaning: 'アラビア語で「鼻孔」' },
+      null, null, null, null, null, null, null, null,
+      { nameJa: 'ミラ', nameEn: 'Mira', meaning: 'ラテン語で「驚くべき」。有名な長周期変光星', isBrightest: true },
+      null, null,
+    ],
   },
 
   // ── うみへび座 (Hydra) ───────────────────────────────────────────────────
@@ -576,6 +768,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9],
     ],
     silhouette: 'M10,22 C6,18 5,25 8,30 C5,32 5,40 10,44 C8,48 10,55 15,58 C20,62 28,60 32,55 C35,60 40,65 45,62 C50,65 55,68 60,65 C65,68 70,72 75,68 C80,72 85,70 88,65 C90,58 88,50 83,48 C86,44 86,36 82,32 C78,28 72,28 68,32 C65,28 60,25 55,28 C50,25 44,22 38,25 C35,20 28,18 22,20 Z',
+    starNames: [
+      null, null, null, null,
+      { nameJa: 'アルファルド', nameEn: 'Alphard', meaning: 'アラビア語で「孤独な者」。一帯に明るい星がないため', isBrightest: true },
+      null, null, null, null, null, null, null,
+    ],
   },
 
   // ── へびつかい座 (Ophiuchus) ─────────────────────────────────────────────
@@ -600,6 +797,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [1, 8], [2, 9],
     ],
     silhouette: 'M50,8 C55,6 60,8 62,15 C65,10 70,12 72,18 C74,25 70,32 65,35 C70,40 72,50 68,58 C64,66 56,70 50,68 C44,70 36,66 32,58 C28,50 30,40 35,35 C30,32 26,25 28,18 C30,12 35,10 38,15 C40,8 45,6 50,8 Z',
+    starNames: [
+      { nameJa: 'ラサルハゲ', nameEn: 'Rasalhague', meaning: 'アラビア語で「蛇使いの頭」', isBrightest: true },
+      { nameJa: 'ケバルライ', nameEn: 'Cebalrai', meaning: 'アラビア語で「羊飼いの犬」' },
+      null, null, null, null, null, null, null, null,
+    ],
   },
 
   // ── りゅう座 (Draco) ─────────────────────────────────────────────────────
@@ -626,6 +828,16 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [11, 12], [12, 13],
     ],
     silhouette: 'M55,5 C60,2 68,5 72,12 C76,8 80,12 80,20 C80,28 74,32 68,30 C72,35 72,45 68,52 C64,58 56,62 50,60 C44,58 38,52 35,45 C30,48 22,48 18,42 C14,36 15,28 20,22 C16,18 14,10 20,8 C26,6 32,10 34,16 C36,10 42,6 48,8 Z',
+    starNames: [
+      { nameJa: 'エルタニン', nameEn: 'Eltanin', meaning: 'アラビア語で「龍の頭」', isBrightest: true },
+      { nameJa: 'ラスタバン', nameEn: 'Rastaban', meaning: 'アラビア語で「龍の頭」' },
+      { nameJa: 'グルミウム', nameEn: 'Grumium', meaning: 'アラビア語で「顎」' },
+      null, null, null, null, null,
+      { nameJa: 'アルワイド', nameEn: 'Alwaid', meaning: 'アラビア語で「母親と幼い子たち」' },
+      null, null,
+      { nameJa: 'アルディバ', nameEn: 'Aldhibah', meaning: 'アラビア語で「雌の鬣狐」' },
+      null, null,
+    ],
   },
 
   // ── かんむり座 (Corona Borealis) ─────────────────────────────────────────
@@ -645,6 +857,10 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [1, 0], [0, 7],
     ],
     silhouette: 'M50,15 C56,10 64,12 70,18 C76,14 82,18 82,26 C82,34 76,42 68,46 C72,52 70,60 64,65 C58,70 50,70 44,65 C38,70 30,68 28,62 C25,56 28,48 32,44 C25,40 18,34 18,26 C18,18 24,14 30,18 C36,12 44,10 50,15 Z',
+    starNames: [
+      { nameJa: 'アルフェッカ', nameEn: 'Alphecca', meaning: 'アラビア語で「壊れた器の明るい星」。北の冠の宝石', isBrightest: true },
+      null, null, null, null, null, null, null,
+    ],
   },
 
   // ── ぎょしゃ座 (Auriga) ──────────────────────────────────────────────────
@@ -667,6 +883,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [5, 6],
     ],
     silhouette: 'M50,8 C55,5 62,8 65,15 C70,10 76,12 78,20 C80,28 76,36 70,40 C75,44 78,52 74,60 C70,68 62,72 56,68 C60,74 60,82 56,86 C52,90 48,88 44,84 C40,78 42,70 46,65 C38,68 30,65 26,58 C22,50 26,42 32,38 C26,34 22,26 24,18 C26,10 32,7 38,12 C40,7 45,5 50,8 Z',
+    starNames: [
+      { nameJa: 'カペラ', nameEn: 'Capella', meaning: 'ラテン語で「小さな山羊」。北天第3位の明るさ', isBrightest: true },
+      { nameJa: 'メンカリナン', nameEn: 'Menkalinan', meaning: 'アラビア語で「肩の手綱」' },
+      null, null, null, null, null, null,
+    ],
   },
 
   // ── オリオン座以外のみ表示する省略デフォルトパターン ─────────────────────
@@ -696,6 +917,14 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [7, 8],
     ],
     silhouette: 'M50,12 C56,8 65,10 68,18 C72,12 78,14 80,22 C82,30 78,38 72,42 C76,48 76,58 70,65 C65,70 58,72 52,68 C55,75 56,82 53,88 C50,92 47,90 44,85 C42,78 44,72 48,68 C42,72 35,70 30,65 C24,58 24,48 28,42 C22,38 18,30 20,22 C22,14 28,12 32,18 C35,12 44,8 50,12 Z',
+    starNames: [
+      { nameJa: 'シリウス', nameEn: 'Sirius', meaning: 'ギリシャ語で「燃えるように輝くもの」。全天最明星', isBrightest: true },
+      null, null,
+      { nameJa: 'ウェゼン', nameEn: 'Wezen', meaning: 'アラビア語で「重さ」' },
+      null, null,
+      { nameJa: 'アドハラ', nameEn: 'Adhara', meaning: 'アラビア語で「処女」' },
+      null, null, null,
+    ],
   },
 
   // ── こいぬ座 (Canis Minor) ───────────────────────────────────────────────
@@ -709,6 +938,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 1], [0, 2], [1, 2],
     ],
     silhouette: 'M50,18 C55,14 62,16 65,24 C68,18 74,20 75,28 C76,36 70,44 62,48 C65,54 65,62 60,68 C56,72 50,72 45,68 C40,72 35,70 32,65 C28,58 32,50 38,46 C32,42 28,35 30,26 C32,18 38,15 42,20 C44,16 47,14 50,18 Z',
+    starNames: [
+      { nameJa: 'プロキオン', nameEn: 'Procyon', meaning: 'ギリシャ語で「犬の前に昇る星」', isBrightest: true },
+      { nameJa: 'ゴメイサ', nameEn: 'Gomeisa', meaning: 'アラビア語で「涙目の星」' },
+      null,
+    ],
   },
 
   // ── エリダヌス座 (Eridanus) ──────────────────────────────────────────────
@@ -733,6 +967,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12],
     ],
     silhouette: 'M42,5 C46,3 50,5 52,10 C55,8 60,8 62,14 C64,20 62,28 56,32 C62,35 68,40 68,48 C68,56 62,62 56,62 C58,68 58,75 55,80 C52,85 48,86 45,83 C42,88 38,90 34,87 C30,83 30,76 32,70 C26,72 20,70 17,65 C14,60 15,52 20,48 C16,44 15,36 18,28 C21,20 28,16 34,18 C30,12 32,6 38,5 Z',
+    starNames: [
+      { nameJa: 'クルサ', nameEn: 'Cursa', meaning: 'アラビア語で「椅子の足台」' },
+      null, null, null, null, null, null, null, null, null, null, null,
+      { nameJa: 'アケルナル', nameEn: 'Achernar', meaning: 'アラビア語で「川の端」。南天の明星', isBrightest: true },
+    ],
   },
 
   // ── みなみじゅうじ座 (Crux) ──────────────────────────────────────────────
@@ -748,6 +987,13 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 1], [2, 3], [4, 1],
     ],
     silhouette: 'M50,5 C53,5 56,8 56,12 C60,10 64,12 65,16 C66,20 64,25 60,28 C64,30 68,33 68,38 C68,43 64,47 60,48 C64,50 68,54 68,60 C68,65 64,68 60,68 C58,72 56,78 53,82 C51,85 49,85 47,82 C44,78 42,72 40,68 C36,68 32,65 32,60 C32,54 36,50 40,48 C36,47 32,43 32,38 C32,33 36,30 40,28 C36,25 34,20 35,16 C36,12 40,10 44,12 C44,8 47,5 50,5 Z',
+    starNames: [
+      { nameJa: 'ガクルックス', nameEn: 'Gacrux', meaning: 'ラテン語+略号の混成。縦軸の北端' },
+      { nameJa: 'アクルックス', nameEn: 'Acrux', meaning: 'ラテン語+略号の混成。縦軸の南端', isBrightest: true },
+      { nameJa: 'デルタ・クルシス', nameEn: 'Delta Cru', meaning: '南十字左端' },
+      { nameJa: 'ベクルックス', nameEn: 'Becrux', meaning: 'ラテン語+略号の混成。横軸の明星' },
+      null,
+    ],
   },
 
   // ── ケンタウルス座 (Centaurus) ───────────────────────────────────────────
@@ -776,6 +1022,11 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [9, 12], [12, 13],
     ],
     silhouette: 'M50,12 C56,8 65,10 68,18 C72,12 78,15 80,22 C82,30 78,38 72,42 C78,45 82,52 80,60 C78,68 70,72 65,68 C62,75 60,82 58,88 C55,92 50,90 48,85 C44,88 42,84 40,80 C38,72 42,65 45,60 C40,62 32,60 28,54 C24,48 26,40 30,35 C24,32 18,26 20,18 C22,10 30,8 36,12 C38,7 44,5 50,12 Z',
+    starNames: [
+      { nameJa: 'アルファ・ケンタウリ', nameEn: 'Alpha Centauri', meaning: '太陽系に最も近い恒星系。3つの星から構成', isBrightest: true },
+      { nameJa: 'ハダル', nameEn: 'Hadar', meaning: 'アラビア語で「地面」または「都市」' },
+      null, null, null, null, null, null, null, null, null, null, null, null,
+    ],
   },
 
   // ── さいだん座 (Ara) ─────────────────────────────────────────────────────
@@ -1090,6 +1341,16 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [2, 4], [4, 5],
     ],
     silhouette: 'M50,5 C53,3 56,5 56,10 C60,8 65,10 66,18 C68,25 64,32 58,35 C62,38 65,45 62,52 C60,58 54,62 50,60 C48,66 48,74 50,80 C46,78 42,72 42,65 C38,70 32,70 28,64 C24,58 26,50 30,44 C24,40 18,35 18,28 C18,20 24,14 30,15 C28,10 32,5 38,5 Z',
+    starNames: [
+      { nameJa: 'アルナイル', nameEn: 'Alnair', meaning: 'アラビア語で「明るい者」', isBrightest: true },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ],
   },
 
   // ── みなみのさかな座 (Piscis Austrinus) ─────────────────────────────────
@@ -1107,6 +1368,10 @@ export const CONSTELLATION_ART: Record<string, ConstellationArt> = {
       [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 0],
     ],
     silhouette: 'M50,28 C56,22 66,24 70,32 C75,26 82,28 84,36 C86,44 82,54 75,58 C80,64 80,74 74,80 C68,86 58,86 52,80 C50,86 48,90 44,88 C40,84 40,76 44,70 C38,74 30,73 26,67 C22,60 24,50 30,44 C24,40 20,32 24,24 C28,16 38,14 44,20 Z',
+    starNames: [
+      { nameJa: 'フォーマルハウト', nameEn: 'Fomalhaut', meaning: 'アラビア語で「魚の口」。秋の一等星', isBrightest: true },
+      null, null, null, null, null, null,
+    ],
   },
 
   // ── きょしちょう座 / とびうお座 など省略パターン ─────────────────────────
