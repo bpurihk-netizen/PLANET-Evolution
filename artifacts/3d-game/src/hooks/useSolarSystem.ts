@@ -86,8 +86,10 @@ export interface SolarSystemState {
   // Observation / sketching mode
   obsRotationPaused: boolean;
   obsFlatLight: boolean;
+  showAtmosphere: boolean;
   toggleObsRotation: () => void;
   toggleObsFlatLight: () => void;
+  toggleShowAtmosphere: () => void;
 }
 
 const SAVE_KEY = 'solar_explorer_v2';
@@ -137,6 +139,7 @@ export function useSolarSystem(): SolarSystemState {
   const [moonDetailParentId, setMoonDetailParentId] = useState<string | null>(null);
   const [obsRotationPaused, setObsRotationPaused] = useState(false);
   const [obsFlatLight, setObsFlatLight] = useState(false);
+  const [showAtmosphere, setShowAtmosphere] = useState(true);
 
   const currentSystem = getSystemById(currentSystemId);
   const visitedBodyIds = visitedBySystem[currentSystemId] ?? [];
@@ -267,8 +270,9 @@ export function useSolarSystem(): SolarSystemState {
     setObsFlatLight(false);
   }, []);
 
-  const toggleObsRotation  = useCallback(() => setObsRotationPaused(v => !v), []);
-  const toggleObsFlatLight = useCallback(() => setObsFlatLight(v => !v), []);
+  const toggleObsRotation     = useCallback(() => setObsRotationPaused(v => !v), []);
+  const toggleObsFlatLight    = useCallback(() => setObsFlatLight(v => !v), []);
+  const toggleShowAtmosphere  = useCallback(() => setShowAtmosphere(v => !v), []);
 
   const activateDeiland = useCallback((bodyId: string) => {
     setDeilandBodyId(bodyId);
@@ -342,7 +346,9 @@ export function useSolarSystem(): SolarSystemState {
     endShooter,
     obsRotationPaused,
     obsFlatLight,
+    showAtmosphere,
     toggleObsRotation,
     toggleObsFlatLight,
+    toggleShowAtmosphere,
   };
 }

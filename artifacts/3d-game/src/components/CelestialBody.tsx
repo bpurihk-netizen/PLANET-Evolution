@@ -800,8 +800,10 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
   const fragShader = useMemo(() => getFragShader(body), [body]);
 
   useFrame((_, dt) => {
-    timeRef.current += dt;
-    uniforms.uTime.value = timeRef.current;
+    if (!rotationPaused) {
+      timeRef.current += dt;
+      uniforms.uTime.value = timeRef.current;
+    }
     if (meshRef.current) {
       if (rotationPaused && manualRotationRef) {
         meshRef.current.rotation.y = manualRotationRef.current;

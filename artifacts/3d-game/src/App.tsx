@@ -153,7 +153,7 @@ function SolarExplorerApp() {
         <>
           {/* ── Main 3D solar system canvas ── */}
           <div className="absolute inset-0 z-0">
-            <SolarSystemView state={state} />
+            <SolarSystemView state={state} showAtmosphere={state.showAtmosphere} />
           </div>
 
           {/* ── Navigation HUD (top bar, breadcrumbs, exploration counter) ── */}
@@ -196,6 +196,21 @@ function SolarExplorerApp() {
               >
                 <span className="text-[18px] leading-none">{state.obsFlatLight ? '☀️' : '🌑'}</span>
                 <span className="text-[8px] font-mono leading-none">{state.obsFlatLight ? '均一光' : '影あり'}</span>
+              </button>
+
+              {/* Atmosphere toggle */}
+              <button
+                onClick={state.toggleShowAtmosphere}
+                className={[
+                  'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
+                  state.showAtmosphere
+                    ? 'bg-cyan-500/25 border-cyan-400/55 text-cyan-300'
+                    : 'bg-black/45 border-white/15 text-white/55'
+                ].join(' ')}
+                title={state.showAtmosphere ? '大気圏・コロナを非表示' : '大気圏・コロナを表示'}
+              >
+                <span className="text-[18px] leading-none">🌫</span>
+                <span className="text-[8px] font-mono leading-none">{state.showAtmosphere ? '大気あり' : '大気なし'}</span>
               </button>
             </div>
           )}

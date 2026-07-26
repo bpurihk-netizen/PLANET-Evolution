@@ -547,9 +547,8 @@ const BADGE_BG: Record<FlareClass, string> = {
 };
 
 // ── Exported canvas component ────────────────────────────────────────────────
-export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }) => {
+export const SolarSystemView: React.FC<{ state: SolarSystemState; showAtmosphere?: boolean }> = ({ state, showAtmosphere = true }) => {
   const weather          = useNoaaSpaceWeather();
-  const [showAtmosphere, setShowAtmosphere] = useState(true);
   const isSun = state.viewMode === 'detail' && state.currentSystem.bodies[0]?.id === 'sun'
                 && state.focusBodyId === 'sun';
 
@@ -576,23 +575,6 @@ export const SolarSystemView: React.FC<{ state: SolarSystemState }> = ({ state }
           />
         )}
       </Canvas>
-
-      {/* ── 大気圏 ON/OFF トグル ── */}
-      <button
-        onClick={() => setShowAtmosphere(v => !v)}
-        className="absolute top-3 right-3 z-30 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border backdrop-blur-md transition-all"
-        style={{
-          background: showAtmosphere ? 'rgba(56,189,248,0.15)' : 'rgba(30,30,40,0.55)',
-          borderColor: showAtmosphere ? 'rgba(56,189,248,0.45)' : 'rgba(255,255,255,0.12)',
-          color: showAtmosphere ? '#7dd3fc' : 'rgba(255,255,255,0.35)',
-        }}
-        title={showAtmosphere ? '大気圏・コロナを非表示' : '大気圏・コロナを表示'}
-      >
-        <span className="text-base leading-none">🌫</span>
-        <span className="text-[11px] font-mono tracking-wide">
-          {showAtmosphere ? '大気 ON' : '大気 OFF'}
-        </span>
-      </button>
 
       {/* ── NOAA Solar Activity Badge (sun detail view only) ── */}
       {isSun && !weather.loading && (
