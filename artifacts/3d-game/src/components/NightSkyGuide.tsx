@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronLeft, Moon, Star, Telescope, Clock, ArrowUp, ExternalLink, CalendarDays } from 'lucide-react';
+import { ChevronLeft, Moon, Star, Telescope, Clock, ArrowUp, ExternalLink, CalendarDays, MapPin } from 'lucide-react';
 import { CONSTELLATIONS } from '../data/constellations';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import {
@@ -481,6 +481,129 @@ function getSeasonLabel(date: Date): string {
   return '冬';
 }
 
+// ── Location Presets ──────────────────────────────────────────────────────────
+interface LocationPreset {
+  id: string;
+  nameJa: string;
+  flag: string;
+  latDeg: number;
+  latLabel: string;   // e.g. "北緯35°"
+  circumpolarNote: string; // label for circumpolar section
+}
+
+const LOCATION_PRESETS: LocationPreset[] = [
+  {
+    id: 'japan',
+    nameJa: '日本',
+    flag: '🇯🇵',
+    latDeg: 35,
+    latLabel: '北緯35°',
+    circumpolarNote: '北緯35°以上でつねに地平線上',
+  },
+  {
+    id: 'nordic',
+    nameJa: '北欧',
+    flag: '🇸🇪',
+    latDeg: 60,
+    latLabel: '北緯60°',
+    circumpolarNote: '北緯60°以上でつねに地平線上',
+  },
+  {
+    id: 'uk',
+    nameJa: 'イギリス',
+    flag: '🇬🇧',
+    latDeg: 52,
+    latLabel: '北緯52°',
+    circumpolarNote: '北緯52°以上でつねに地平線上',
+  },
+  {
+    id: 'hawaii',
+    nameJa: 'ハワイ',
+    flag: '🌺',
+    latDeg: 21,
+    latLabel: '北緯21°',
+    circumpolarNote: '北緯21°以上でつねに地平線上',
+  },
+  {
+    id: 'equator',
+    nameJa: '赤道',
+    flag: '🌍',
+    latDeg: 0,
+    latLabel: '赤道（0°）',
+    circumpolarNote: '赤道では周極星座なし',
+  },
+  {
+    id: 'australia',
+    nameJa: 'オーストラリア',
+    flag: '🇦🇺',
+    latDeg: -33,
+    latLabel: '南緯33°',
+    circumpolarNote: '南緯33°以南でつねに地平線上',
+  },
+];
+
+// ── Location Selector ─────────────────────────────────────────────────────────
+interface LocationSelectorProps {
+  selected: LocationPreset;
+  onSelect: (preset: LocationPreset) => void;
+}
+
+const LocationSelector: React.FC<LocationSelectorProps> = ({ selected, onSelect }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      {/* Trigger button */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3.5 py-2.5 bg-violet-950/50 border border-violet-500/30 rounded-2xl active:bg-violet-900/50 min-h-[48px]"
+      >
+        <MapPin size={14} className="text-violet-300 shrink-0" />
+        <div className="flex-1 min-w-0 text-left">
+          <div className="text-[10px] text-violet-300/60 font-bold tracking-widest uppercase">観察地点</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-base leading-none">{selected.flag}</span>
+            <span className="text-white/90 font-bold text-sm">{selected.nameJa}</span>
+            <span className="text-violet-300/60 text-[10px] font-mono">({selected.latLabel})</span>
+          </div>
+        </div>
+        <ChevronLeft
+          size={14}
+          className={cn('text-white/30 transition-transform shrink-0', open ? 'rotate-90' : '-rotate-90')}
+        />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="mt-1.5 rounded-2xl border border-violet-500/25 bg-[#0a0515]/95 backdrop-blur-lg overflow-hidden shadow-xl z-10 relative">
+          {LOCATION_PRESETS.map(preset => {
+            const isSelected = preset.id === selected.id;
+            return (
+              <button
+                key={preset.id}
+                onClick={() => { onSelect(preset); setOpen(false); }}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5 min-h-[52px] border-b border-white/5 last:border-0',
+                  isSelected ? 'bg-violet-900/40' : 'bg-transparent',
+                )}
+              >
+                <span className="text-xl leading-none shrink-0">{preset.flag}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white/90 font-bold text-sm">{preset.nameJa}</div>
+                  <div className="text-white/40 text-[10px] font-mono">{preset.latLabel}</div>
+                </div>
+                {isSelected && (
+                  <div className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Main Component ────────────────────────────────────────────────────────────
 interface NightSkyGuideProps {
   onExit: () => void;
@@ -495,11 +618,18 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
 }) => {
   const today = useMemo(() => new Date(), []);
   const [activeTab, setActiveTab] = useState<Tab>('tonight');
+  const [location, setLocation] = useState<LocationPreset>(LOCATION_PRESETS[0]);
 
-  const result = useMemo(() => computeNightSky(CONSTELLATIONS, today), [today]);
+  const result = useMemo(
+    () => computeNightSky(CONSTELLATIONS, today, location.latDeg),
+    [today, location.latDeg],
+  );
   const moon = useMemo(() => computeMoonPhase(today), [today]);
   const planets = useMemo(() => computePlanetsTonight(today), [today]);
-  const annualCalendar = useMemo(() => computeAnnualCalendar(CONSTELLATIONS, today.getFullYear()), [today]);
+  const annualCalendar = useMemo(
+    () => computeAnnualCalendar(CONSTELLATIONS, today.getFullYear(), location.latDeg),
+    [today, location.latDeg],
+  );
 
   const season = getSeasonLabel(today);
   const currentMonth = today.getMonth() + 1;
@@ -577,12 +707,15 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
         {/* ══════════ TONIGHT TAB ══════════ */}
         {activeTab === 'tonight' && (
           <div className="space-y-5">
+            {/* Location selector */}
+            <LocationSelector selected={location} onSelect={setLocation} />
+
             {/* Season context bar */}
             <div className="px-4 py-2.5 bg-indigo-950/50 border border-indigo-500/20 rounded-2xl">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="text-xs text-indigo-200/70 leading-relaxed">
                   <span className="text-indigo-300 font-bold">{season}の夜空</span>
-                  {' '}· 日本全国（北緯35°）基準
+                  {' '}·{' '}{location.flag} {location.nameJa}（{location.latLabel}）
                   {' '}· 日没後〜夜明け前の観察に最適な時間帯
                 </div>
                 {linkedTonight.length > 0 && (
@@ -650,7 +783,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <h2 className="text-white/80 text-sm font-bold">周極星座（年中見える）</h2>
-                  <span className="text-white/30 text-[10px]">北緯35°以上でつねに地平線上</span>
+                  <span className="text-white/30 text-[10px]">{location.circumpolarNote}</span>
                 </div>
                 <div className="space-y-1.5">
                   {result.circumpolar.map(entry => (
@@ -717,7 +850,7 @@ export const NightSkyGuide: React.FC<NightSkyGuideProps> = ({
             {/* Footer note */}
             <div className="bg-slate-900/40 border border-white/6 rounded-2xl px-4 py-3">
               <p className="text-white/35 text-[10px] leading-relaxed text-center">
-                ※ 見ごろ計算は日本（北緯35°）を基準に、各月15日の午前0時で算出。
+                ※ 見ごろ計算は {location.flag} {location.nameJa}（{location.latLabel}）を基準に、各月15日の午前0時で算出。
                 南中時刻は現地の天候・地形により異なります。
               </p>
             </div>

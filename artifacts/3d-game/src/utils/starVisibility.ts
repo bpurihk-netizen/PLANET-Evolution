@@ -56,15 +56,20 @@ export function getCulmAltitudeDeg(decDeg: number, latDeg = JAPAN_LAT): number {
   return 90 - Math.abs(latDeg - decDeg);
 }
 
-/** Is this constellation above the horizon at Japan? */
+/** Is this constellation above the horizon at the given latitude?
+ *  Upper culmination altitude = 90 - |lat - dec|.
+ *  Star is ever above horizon when that altitude > 0, i.e. |lat - dec| < 90. */
 export function isAboveHorizon(decDeg: number, latDeg = JAPAN_LAT): boolean {
-  // A star rises if its upper culmination altitude > 0, i.e. dec > lat - 90
-  return decDeg > latDeg - 90;
+  return Math.abs(latDeg - decDeg) < 90;
 }
 
-/** Is this constellation circumpolar (never sets) at Japan? */
+/** Is this constellation circumpolar (never sets) at the given latitude?
+ *  Northern hemisphere (lat > 0): circumpolar when dec > 90 - lat
+ *  Southern hemisphere (lat < 0): circumpolar when dec < -90 - lat (i.e. close to south pole)
+ *  Unified: sign(lat) × dec > 90 - |lat|   (at equator lat=0: 0 > 90, always false) */
 export function isCircumpolar(decDeg: number, latDeg = JAPAN_LAT): boolean {
-  return decDeg > 90 - latDeg; // dec > 55°
+  if (latDeg === 0) return false; // no circumpolar stars at equator
+  return Math.sign(latDeg) * decDeg > 90 - Math.abs(latDeg);
 }
 
 /** Hour angle of constellation at midnight (degrees).
@@ -443,6 +448,7 @@ export function computeMonthlyTop3(
 export function computeAnnualCalendar(
   constellations: Constellation[],
   year = new Date().getFullYear(),
+  latDeg = JAPAN_LAT,
 ): MonthlyCalendarEntry[] {
   return Array.from({ length: 12 }, (_, i) => {
     const month = i + 1;
@@ -450,7 +456,7 @@ export function computeAnnualCalendar(
       month,
       monthJa: MONTH_LABELS[i],
       seasonJa: getSeasonJa(month),
-      top3: computeMonthlyTop3(constellations, month, year),
+      top3: computeMonthlyTop3(constellations, month, year, latDeg),
       events: MONTHLY_EVENTS[month] ?? [],
     };
   });
@@ -480,22 +486,23 @@ export interface NightSkyResult {
 export function computeNightSky(
   constellations: Constellation[],
   date: Date = new Date(),
+  latDeg = JAPAN_LAT,
 ): NightSkyResult {
   const lstDeg = getMidnightLSTDeg(date);
   const sunRADeg = getSunRADeg(date);
 
   const scored: VisibleConstellation[] = constellations
     .map(con => {
-      const score = computeVisibilityScore(con, lstDeg);
+      const score = computeVisibilityScore(con, lstDeg, latDeg);
       const transitHours = getTransitHoursFromMidnight(con.raDeg, lstDeg);
       return {
         constellation: con,
         score,
         transitHours,
         transitJST: formatTransitJST(transitHours),
-        culminAlt: Math.round(getCulmAltitudeDeg(con.decDeg)),
+        culminAlt: Math.round(getCulmAltitudeDeg(con.decDeg, latDeg)),
         isPrimeTime: isPrimeTime(transitHours),
-        isCircumpolar: isCircumpolar(con.decDeg),
+        isCircumpolar: isCircumpolar(con.decDeg, latDeg),
         easyRating: getEasyRating(con),
       };
     })
