@@ -4,7 +4,7 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
-import { CelestialBodyMesh, AsteroidBeltRing, CometTail } from './CelestialBody';
+import { CelestialBodyMesh, AsteroidBeltRing, CometTail, SatelliteOrbitPath } from './CelestialBody';
 import { SolarFlares } from './SolarFlares';
 import { useNoaaSpaceWeather, FlareClass } from '../hooks/useNoaaSpaceWeather';
 
@@ -520,17 +520,27 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel, showAtmosphere }) =
       {state.viewMode === 'detail' && !state.moonDetailMode && focusBodies.length > 0 && focusBodies.map((child, i) => {
         const moonAngle = (i / focusBodies.length) * Math.PI * 2;
         const moonR = (state.focusBody!.displayRadius) * 4 * (1.8 + i * 0.6);
+        const isSatellite = child.type === 'STATION' || child.type === 'SATELLITE';
         return (
-          <MoonOrbit
-            key={child.id}
-            moon={child}
-            orbitRadius={moonR}
-            initialAngle={moonAngle}
-            onClick={() => state.enterMoonDetail(child.id, state.focusBodyId!)}
-            isSelected={state.selectedBodyId === child.id}
-            showAtmosphere={showAtmosphere}
-            bodyViewMode={state.bodyViewModes?.[child.id]}
-          />
+          <React.Fragment key={child.id}>
+            {/* Orbit ring for artificial satellites / space stations */}
+            {isSatellite && (
+              <SatelliteOrbitPath
+                orbitRadius={moonR}
+                color={child.id === 'iss' ? '#88CCFF' : '#AABBCC'}
+                opacity={0.22}
+              />
+            )}
+            <MoonOrbit
+              moon={child}
+              orbitRadius={moonR}
+              initialAngle={moonAngle}
+              onClick={() => state.enterMoonDetail(child.id, state.focusBodyId!)}
+              isSelected={state.selectedBodyId === child.id}
+              showAtmosphere={showAtmosphere}
+              bodyViewMode={state.bodyViewModes?.[child.id]}
+            />
+          </React.Fragment>
         );
       })}
 

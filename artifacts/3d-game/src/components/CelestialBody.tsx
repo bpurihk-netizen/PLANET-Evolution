@@ -1202,6 +1202,11 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
 // ── Public dispatcher: real texture when available, shader fallback ────────
 export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef, showAtmosphere = true, bodyViewMode }) => {
   const r = radius ?? body.displayRadius;
+
+  // Custom 3D models for artificial objects
+  if (body.id === 'iss')    return <ISSModel    r={r} onClick={onClick} />;
+  if (body.id === 'hubble') return <HubbleMesh  r={r} onClick={onClick} />;
+
   // Surface/infrared mode overrides always use the shader (bypass texture)
   const forceShader = (body.id === 'venus' && bodyViewMode === 'surface') ||
                       (body.id === 'titan' && bodyViewMode === 'infrared');
@@ -1209,6 +1214,199 @@ export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = 
     return <TexturedPlanetMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} showAtmosphere={showAtmosphere} />;
   }
   return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} showAtmosphere={showAtmosphere} bodyViewMode={bodyViewMode} />;
+};
+
+// ── ISS 3D model — realistic truss + solar panels + modules ──────────────
+interface StationModelProps { r: number; onClick?: () => void }
+
+const ISSModel: React.FC<StationModelProps> = ({ r, onClick }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const s = r * 3; // base scale unit
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.z = state.clock.elapsedTime * 0.2;
+    }
+  });
+
+  const metalGray   = '#C8C4B8';
+  const moduleWhite = '#E8E4D8';
+  const panelBlue   = '#1A3A6A';
+  const panelEmit   = '#0D2040';
+
+  return (
+    <group ref={groupRef} onClick={onClick}>
+      {/* ITS — Integrated Truss Segment (horizontal X axis) */}
+      <mesh>
+        <boxGeometry args={[s * 16, s * 0.28, s * 0.28]} />
+        <meshStandardMaterial color={metalGray} metalness={0.85} roughness={0.15} />
+      </mesh>
+
+      {/* 4 Solar Array Wing pairs at -6, -3, +3, +6 */}
+      {([-6, -3, 3, 6] as const).map((xp, i) => (
+        <group key={i} position={[xp * s, 0, 0]}>
+          {/* Upper panel */}
+          <mesh position={[0, s * 2.6, 0]}>
+            <boxGeometry args={[s * 2.7, s * 0.042, s * 1.9]} />
+            <meshStandardMaterial color={panelBlue} emissive={panelEmit} emissiveIntensity={0.7} metalness={0.2} roughness={0.8} />
+          </mesh>
+          {/* Lower panel */}
+          <mesh position={[0, -s * 2.6, 0]}>
+            <boxGeometry args={[s * 2.7, s * 0.042, s * 1.9]} />
+            <meshStandardMaterial color={panelBlue} emissive={panelEmit} emissiveIntensity={0.7} metalness={0.2} roughness={0.8} />
+          </mesh>
+          {/* Mast */}
+          <mesh>
+            <boxGeometry args={[s * 0.11, s * 5.4, s * 0.11]} />
+            <meshStandardMaterial color={metalGray} metalness={0.9} roughness={0.1} />
+          </mesh>
+          {/* Beta gimbal joint */}
+          <mesh>
+            <boxGeometry args={[s * 0.4, s * 0.4, s * 0.4]} />
+            <meshStandardMaterial color={metalGray} metalness={0.7} roughness={0.3} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* US Lab / Destiny module (Z direction) */}
+      <mesh position={[0, 0, s * 1.8]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.62, s * 0.62, s * 3.5, 12]} />
+        <meshStandardMaterial color={moduleWhite} metalness={0.45} roughness={0.5} />
+      </mesh>
+      {/* Node 1 (Unity) */}
+      <mesh position={[0, 0, -s * 0.8]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.68, s * 0.68, s * 2.0, 8]} />
+        <meshStandardMaterial color={moduleWhite} metalness={0.4} roughness={0.55} />
+      </mesh>
+      {/* Russian FGB / Zvezda service module */}
+      <mesh position={[0, 0, -s * 3.2]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.55, s * 0.55, s * 3.0, 8]} />
+        <meshStandardMaterial color="#C0B8A8" metalness={0.3} roughness={0.65} />
+      </mesh>
+      {/* Columbus / Kibo experiment module (side) */}
+      <mesh position={[0, 0, s * 3.5]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.5, s * 0.5, s * 2.0, 8]} />
+        <meshStandardMaterial color={moduleWhite} metalness={0.4} roughness={0.6} />
+      </mesh>
+      {/* Cupola dome */}
+      <mesh position={[0, -s * 0.85, s * 1.2]}>
+        <sphereGeometry args={[s * 0.38, 8, 4, 0, Math.PI * 2, 0, Math.PI * 0.6]} />
+        <meshStandardMaterial color={moduleWhite} metalness={0.6} roughness={0.25} transparent opacity={0.88} />
+      </mesh>
+      {/* Central truss node box */}
+      <mesh>
+        <boxGeometry args={[s * 0.7, s * 0.7, s * 0.7]} />
+        <meshStandardMaterial color={metalGray} metalness={0.75} roughness={0.25} />
+      </mesh>
+      {/* Radiators (2 flat panels on truss) */}
+      {[-2.5, 2.5].map((xp, i) => (
+        <mesh key={i} position={[xp * s, s * 0.5, 0]} rotation={[0, 0, Math.PI * 0.05]}>
+          <boxGeometry args={[s * 2.0, s * 0.04, s * 0.9]} />
+          <meshStandardMaterial color="#DDDDCC" metalness={0.85} roughness={0.1} />
+        </mesh>
+      ))}
+      <pointLight color="#FFFFEE" intensity={2} distance={s * 20} />
+    </group>
+  );
+};
+
+// ── Hubble Space Telescope 3D model ──────────────────────────────────────
+const HubbleMesh: React.FC<StationModelProps> = ({ r, onClick }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const s = r * 3;
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.z = state.clock.elapsedTime * 0.12;
+    }
+  });
+
+  return (
+    <group ref={groupRef} onClick={onClick}>
+      {/* OTA — Optical Telescope Assembly (main tube, Z axis) */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.52, s * 0.52, s * 5.5, 16]} />
+        <meshStandardMaterial color="#8899AA" metalness={0.72} roughness={0.28} />
+      </mesh>
+      {/* Forward shell (aperture end) */}
+      <mesh position={[0, 0, s * 2.9]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.56, s * 0.52, s * 0.45, 16]} />
+        <meshStandardMaterial color="#6677AA" metalness={0.65} roughness={0.2} />
+      </mesh>
+      {/* Aperture ring */}
+      <mesh position={[0, 0, s * 3.15]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[s * 0.56, s * 0.06, 8, 24]} />
+        <meshStandardMaterial color="#334466" metalness={0.9} roughness={0.1} />
+      </mesh>
+      {/* Aft shroud (electronics) */}
+      <mesh position={[0, 0, -s * 2.85]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.46, s * 0.52, s * 0.6, 12]} />
+        <meshStandardMaterial color="#778899" metalness={0.65} roughness={0.3} />
+      </mesh>
+
+      {/* Solar panel wings (both sides) */}
+      {[-1, 1].map((sign, i) => (
+        <group key={i} position={[sign * s * 2.4, 0, 0]}>
+          <mesh>
+            <boxGeometry args={[s * 3.6, s * 0.038, s * 1.55]} />
+            <meshStandardMaterial color="#1A3A6A" emissive="#0D2040" emissiveIntensity={0.75} metalness={0.2} roughness={0.8} />
+          </mesh>
+          {/* Wing support arm */}
+          <mesh position={[-sign * s * 1.2, 0, 0]}>
+            <boxGeometry args={[s * 1.0, s * 0.1, s * 0.1]} />
+            <meshStandardMaterial color="#8899AA" metalness={0.8} roughness={0.2} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* High-gain antenna (one at aft) */}
+      <mesh position={[s * 0.6, s * 0.7, -s * 2.6]} rotation={[-0.4, 0.3, 0]}>
+        <sphereGeometry args={[s * 0.28, 8, 4, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+        <meshStandardMaterial color="#CCDDEE" metalness={0.85} roughness={0.1} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Antenna mast */}
+      <mesh position={[s * 0.6, s * 0.35, -s * 2.4]} rotation={[-0.4, 0.3, 0]}>
+        <cylinderGeometry args={[s * 0.04, s * 0.04, s * 0.75, 6]} />
+        <meshStandardMaterial color="#CCCCCC" metalness={0.9} roughness={0.1} />
+      </mesh>
+
+      {/* Equipment bay cylinder (mid-section bulge) */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[s * 0.56, s * 0.56, s * 1.5, 12]} />
+        <meshStandardMaterial color="#8899AA" metalness={0.7} roughness={0.35} />
+      </mesh>
+
+      <pointLight color="#EEEEFF" intensity={2} distance={s * 18} />
+    </group>
+  );
+};
+
+// ── Satellite orbit path ring ──────────────────────────────────────────────
+export const SatelliteOrbitPath: React.FC<{ orbitRadius: number; color?: string; opacity?: number }> = ({
+  orbitRadius, color = '#88AABB', opacity = 0.25,
+}) => {
+  // Build as lineSegments (pairs of points) to avoid <line> / SVG conflict
+  const geo = useMemo(() => {
+    const pts: number[] = [];
+    const N = 128;
+    for (let i = 0; i < N; i++) {
+      const a0 = (i       / N) * Math.PI * 2;
+      const a1 = ((i + 1) / N) * Math.PI * 2;
+      pts.push(
+        Math.cos(a0) * orbitRadius, 0, Math.sin(a0) * orbitRadius,
+        Math.cos(a1) * orbitRadius, 0, Math.sin(a1) * orbitRadius,
+      );
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+    return g;
+  }, [orbitRadius]);
+
+  return (
+    <lineSegments geometry={geo}>
+      <lineBasicMaterial color={color} transparent opacity={opacity} />
+    </lineSegments>
+  );
 };
 
 // ── Saturn-style rings ─────────────────────────────────────────────────────
