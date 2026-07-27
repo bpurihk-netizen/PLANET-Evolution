@@ -16,6 +16,9 @@ import { WarpOverlay } from './components/WarpOverlay';
 import { StampRallyBook } from './components/StampRallyBook';
 import { CosmicLevelPanel } from './components/CosmicLevelPanel';
 import { CosmicImageView } from './components/CosmicImageView';
+import { LargeScaleStructureView } from './components/LargeScaleStructureView';
+import { CosmicLevelView } from './components/CosmicLevelView';
+import { GalaxyView } from './components/GalaxyView';
 import {
   BODY_STAMP_TRIGGERS,
   SYSTEM_STAMP_TRIGGERS,
@@ -167,18 +170,38 @@ function SolarExplorerApp() {
         /* ── Deiland surface mode — full replacement (frees WebGL context) ── */
         <Deiland state={state} />
       ) : state.cosmicLevel !== 'system' ? (
-        /* ── Cosmic hierarchy view (NASA image cards) ── */
+        /* ── Cosmic hierarchy 3D views ── */
         <>
-          {/* Left-side level panel */}
-          <CosmicLevelPanel
-            state={state}
-            collapsed={cosmicPanelCollapsed}
-            onToggle={() => setCosmicPanelCollapsed(v => !v)}
-          />
-          {/* Main image-based content */}
+          {/* 3D view layer — switches by cosmicLevel */}
           <div className="absolute inset-0 z-0">
-            <CosmicImageView state={state} panelCollapsed={cosmicPanelCollapsed} />
+            {state.cosmicLevel === 'lss' && (
+              <LargeScaleStructureView state={state} />
+            )}
+            {state.cosmicLevel === 'supercluster' && (
+              <CosmicLevelView state={state} level="supercluster" />
+            )}
+            {state.cosmicLevel === 'cluster' && (
+              <CosmicLevelView state={state} level="cluster" />
+            )}
+            {state.cosmicLevel === 'group' && (
+              <CosmicLevelView state={state} level="group" />
+            )}
+            {state.cosmicLevel === 'galaxy' && (
+              <GalaxyView state={state} />
+            )}
           </div>
+
+          {/* Left-side level panel — overlay on the 3D canvas */}
+          <div className="absolute inset-0 z-10 pointer-events-none">
+            <div className="pointer-events-auto w-fit">
+              <CosmicLevelPanel
+                state={state}
+                collapsed={cosmicPanelCollapsed}
+                onToggle={() => setCosmicPanelCollapsed(v => !v)}
+              />
+            </div>
+          </div>
+
           {/* Star-system warp can still trigger from galaxy level */}
           <WarpOverlay
             isActive={state.isWarping}

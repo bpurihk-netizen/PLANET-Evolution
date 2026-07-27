@@ -1221,7 +1221,7 @@ interface StationModelProps { r: number; onClick?: () => void }
 
 const ISSModel: React.FC<StationModelProps> = ({ r, onClick }) => {
   const groupRef = useRef<THREE.Group>(null);
-  const s = r * 3; // base scale unit
+  const s = r * 0.3; // base scale unit (reduced: model is ~16s wide, should fit within r)
 
   useFrame((state) => {
     if (groupRef.current) {
@@ -1313,7 +1313,7 @@ const ISSModel: React.FC<StationModelProps> = ({ r, onClick }) => {
 // ── Hubble Space Telescope 3D model ──────────────────────────────────────
 const HubbleMesh: React.FC<StationModelProps> = ({ r, onClick }) => {
   const groupRef = useRef<THREE.Group>(null);
-  const s = r * 3;
+  const s = r * 0.3;
 
   useFrame((state) => {
     if (groupRef.current) {
