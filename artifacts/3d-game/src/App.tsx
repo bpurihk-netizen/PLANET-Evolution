@@ -56,6 +56,7 @@ function SolarExplorerApp() {
   const [toastIds, setToastIds] = useState<string[]>([]);
   const [infoPanelCollapsed, setInfoPanelCollapsed] = useState(false);
   const [cosmicPanelCollapsed, setCosmicPanelCollapsed] = useState(false);
+  const [showCosmicPanel, setShowCosmicPanel] = useState(false);
   const prevVisitedRef = useRef<string[]>([]);
   const prevSystemRef = useRef<string>(state.currentSystemId);
 
@@ -193,12 +194,14 @@ function SolarExplorerApp() {
             <SolarSystemView state={state} showAtmosphere={state.showAtmosphere} />
           </div>
 
-          {/* ── Cosmic level panel (left side, always available for hierarchy access) ── */}
-          <CosmicLevelPanel
-            state={state}
-            collapsed={cosmicPanelCollapsed}
-            onToggle={() => setCosmicPanelCollapsed(v => !v)}
-          />
+          {/* ── Cosmic level panel (shown only when 階層 button is active) ── */}
+          {showCosmicPanel && (
+            <CosmicLevelPanel
+              state={state}
+              collapsed={cosmicPanelCollapsed}
+              onToggle={() => setCosmicPanelCollapsed(v => !v)}
+            />
+          )}
 
           {/* ── Navigation HUD (top bar, breadcrumbs, exploration counter) ── */}
           <div className="absolute inset-0 z-10 pointer-events-none">
@@ -209,55 +212,73 @@ function SolarExplorerApp() {
             />
           </div>
 
-          {/* ── Observation toolbar (detail mode only) — sits below top HUD bar, clear of InfoPanel ── */}
-          {state.viewMode === 'detail' && state.selectedBody && (
-            <div className="absolute right-3 top-[108px] z-[25] pointer-events-auto flex flex-col gap-2">
-              {/* Rotation toggle */}
-              <button
-                onClick={state.toggleObsRotation}
-                className={[
-                  'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
-                  state.obsRotationPaused
-                    ? 'bg-amber-500/25 border-amber-400/55 text-amber-300'
-                    : 'bg-black/45 border-white/15 text-white/55'
-                ].join(' ')}
-                title={state.obsRotationPaused ? '回転を再開' : '回転を停止（ドラッグで手動回転）'}
-              >
-                <span className="text-[18px] leading-none">{state.obsRotationPaused ? '⏸' : '🔄'}</span>
-                <span className="text-[8px] font-mono leading-none">{state.obsRotationPaused ? '停止中' : '回転'}</span>
-              </button>
+          {/* ── Right toolbar: observation buttons (detail only) + 階層 button (always) ── */}
+          <div className="absolute right-3 top-[108px] z-[25] pointer-events-auto flex flex-col gap-2">
+            {/* Observation buttons — detail mode only */}
+            {state.viewMode === 'detail' && state.selectedBody && (
+              <>
+                {/* Rotation toggle */}
+                <button
+                  onClick={state.toggleObsRotation}
+                  className={[
+                    'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
+                    state.obsRotationPaused
+                      ? 'bg-amber-500/25 border-amber-400/55 text-amber-300'
+                      : 'bg-black/45 border-white/15 text-white/55'
+                  ].join(' ')}
+                  title={state.obsRotationPaused ? '回転を再開' : '回転を停止（ドラッグで手動回転）'}
+                >
+                  <span className="text-[18px] leading-none">{state.obsRotationPaused ? '⏸' : '🔄'}</span>
+                  <span className="text-[8px] font-mono leading-none">{state.obsRotationPaused ? '停止中' : '回転'}</span>
+                </button>
 
-              {/* Flat light toggle */}
-              <button
-                onClick={state.toggleObsFlatLight}
-                className={[
-                  'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
-                  state.obsFlatLight
-                    ? 'bg-sky-500/25 border-sky-400/55 text-sky-300'
-                    : 'bg-black/45 border-white/15 text-white/55'
-                ].join(' ')}
-                title={state.obsFlatLight ? '影を表示' : '均一光（影なし）'}
-              >
-                <span className="text-[18px] leading-none">{state.obsFlatLight ? '☀️' : '🌑'}</span>
-                <span className="text-[8px] font-mono leading-none">{state.obsFlatLight ? '均一光' : '影あり'}</span>
-              </button>
+                {/* Flat light toggle */}
+                <button
+                  onClick={state.toggleObsFlatLight}
+                  className={[
+                    'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
+                    state.obsFlatLight
+                      ? 'bg-sky-500/25 border-sky-400/55 text-sky-300'
+                      : 'bg-black/45 border-white/15 text-white/55'
+                  ].join(' ')}
+                  title={state.obsFlatLight ? '影を表示' : '均一光（影なし）'}
+                >
+                  <span className="text-[18px] leading-none">{state.obsFlatLight ? '☀️' : '🌑'}</span>
+                  <span className="text-[8px] font-mono leading-none">{state.obsFlatLight ? '均一光' : '影あり'}</span>
+                </button>
 
-              {/* Atmosphere toggle */}
-              <button
-                onClick={state.toggleShowAtmosphere}
-                className={[
-                  'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
-                  state.showAtmosphere
-                    ? 'bg-cyan-500/25 border-cyan-400/55 text-cyan-300'
-                    : 'bg-black/45 border-white/15 text-white/55'
-                ].join(' ')}
-                title={state.showAtmosphere ? '大気圏・コロナを非表示' : '大気圏・コロナを表示'}
-              >
-                <span className="text-[18px] leading-none">🌫</span>
-                <span className="text-[8px] font-mono leading-none">{state.showAtmosphere ? '大気あり' : '大気なし'}</span>
-              </button>
-            </div>
-          )}
+                {/* Atmosphere toggle */}
+                <button
+                  onClick={state.toggleShowAtmosphere}
+                  className={[
+                    'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
+                    state.showAtmosphere
+                      ? 'bg-cyan-500/25 border-cyan-400/55 text-cyan-300'
+                      : 'bg-black/45 border-white/15 text-white/55'
+                  ].join(' ')}
+                  title={state.showAtmosphere ? '大気圏・コロナを非表示' : '大気圏・コロナを表示'}
+                >
+                  <span className="text-[18px] leading-none">🌫</span>
+                  <span className="text-[8px] font-mono leading-none">{state.showAtmosphere ? '大気あり' : '大気なし'}</span>
+                </button>
+              </>
+            )}
+
+            {/* 階層ボタン — 常時表示、大気なしボタンの直下に来る */}
+            <button
+              onClick={() => setShowCosmicPanel(v => !v)}
+              className={[
+                'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
+                showCosmicPanel
+                  ? 'bg-indigo-500/30 border-indigo-400/60 text-indigo-200'
+                  : 'bg-black/45 border-white/15 text-white/55'
+              ].join(' ')}
+              title="宇宙の階層ナビゲーション"
+            >
+              <span className="text-[18px] leading-none">🌌</span>
+              <span className="text-[8px] font-mono leading-none">階層</span>
+            </button>
+          </div>
 
           {/* ── Educational info panel (slides up from bottom when body selected) ── */}
           <div className="absolute inset-0 z-20 pointer-events-none">
