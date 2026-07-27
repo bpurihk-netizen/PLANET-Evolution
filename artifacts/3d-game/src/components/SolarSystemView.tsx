@@ -82,12 +82,16 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
   const targetLookAt  = useRef(OVERVIEW_LOOK.clone());
   const currentLook   = useRef(OVERVIEW_LOOK.clone());
   const transitioning = useRef(false);
+  // Frame counter — forces transition to complete after ~1.5s even if OrbitControls
+  // has moved the camera away from the target (preventing rotation from getting stuck).
+  const transitionFrames = useRef(0);
 
   // Reset to overview whenever system changes
   useEffect(() => {
     targetCamPos.current.copy(OVERVIEW_CAM);
     targetLookAt.current.copy(OVERVIEW_LOOK);
     transitioning.current = true;
+    transitionFrames.current = 0;
     zoomRef.current = 1.0;
   }, [systemId, zoomRef]);
 
@@ -96,17 +100,17 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
       targetCamPos.current.copy(OVERVIEW_CAM);
       targetLookAt.current.copy(OVERVIEW_LOOK);
       transitioning.current = true;
+      transitionFrames.current = 0;
       zoomRef.current = 1.0;
     } else {
       transitioning.current = true;
+      transitionFrames.current = 0;
     }
   }, [viewMode, targetRadius, zoomRef]);
 
   useFrame(() => {
     if (viewMode === 'detail') {
       // Recompute both camera position AND lookAt every frame so zoom stays centred.
-      // lookAt scales with zoom: at z=1 slightly below origin (leave room for InfoPanel),
-      // approaching (0,0,0) as user zooms in so body never drifts off-screen.
       const z = zoomRef.current;
       const yOff   = Math.max(targetRadius * 2.5, 2.0) * z;
       const zOff   = Math.max(targetRadius * 6.5, 5.0) * z;
@@ -118,11 +122,15 @@ const CameraController: React.FC<CameraControllerProps> = ({ viewMode, targetRad
       currentLook.current.lerp(targetLookAt.current, 0.08);
       camera.lookAt(currentLook.current);
     } else if (transitioning.current) {
+      transitionFrames.current++;
       camera.position.lerp(targetCamPos.current, 0.06);
       currentLook.current.lerp(targetLookAt.current, 0.06);
       camera.lookAt(currentLook.current);
-      if (camera.position.distanceTo(targetCamPos.current) < 0.5) {
+      // Complete transition either when close enough OR after ~1.5s (90 frames)
+      // to ensure OrbitControls is never permanently blocked.
+      if (camera.position.distanceTo(targetCamPos.current) < 0.5 || transitionFrames.current > 90) {
         transitioning.current = false;
+        transitionFrames.current = 0;
       }
     }
   });

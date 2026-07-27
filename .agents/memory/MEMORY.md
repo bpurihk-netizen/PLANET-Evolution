@@ -3,3 +3,6 @@
 - [Moon detail architecture](moon-detail-arch.md) — Moon close-up view uses moonDetailMode state; focusBodyId = moonId when true; moon rendered at MOON_DETAIL_RADIUS=0.9 at origin; parent planet stays at orbital position in background.
 - [Polar cap fix](polar-cap-fix.md) — Smoothstep range 0.75-0.85 was too wide; camera looks down at planet so the cap dominated the view. Fixed to 0.90-0.97 for all ice-cap shaders (Earth, Mars, habitable exoplanets).
 - [Shooter Gradius expansion](shooter-gradius.md) — 10 new enemy types, 6 new bullet types, 10 item types, ranks 9-14 added; RefObject<Group|null> typing required for useRef inside inline components.
+- [Globe inside-sphere zoom](globe-fov-zoom.md) — OrbitControls dolly is imperceptible from inside a large sphere; replace with FOV-based zoom via GlobeFovZoom R3F component using touch+wheel listeners. Set enableZoom=false on OrbitControls.
+- [CameraController transition lock](camera-transition-lock.md) — Add transitionFrames counter; force transition.current=false after 90 frames to prevent OrbitControls fight from permanently blocking overview rotation.
+- [namedStars astro data](named-stars-data.md) — STAR_ASTRO_DATA lookup table added keyed by nameEn with distanceLy+magnitude for ~40 major stars; NamedStarEntry has optional distanceLy/magnitude fields.

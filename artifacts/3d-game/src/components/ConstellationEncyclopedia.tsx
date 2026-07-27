@@ -5,6 +5,7 @@ import {
   SEASON_LABELS, SEASON_COLORS, getConstellationMeta
 } from '../data/constellationMeta';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
+import { ConstellationSilhouette } from './ConstellationSilhouette';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, X, ExternalLink, Star, BookOpen, Search } from 'lucide-react';
 
@@ -78,11 +79,19 @@ const ConstellationCard: React.FC<ConstellationCardProps> = ({ con, meta, isView
         </div>
       )}
 
-      {/* Glyph + rank */}
-      <div className="flex items-start justify-between mt-1">
-        <span className="text-2xl leading-none">{getConstellationGlyph(con.id)}</span>
+      {/* Silhouette + rank */}
+      <div className="flex items-start justify-between mt-1 gap-1">
+        <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-black/30">
+          <ConstellationSilhouette
+            constellationId={con.id}
+            size={56}
+            interactive={false}
+            animate={false}
+            accentColor={seasonColor}
+          />
+        </div>
         <span
-          className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full"
+          className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full self-start mt-0.5"
           style={{ background: `${seasonColor}22`, color: seasonColor, border: `1px solid ${seasonColor}44` }}
         >
           {con.areaRank}位

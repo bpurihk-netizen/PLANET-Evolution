@@ -1,10 +1,38 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { CelestialBody } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
 import { StampRallyState } from '../hooks/useStampRally';
 import { BODY_STAMP_TRIGGERS, pickQuiz, QuizQuestion } from '../data/stampData';
+import { useNoaaSpaceWeather } from '../hooks/useNoaaSpaceWeather';
 import { cn } from '@/lib/utils';
 import { X, Footprints, Swords, ChevronLeft, ChevronDown, HelpCircle, CheckCircle, XCircle, Layers, Thermometer } from 'lucide-react';
+
+// ── Moon phase & rise/set utilities ──────────────────────────────────────────
+function getMoonPhaseInfo(now: Date): { phaseJa: string; emoji: string } {
+  const knownNew = new Date(Date.UTC(2000, 0, 6, 18, 14, 0));
+  const lunation = 29.53058867;
+  const p = (((now.getTime() - knownNew.getTime()) / 86400000 % lunation) + lunation) % lunation;
+  const pn = p / lunation;
+  const emoji  = pn < 0.0625||pn>=0.9375 ? '🌑' : pn<0.1875 ? '🌒' : pn<0.3125 ? '🌓' :
+                 pn < 0.4375 ? '🌔' : pn<0.5625 ? '🌕' : pn<0.6875 ? '🌖' : pn<0.8125 ? '🌗' : '🌘';
+  const phaseJa = pn < 0.0625||pn>=0.9375 ? '新月' : pn<0.1875 ? '三日月' : pn<0.3125 ? '上弦の月' :
+                  pn < 0.4375 ? '十三夜'  : pn<0.5625 ? '満月'  : pn<0.6875 ? '居待ち月':
+                  pn < 0.8125 ? '下弦の月' : '有明の月';
+  return { phaseJa, emoji };
+}
+function getMoonRiseSet(now: Date): { rise: string; set: string } {
+  const knownNew = new Date(Date.UTC(2000, 0, 6, 18, 14, 0));
+  const lunation = 29.53058867;
+  const p = (((now.getTime() - knownNew.getTime()) / 86400000 % lunation) + lunation) % lunation;
+  // New moon rises ~6h, advances ~48min/day, JST = UTC+9
+  const riseH = ((6 + (p / lunation) * 24 + 9) % 24);
+  const setH  = (riseH + 12.4) % 24;
+  const fmt = (h: number) => {
+    const hr = Math.floor(h), mn = Math.round((h - hr) * 60) % 60;
+    return `${String(hr).padStart(2,'0')}:${String(mn).padStart(2,'0')}`;
+  };
+  return { rise: fmt(riseH), set: fmt(setH) };
+}
 
 interface InfoPanelProps {
   state: SolarSystemState;
@@ -168,6 +196,13 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
       onStampEarned?.(quizSession.constellationId);
     }
   }, [quizSession, onStampEarned]);
+
+  // ── #61: Solar activity (called unconditionally to satisfy Rules of Hooks) ─
+  const weather = useNoaaSpaceWeather();
+
+  // ── #48: Moon phase & rise/set ────────────────────────────────────────────
+  const moonPhase   = useMemo(() => getMoonPhaseInfo(new Date()), []);
+  const moonRiseSet = useMemo(() => getMoonRiseSet(new Date()), []);
 
   if (!body) return null;
 
@@ -342,6 +377,92 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* ── #61 Solar activity panel ── */}
+          {body.id === 'sun' && (
+            <div className="bg-orange-900/20 border border-orange-500/30 rounded-2xl p-4">
+              <h3 className="text-xs text-orange-400/80 font-bold tracking-widest uppercase mb-3">🌞 現在の太陽活動</h3>
+              <div className="divide-y divide-white/5">
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">フレアレベル</span>
+                  <span className={[
+                    'text-xs font-bold font-mono px-2 py-0.5 rounded-full',
+                    weather.activityLevel > 0.8 ? 'bg-red-500/30 text-red-300'    :
+                    weather.activityLevel > 0.5 ? 'bg-orange-500/30 text-orange-300' :
+                    weather.activityLevel > 0.3 ? 'bg-yellow-500/30 text-yellow-300' :
+                                                   'bg-green-500/30 text-green-300',
+                  ].join(' ')}>
+                    {weather.loading ? '読み込み中…' : weather.label}
+                  </span>
+                </div>
+                {!weather.loading && weather.flareClass !== '?' && (
+                  <div className="flex justify-between items-center py-1.5">
+                    <span className="text-white/50 text-xs font-mono">X線フラックス</span>
+                    <span className="text-orange-200 text-xs font-mono">{weather.fluxWm2.toExponential(1)} W/m²</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">活動周期</span>
+                  <span className="text-white/70 text-xs font-mono">第25周期（2019年〜）</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">次の極大期予測</span>
+                  <span className="text-yellow-300/80 text-xs font-mono">2025年頃（ピーク越え）</span>
+                </div>
+              </div>
+              {weather.timeTag && (
+                <p className="text-white/20 text-[9px] font-mono mt-2">
+                  更新: {new Date(weather.timeTag).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' })} UTC
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── #59 Saturn ring timing ── */}
+          {body.id === 'saturn' && (
+            <div className="bg-sky-900/20 border border-sky-500/30 rounded-2xl p-4">
+              <h3 className="text-xs text-sky-400/80 font-bold tracking-widest uppercase mb-3">💍 土星の輪カレンダー</h3>
+              <div className="divide-y divide-white/5">
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">現在の輪の傾き</span>
+                  <span className="text-sky-300 text-xs font-bold font-mono">~5°（edge-on 後）</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">edge-on（輪消失）</span>
+                  <span className="text-white/45 text-xs font-mono">2025年3月（通過済み）</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">次の最良シーズン</span>
+                  <span className="text-yellow-300 text-xs font-bold font-mono">2032年頃（26.7°）</span>
+                </div>
+              </div>
+              <p className="text-white/40 text-xs leading-relaxed mt-3">
+                2025年3月に輪が地球方向でほぼ真横になりました。今後ゆっくり開き始め、2032年頃に最大傾角26.7°となり最高の見ごろを迎えます。
+              </p>
+            </div>
+          )}
+
+          {/* ── #48 Moon rise / set ── */}
+          {body.id === 'moon' && (
+            <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-2xl p-4">
+              <h3 className="text-xs text-indigo-400/80 font-bold tracking-widest uppercase mb-3">🌙 今日の月の情報</h3>
+              <div className="divide-y divide-white/5">
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">今日の月相</span>
+                  <span className="text-white/80 text-xs font-bold">{moonPhase.emoji} {moonPhase.phaseJa}</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">月の出（東京）</span>
+                  <span className="text-amber-300 text-xs font-bold font-mono">{moonRiseSet.rise}</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-white/50 text-xs font-mono">月の入り（東京）</span>
+                  <span className="text-sky-300 text-xs font-bold font-mono">{moonRiseSet.set}</span>
+                </div>
+              </div>
+              <p className="text-white/20 text-[9px] mt-2">※平均軌道による概算。地域・地形で実際の時刻は異なります。</p>
             </div>
           )}
 

@@ -19,7 +19,63 @@ export interface NamedStarEntry {
   raDeg: number;
   /** Declination in decimal degrees (J2000) */
   decDeg: number;
+  /** Distance in light-years (Hipparcos / SIMBAD) */
+  distanceLy?: number;
+  /** Apparent visual magnitude (V-band) */
+  magnitude?: number;
 }
+
+/**
+ * Distance + apparent magnitude for named stars (Hipparcos / SIMBAD).
+ * Keyed by English name for fast lookup in StarNamePopup.
+ */
+export const STAR_ASTRO_DATA: Record<string, { distanceLy: number; magnitude: number }> = {
+  'Sirius':       { distanceLy:   8.6, magnitude: -1.46 },
+  'Canopus':      { distanceLy: 310,   magnitude: -0.74 },
+  'Arcturus':     { distanceLy:  37,   magnitude: -0.05 },
+  'Vega':         { distanceLy:  25,   magnitude:  0.03 },
+  'Capella':      { distanceLy:  42,   magnitude:  0.08 },
+  'Rigel':        { distanceLy: 860,   magnitude:  0.13 },
+  'Procyon':      { distanceLy:  11.5, magnitude:  0.34 },
+  'Betelgeuse':   { distanceLy: 700,   magnitude:  0.42 },
+  'Achernar':     { distanceLy: 139,   magnitude:  0.46 },
+  'Hadar':        { distanceLy: 390,   magnitude:  0.61 },
+  'Altair':       { distanceLy:  17,   magnitude:  0.77 },
+  'Acrux':        { distanceLy: 320,   magnitude:  0.77 },
+  'Aldebaran':    { distanceLy:  65,   magnitude:  0.85 },
+  'Spica':        { distanceLy: 250,   magnitude:  1.04 },
+  'Antares':      { distanceLy: 550,   magnitude:  1.05 },
+  'Pollux':       { distanceLy:  34,   magnitude:  1.15 },
+  'Deneb':        { distanceLy:2600,   magnitude:  1.25 },
+  'Regulus':      { distanceLy:  79,   magnitude:  1.35 },
+  'Castor':       { distanceLy:  51,   magnitude:  1.58 },
+  'Gacrux':       { distanceLy:  88,   magnitude:  1.64 },
+  'Dubhe':        { distanceLy: 124,   magnitude:  1.79 },
+  'Elnath':       { distanceLy: 134,   magnitude:  1.65 },
+  'Bellatrix':    { distanceLy: 240,   magnitude:  1.64 },
+  'Alnath':       { distanceLy: 134,   magnitude:  1.65 },
+  'Menkalinan':   { distanceLy:  82,   magnitude:  1.90 },
+  'Polaris':      { distanceLy: 430,   magnitude:  1.98 },
+  'Alioth':       { distanceLy:  83,   magnitude:  1.76 },
+  'Kaus Australis':{ distanceLy: 143,  magnitude:  1.85 },
+  'Epsilon Sgr':  { distanceLy: 143,   magnitude:  1.85 },
+  'Alkaid':       { distanceLy: 101,   magnitude:  1.86 },
+  'Avior':        { distanceLy: 610,   magnitude:  1.86 },
+  'Saiph':        { distanceLy: 720,   magnitude:  2.07 },
+  'Diphda':       { distanceLy:  96,   magnitude:  2.04 },
+  'Alphecca':     { distanceLy:  75,   magnitude:  2.22 },
+  'Schedar':      { distanceLy: 228,   magnitude:  2.24 },
+  'Alnilam':      { distanceLy:2000,   magnitude:  1.70 },
+  'Alnitak':      { distanceLy:1260,   magnitude:  1.74 },
+  'Mintaka':      { distanceLy:1070,   magnitude:  2.21 },
+  'Becrux':       { distanceLy: 280,   magnitude:  1.25 },
+  'Eltanin':      { distanceLy: 154,   magnitude:  2.24 },
+  'Mizar':        { distanceLy:  88,   magnitude:  2.27 },
+  'Kornephoros':  { distanceLy: 148,   magnitude:  2.77 },
+  'Alpheratz':    { distanceLy:  97,   magnitude:  2.06 },
+  'Alpha Centauri':{ distanceLy: 4.37,magnitude:  -0.27 },
+  'Hamal':        { distanceLy:  66,   magnitude:  2.01 },
+};
 
 export const NAMED_STARS: NamedStarEntry[] = [
   // ── Orion ──────────────────────────────────────────────────────────────────

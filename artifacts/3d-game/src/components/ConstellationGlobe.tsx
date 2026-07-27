@@ -1,13 +1,13 @@
-import React, { useRef, useMemo, useState, useCallback } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useRef, useMemo, useState, useCallback, useEffect } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { CONSTELLATIONS, Constellation, radec2xyz } from '../data/constellations';
 import { ALL_STAR_SYSTEMS } from '../data/starSystems';
 import { CONSTELLATION_LINES } from '../data/constellationLines';
-import { NAMED_STARS, NamedStarEntry } from '../data/namedStars';
+import { NAMED_STARS, NamedStarEntry, STAR_ASTRO_DATA } from '../data/namedStars';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, X, ExternalLink, Search, Star } from 'lucide-react';
+import { ChevronLeft, X, ExternalLink, Search, Star, Play } from 'lucide-react';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GLOBE_R = 32;
@@ -65,6 +65,49 @@ const CelestialEquator: React.FC = () => {
       <lineBasicMaterial color="#ffffff" transparent opacity={0.06} />
     </line>
   );
+};
+
+// ── FOV-based pinch / wheel zoom ─────────────────────────────────────────────
+// Inside-sphere camera: OrbitControls dolly changes camera-to-origin distance
+// which has no visual effect from inside a large sphere. We change FOV instead.
+const GlobeFovZoom: React.FC = () => {
+  const { gl, camera } = useThree();
+  useEffect(() => {
+    const el = gl.domElement;
+    let lastDist = 0;
+    const pinchDist = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) lastDist = pinchDist(e.touches);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length < 2 || lastDist <= 0) return;
+      const d = pinchDist(e.touches);
+      const cam = camera as THREE.PerspectiveCamera;
+      // pinch apart → lower FOV (zoom in); pinch together → higher FOV (zoom out)
+      cam.fov = Math.max(12, Math.min(90, cam.fov * (lastDist / d)));
+      cam.updateProjectionMatrix();
+      lastDist = d;
+    };
+    const onTouchEnd = (e: TouchEvent) => { if (e.touches.length < 2) lastDist = 0; };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const cam = camera as THREE.PerspectiveCamera;
+      cam.fov = Math.max(12, Math.min(90, cam.fov * (e.deltaY > 0 ? 1.08 : 1 / 1.08)));
+      cam.updateProjectionMatrix();
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove',  onTouchMove,  { passive: true });
+    el.addEventListener('touchend',   onTouchEnd,   { passive: true });
+    el.addEventListener('wheel',      onWheel,      { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove',  onTouchMove);
+      el.removeEventListener('touchend',   onTouchEnd);
+      el.removeEventListener('wheel',      onWheel);
+    };
+  }, [gl, camera]);
+  return null;
 };
 
 // ── Constellation Node ────────────────────────────────────────────────────────
@@ -227,17 +270,23 @@ const SYSTEM_PINS = [
 interface ConstellationLinesProps {
   selectedId: string | null;
   showAllLines: boolean;
+  /** -1 = not animating; ≥0 = sequential draw, show only constellations up to this index */
+  animConIndex: number;
 }
 
-const ConstellationLinesRenderer: React.FC<ConstellationLinesProps> = ({ selectedId, showAllLines }) => {
+const ConstellationLinesRenderer: React.FC<ConstellationLinesProps> = ({ selectedId, showAllLines, animConIndex }) => {
   const lineObjects = useMemo(() => {
-    return CONSTELLATION_LINES.map(({ conId, segments }) => {
+    return CONSTELLATION_LINES.map(({ conId, segments }, conIdx) => {
       const isSelected = selectedId === conId;
-      const visible = showAllLines || isSelected;
+      // Respect sequential draw-in animation
+      const withinAnim = animConIndex < 0 || conIdx <= animConIndex;
+      const visible = withinAnim && (showAllLines || isSelected);
       if (!visible) return null;
 
-      const opacity = isSelected ? 0.85 : 0.22;
-      const color = isSelected ? '#ffcc44' : '#88ccff';
+      // Newly-drawn constellation gets a brief highlight
+      const freshDraw = animConIndex >= 0 && conIdx === animConIndex;
+      const opacity = isSelected ? 0.85 : freshDraw ? 0.65 : 0.22;
+      const color = isSelected ? '#ffcc44' : freshDraw ? '#ccddff' : '#88ccff';
 
       return segments.map(([ra1, dec1, ra2, dec2], idx) => {
         const [x1, y1, z1] = radec2xyz(ra1, dec1, GLOBE_R * 0.985);
@@ -253,7 +302,7 @@ const ConstellationLinesRenderer: React.FC<ConstellationLinesProps> = ({ selecte
         );
       });
     });
-  }, [selectedId, showAllLines]);
+  }, [selectedId, showAllLines, animConIndex]);
 
   return <>{lineObjects}</>;
 };
@@ -267,11 +316,16 @@ interface GlobeSceneProps {
   selectedStarKey: string | null;
   onSelectStar: (star: NamedStarEntry | null) => void;
   showStarNames: boolean;
+  /** null = all constellations; string = show only this conId's stars */
+  starNameConFilter: string | null;
+  /** Sequential line animation index (-1 = not animating) */
+  animConIndex: number;
 }
 
 const GlobeScene: React.FC<GlobeSceneProps> = ({
   selectedId, onSelect, visibleIds, showLines,
   selectedStarKey, onSelectStar, showStarNames,
+  starNameConFilter, animConIndex,
 }) => (
   <>
     <StarField />
@@ -280,7 +334,7 @@ const GlobeScene: React.FC<GlobeSceneProps> = ({
       <sphereGeometry args={[GLOBE_R + 0.2, 32, 32]} />
       <meshBasicMaterial color="#112244" transparent opacity={0.04} side={THREE.BackSide} />
     </mesh>
-    <ConstellationLinesRenderer selectedId={selectedId} showAllLines={showLines} />
+    <ConstellationLinesRenderer selectedId={selectedId} showAllLines={showLines} animConIndex={animConIndex} />
     {CONSTELLATIONS.filter(con => !visibleIds || visibleIds.has(con.id)).map(con => (
       <ConstellationNode
         key={con.id}
@@ -289,17 +343,19 @@ const GlobeScene: React.FC<GlobeSceneProps> = ({
         onClick={() => onSelect(selectedId === con.id ? null : con.id)}
       />
     ))}
-    {showStarNames && NAMED_STARS.map((star, idx) => {
-      const key = `${star.conId}-${star.nameEn}-${idx}`;
-      return (
-        <NamedStarNode
-          key={key}
-          star={star}
-          isSelected={selectedStarKey === key}
-          onClick={() => onSelectStar(selectedStarKey === key ? null : star)}
-        />
-      );
-    })}
+    {showStarNames && NAMED_STARS
+      .filter(s => !starNameConFilter || s.conId === starNameConFilter)
+      .map((star, idx) => {
+        const key = `${star.conId}-${star.nameEn}-${idx}`;
+        return (
+          <NamedStarNode
+            key={key}
+            star={star}
+            isSelected={selectedStarKey === key}
+            onClick={() => onSelectStar(selectedStarKey === key ? null : star)}
+          />
+        );
+      })}
     {SYSTEM_PINS.map(pin => (
       <SystemPin key={pin.id} {...pin} />
     ))}
@@ -445,6 +501,26 @@ const StarNamePopup: React.FC<StarNamePopupProps> = ({ star, onClose }) => {
             {star.meaning && (
               <p className="text-white/70 text-sm leading-relaxed">{star.meaning}</p>
             )}
+            {/* Distance + magnitude (#67) */}
+            {(() => {
+              const d = STAR_ASTRO_DATA[star.nameEn];
+              if (!d) return null;
+              return (
+                <div className="flex items-stretch bg-white/5 rounded-xl overflow-hidden border border-white/10">
+                  <div className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5">
+                    <span className="text-white/80 text-sm font-bold font-mono">
+                      {d.distanceLy < 100 ? d.distanceLy.toFixed(1) : d.distanceLy.toLocaleString()}
+                    </span>
+                    <span className="text-white/30 text-[9px] font-mono">光年先</span>
+                  </div>
+                  <div className="w-px bg-white/10" />
+                  <div className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5">
+                    <span className="text-white/80 text-sm font-bold font-mono">{d.magnitude.toFixed(2)}</span>
+                    <span className="text-white/30 text-[9px] font-mono">等級（見かけ）</span>
+                  </div>
+                </div>
+              );
+            })()}
             {con && (
               <div className="flex items-center gap-1.5 text-indigo-300/60 text-xs font-mono">
                 <span>✦</span>
@@ -510,6 +586,37 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
     }
   }, []);
 
+  // ── #68: Constellation filter for star-name mode ──────────────────────────
+  const [starNameConFilter, setStarNameConFilter] = useState<string | null>(null);
+
+  // ── #46: Sequential constellation-line draw animation ────────────────────
+  const [animConIndex, setAnimConIndex] = useState(-1);
+
+  useEffect(() => {
+    if (animConIndex < 0 || animConIndex >= CONSTELLATION_LINES.length) return;
+    const t = setTimeout(() => setAnimConIndex(i => i + 1), 40);
+    return () => clearTimeout(t);
+  }, [animConIndex]);
+
+  const handleAnimateLines = useCallback(() => {
+    setShowLines(true);
+    setAnimConIndex(0);
+  }, []);
+
+  // Build the list of constellations that have named stars (for filter chips)
+  const conFilterOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { id: string; nameJa: string }[] = [];
+    NAMED_STARS.forEach(s => {
+      if (!seen.has(s.conId)) {
+        seen.add(s.conId);
+        const c = CONSTELLATIONS.find(con => con.id === s.conId);
+        if (c) opts.push({ id: s.conId, nameJa: c.nameJa });
+      }
+    });
+    return opts;
+  }, []);
+
   return (
     <div className="w-full h-full relative bg-[#020408]">
       {/* 3D Canvas */}
@@ -527,17 +634,20 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
           selectedStarKey={selectedStarKey}
           onSelectStar={handleSelectStar}
           showStarNames={showStarNames}
+          starNameConFilter={starNameConFilter}
+          animConIndex={animConIndex}
         />
+        {/* FOV zoom: replaces OrbitControls dolly which is useless inside a sphere */}
+        <GlobeFovZoom />
         <OrbitControls
           enablePan={false}
-          enableZoom={true}
+          enableZoom={false}
           enableDamping
           dampingFactor={0.10}
           minDistance={0.01}
           maxDistance={28}
           touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
           rotateSpeed={-0.5}
-          zoomSpeed={0.8}
         />
       </Canvas>
 
@@ -556,19 +666,34 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
               <span className="text-xl">🌐</span>
               <span className="text-white/90 font-bold tracking-widest text-xs">天球儀 · 88星座</span>
             </div>
-            {/* Lines toggle */}
-            <button
-              onClick={() => setShowLines(v => !v)}
-              className={cn(
-                'px-3 py-2 backdrop-blur-md border rounded-full min-h-[44px] flex items-center gap-1.5 transition-all active:scale-95 text-xs font-bold',
-                showLines
-                  ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
-                  : 'bg-white/8 border-white/12 text-white/40'
-              )}
-            >
-              <span>✦</span>
-              <span className="hidden sm:inline">{showLines ? 'ライン表示中' : 'ライン'}</span>
-            </button>
+            {/* Lines toggle + animate button (#46) */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setShowLines(v => !v)}
+                className={cn(
+                  'px-3 py-2 backdrop-blur-md border rounded-full min-h-[44px] flex items-center gap-1.5 transition-all active:scale-95 text-xs font-bold',
+                  showLines
+                    ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
+                    : 'bg-white/8 border-white/12 text-white/40'
+                )}
+              >
+                <span>✦</span>
+                <span className="hidden sm:inline">{showLines ? 'ライン表示中' : 'ライン'}</span>
+              </button>
+              <button
+                onClick={handleAnimateLines}
+                disabled={animConIndex >= 0}
+                className={cn(
+                  'p-2.5 backdrop-blur-md border rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center transition-all active:scale-95',
+                  animConIndex >= 0
+                    ? 'bg-amber-500/30 border-amber-400/60 text-amber-300 animate-pulse'
+                    : 'bg-white/8 border-white/12 text-white/40 active:bg-white/15'
+                )}
+                title="星座ラインをアニメーション描画"
+              >
+                <Play size={14} />
+              </button>
+            </div>
           </div>
 
           {/* Second toolbar row: search + star-names toggle */}
@@ -609,6 +734,36 @@ export const ConstellationGlobe: React.FC<ConstellationGlobeProps> = ({ onExit, 
               <span className="hidden sm:inline">星名</span>
             </button>
           </div>
+          {/* Constellation filter chips — shown in star-name mode (#68) */}
+          {showStarNames && !isSearching && (
+            <div className="flex gap-1.5 overflow-x-auto px-4 pb-2 scrollbar-none pointer-events-auto">
+              <button
+                onClick={() => setStarNameConFilter(null)}
+                className={cn(
+                  'shrink-0 px-2.5 py-1 text-[10px] font-mono font-bold rounded-full border transition-all active:scale-95',
+                  !starNameConFilter
+                    ? 'bg-yellow-500/25 border-yellow-400/50 text-yellow-300'
+                    : 'bg-white/6 border-white/12 text-white/40'
+                )}
+              >
+                すべて
+              </button>
+              {conFilterOptions.map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setStarNameConFilter(prev => prev === opt.id ? null : opt.id)}
+                  className={cn(
+                    'shrink-0 px-2.5 py-1 text-[10px] font-mono font-bold rounded-full border transition-all active:scale-95',
+                    starNameConFilter === opt.id
+                      ? 'bg-yellow-500/25 border-yellow-400/50 text-yellow-300'
+                      : 'bg-white/6 border-white/12 text-white/40'
+                  )}
+                >
+                  {opt.nameJa}
+                </button>
+              ))}
+            </div>
+          )}
           {isSearching && (
             <div className="text-[10px] text-white/30 font-mono px-5 pb-1">
               {searchResultCount > 0 ? `${searchResultCount} 件ヒット` : '一致する星座が見つかりません'}

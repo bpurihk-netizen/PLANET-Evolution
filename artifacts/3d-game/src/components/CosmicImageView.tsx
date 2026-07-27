@@ -637,6 +637,49 @@ const GalaxyFactsView: React.FC<{ state: SolarSystemState }> = ({ state }) => {
   );
 };
 
+// ── Scale comparison bar (#74) ───────────────────────────────────────────────
+const SCALE_ENTRIES: Array<{ level: CosmicLevel; labelJa: string; emoji: string; sizeStr: string }> = [
+  { level: 'lss',          labelJa: '大規模構造', emoji: '🌌', sizeStr: '930億光年' },
+  { level: 'supercluster', labelJa: '超銀河団',   emoji: '✨', sizeStr: '5億光年' },
+  { level: 'cluster',      labelJa: '銀河団',     emoji: '🌠', sizeStr: '1000万光年' },
+  { level: 'group',        labelJa: '銀河群',     emoji: '💫', sizeStr: '300万光年' },
+  { level: 'galaxy',       labelJa: '銀河',       emoji: '🌀', sizeStr: '10万光年' },
+];
+
+const ScaleComparisonBar: React.FC<{ currentLevel: CosmicLevel; onJump?: (level: CosmicLevel) => void }> = ({ currentLevel, onJump }) => (
+  <div className="flex items-center gap-0.5 overflow-x-auto pb-0.5 scrollbar-none">
+    {SCALE_ENTRIES.map((sl, idx) => {
+      const isActive = sl.level === currentLevel;
+      return (
+        <React.Fragment key={sl.level}>
+          <button
+            onClick={() => onJump?.(sl.level)}
+            className={[
+              'shrink-0 flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-all active:opacity-70',
+              isActive
+                ? 'bg-indigo-500/30 border border-indigo-400/50'
+                : 'bg-white/4 border border-white/8',
+            ].join(' ')}
+          >
+            <span className="text-base leading-none">{sl.emoji}</span>
+            <span className={['text-[8px] font-mono whitespace-nowrap', isActive ? 'text-indigo-200' : 'text-white/30'].join(' ')}>
+              {sl.labelJa}
+            </span>
+            {isActive && (
+              <span className="text-[7px] text-indigo-300/60 font-mono whitespace-nowrap">{sl.sizeStr}</span>
+            )}
+          </button>
+          {idx < SCALE_ENTRIES.length - 1 && (
+            <div className="shrink-0 flex flex-col items-center">
+              <div className="w-3 h-px bg-white/15" />
+            </div>
+          )}
+        </React.Fragment>
+      );
+    })}
+  </div>
+);
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -683,7 +726,14 @@ export const CosmicImageView: React.FC<Props> = ({ state, panelCollapsed }) => {
           <p className="text-indigo-300/80 text-[10px] font-medium mb-1 line-clamp-1">
             {ctx.contextLine}
           </p>
-          <p className="text-white/35 text-[9px] leading-snug line-clamp-2">{ctx.description}</p>
+          <p className="text-white/35 text-[9px] leading-snug line-clamp-2 mb-3">{ctx.description}</p>
+          {/* Scale comparison bar (#74) — only for non-system levels */}
+          {cosmicLevel !== 'system' && (
+            <ScaleComparisonBar
+              currentLevel={cosmicLevel}
+              onJump={state.goToCosmicLevel}
+            />
+          )}
         </div>
 
         {/* ── Divider ── */}
