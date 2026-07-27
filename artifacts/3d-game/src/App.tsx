@@ -19,6 +19,8 @@ import { CosmicImageView } from './components/CosmicImageView';
 import { LargeScaleStructureView } from './components/LargeScaleStructureView';
 import { CosmicLevelView } from './components/CosmicLevelView';
 import { GalaxyView } from './components/GalaxyView';
+import { CosmicInfoPanel } from './components/CosmicInfoPanel';
+import { CosmicNavigator } from './components/CosmicNavigator';
 import {
   BODY_STAMP_TRIGGERS,
   SYSTEM_STAMP_TRIGGERS,
@@ -59,6 +61,7 @@ function SolarExplorerApp() {
   const [toastIds, setToastIds] = useState<string[]>([]);
   const [infoPanelCollapsed, setInfoPanelCollapsed] = useState(false);
   const [cosmicPanelCollapsed, setCosmicPanelCollapsed] = useState(false);
+  const [cosmicInfoCollapsed, setCosmicInfoCollapsed] = useState(false);
   const [showCosmicPanel, setShowCosmicPanel] = useState(false);
   const prevVisitedRef = useRef<string[]>([]);
   const prevSystemRef = useRef<string>(state.currentSystemId);
@@ -67,6 +70,11 @@ function SolarExplorerApp() {
   useEffect(() => {
     setInfoPanelCollapsed(false);
   }, [state.selectedBodyId]);
+
+  // Re-expand cosmic info panel on new selection
+  useEffect(() => {
+    if (state.selectedCosmicId) setCosmicInfoCollapsed(false);
+  }, [state.selectedCosmicId]);
 
   // Expand cosmic panel when entering cosmic mode for the first time
   useEffect(() => {
@@ -191,8 +199,15 @@ function SolarExplorerApp() {
             )}
           </div>
 
+          {/* CosmicNavigator — breadcrumb + drillUp at top */}
+          <div className="absolute inset-x-0 top-0 z-20 pointer-events-none">
+            <div className="pointer-events-auto">
+              <CosmicNavigator state={state} />
+            </div>
+          </div>
+
           {/* Left-side level panel — overlay on the 3D canvas */}
-          <div className="absolute inset-0 z-10 pointer-events-none">
+          <div className="absolute inset-0 z-[15] pointer-events-none">
             <div className="pointer-events-auto w-fit">
               <CosmicLevelPanel
                 state={state}
@@ -201,6 +216,13 @@ function SolarExplorerApp() {
               />
             </div>
           </div>
+
+          {/* CosmicInfoPanel — bottom sheet when an object is tapped */}
+          <CosmicInfoPanel
+            state={state}
+            collapsed={cosmicInfoCollapsed}
+            onToggleCollapse={() => setCosmicInfoCollapsed(v => !v)}
+          />
 
           {/* Star-system warp can still trigger from galaxy level */}
           <WarpOverlay
