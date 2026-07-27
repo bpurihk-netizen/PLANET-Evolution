@@ -14,11 +14,8 @@ import { NightSkyGuide } from './components/NightSkyGuide';
 import { MythologyStorybook } from './components/MythologyStorybook';
 import { WarpOverlay } from './components/WarpOverlay';
 import { StampRallyBook } from './components/StampRallyBook';
-import { LargeScaleStructureView } from './components/LargeScaleStructureView';
-import { CosmicLevelView } from './components/CosmicLevelView';
-import { GalaxyView } from './components/GalaxyView';
-import { CosmicNavigator } from './components/CosmicNavigator';
-import { CosmicInfoPanel } from './components/CosmicInfoPanel';
+import { CosmicLevelPanel } from './components/CosmicLevelPanel';
+import { CosmicImageView } from './components/CosmicImageView';
 import {
   BODY_STAMP_TRIGGERS,
   SYSTEM_STAMP_TRIGGERS,
@@ -58,7 +55,7 @@ function SolarExplorerApp() {
   const [showStampBook, setShowStampBook] = useState(false);
   const [toastIds, setToastIds] = useState<string[]>([]);
   const [infoPanelCollapsed, setInfoPanelCollapsed] = useState(false);
-  const [cosmicInfoPanelCollapsed, setCosmicInfoPanelCollapsed] = useState(false);
+  const [cosmicPanelCollapsed, setCosmicPanelCollapsed] = useState(false);
   const prevVisitedRef = useRef<string[]>([]);
   const prevSystemRef = useRef<string>(state.currentSystemId);
 
@@ -67,10 +64,10 @@ function SolarExplorerApp() {
     setInfoPanelCollapsed(false);
   }, [state.selectedBodyId]);
 
-  // Re-show cosmic info panel whenever a different object is selected
+  // Expand cosmic panel when entering cosmic mode for the first time
   useEffect(() => {
-    setCosmicInfoPanelCollapsed(false);
-  }, [state.selectedCosmicId]);
+    if (state.cosmicLevel !== 'system') setCosmicPanelCollapsed(false);
+  }, [state.cosmicLevel]);
 
   // Helper: award stamps and show toast for newly earned ones
   const awardAndToast = useCallback((ids: string[]) => {
@@ -169,24 +166,19 @@ function SolarExplorerApp() {
         /* ── Deiland surface mode — full replacement (frees WebGL context) ── */
         <Deiland state={state} />
       ) : state.cosmicLevel !== 'system' ? (
-        /* ── Cosmic hierarchy view ── */
+        /* ── Cosmic hierarchy view (NASA image cards) ── */
         <>
-          <div className="absolute inset-0 z-0">
-            {state.cosmicLevel === 'lss' && <LargeScaleStructureView state={state} />}
-            {state.cosmicLevel === 'supercluster' && <CosmicLevelView state={state} level="supercluster" />}
-            {state.cosmicLevel === 'cluster' && <CosmicLevelView state={state} level="cluster" />}
-            {state.cosmicLevel === 'group' && <CosmicLevelView state={state} level="group" />}
-            {state.cosmicLevel === 'galaxy' && <GalaxyView state={state} />}
-          </div>
-          {/* Navigator (breadcrumb) sits at top — pointer events inside */}
-          <CosmicNavigator state={state} />
-          {/* Info panel slides up from bottom */}
-          <CosmicInfoPanel
+          {/* Left-side level panel */}
+          <CosmicLevelPanel
             state={state}
-            collapsed={cosmicInfoPanelCollapsed}
-            onToggleCollapse={() => setCosmicInfoPanelCollapsed(v => !v)}
+            collapsed={cosmicPanelCollapsed}
+            onToggle={() => setCosmicPanelCollapsed(v => !v)}
           />
-          {/* Star-system warp can still trigger from galaxy view */}
+          {/* Main image-based content */}
+          <div className="absolute inset-0 z-0">
+            <CosmicImageView state={state} panelCollapsed={cosmicPanelCollapsed} />
+          </div>
+          {/* Star-system warp can still trigger from galaxy level */}
           <WarpOverlay
             isActive={state.isWarping}
             destinationName={state.warpTarget?.nameJa ?? ''}
@@ -200,6 +192,13 @@ function SolarExplorerApp() {
           <div className="absolute inset-0 z-0">
             <SolarSystemView state={state} showAtmosphere={state.showAtmosphere} />
           </div>
+
+          {/* ── Cosmic level panel (left side, always available for hierarchy access) ── */}
+          <CosmicLevelPanel
+            state={state}
+            collapsed={cosmicPanelCollapsed}
+            onToggle={() => setCosmicPanelCollapsed(v => !v)}
+          />
 
           {/* ── Navigation HUD (top bar, breadcrumbs, exploration counter) ── */}
           <div className="absolute inset-0 z-10 pointer-events-none">

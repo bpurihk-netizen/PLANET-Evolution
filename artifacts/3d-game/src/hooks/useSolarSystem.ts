@@ -389,8 +389,15 @@ export function useSolarSystem(): SolarSystemState {
     setSelectedCosmicId(id);
   }, []);
 
-  // Jump directly to a cosmic level without a warp animation (for breadcrumb nav / going up)
+  // Jump directly to a cosmic level without a warp animation.
+  // Also resets all full-screen special modes so the panel works from anywhere.
   const goToCosmicLevel = useCallback((level: CosmicLevel) => {
+    setGlobeMode(false);
+    setEncyclopediaMode(false);
+    setNightSkyMode(false);
+    setStorybookMode(false);
+    setViewMode('overview');
+    setSelectedBodyId(null);
     setCosmicLevel(level);
     setSelectedCosmicId(null);
     setCosmicWarpTarget(null);
