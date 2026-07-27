@@ -104,6 +104,10 @@ export interface SolarSystemState {
   toggleObsFlatLight: () => void;
   toggleShowAtmosphere: () => void;
 
+  // Per-body view mode (e.g. 'default' | 'surface' | 'infrared')
+  bodyViewModes: Record<string, string>;
+  setBodyViewMode: (bodyId: string, mode: string) => void;
+
   // ── Cosmic hierarchy navigation ──────────────────────────────────────────
   cosmicLevel: CosmicLevel;
   currentSuperclusterId: string;
@@ -170,6 +174,11 @@ export function useSolarSystem(): SolarSystemState {
   const [obsRotationPaused, setObsRotationPaused] = useState(false);
   const [obsFlatLight, setObsFlatLight] = useState(false);
   const [showAtmosphere, setShowAtmosphere] = useState(true);
+  const [bodyViewModes, setBodyViewModesState] = useState<Record<string, string>>({});
+
+  const setBodyViewMode = useCallback((bodyId: string, mode: string) => {
+    setBodyViewModesState(prev => ({ ...prev, [bodyId]: mode }));
+  }, []);
 
   // ── Cosmic hierarchy state ───────────────────────────────────────────────
   const [cosmicLevel, setCosmicLevel] = useState<CosmicLevel>('system');
@@ -486,6 +495,8 @@ export function useSolarSystem(): SolarSystemState {
     toggleObsRotation,
     toggleObsFlatLight,
     toggleShowAtmosphere,
+    bodyViewModes,
+    setBodyViewMode,
     cosmicLevel,
     currentSuperclusterId,
     currentClusterId,

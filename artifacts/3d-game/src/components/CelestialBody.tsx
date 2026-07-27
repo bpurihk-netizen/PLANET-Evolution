@@ -596,8 +596,286 @@ void main(){
 }
 `;
 
+// ── Uranus: seasonal bands + polar brightening (Hubble 2023 season) ──────
+const FRAG_URANUS = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float turbulence=fbm(n*1.2+vec3(uTime*0.005,0,0))*0.08;
+  float lat=n.y+turbulence;
+  float band=sin(lat*6.0)*0.5+0.5;
+  // Rich cyan-teal gradient
+  vec3 col=mix(vec3(0.42,0.84,0.86),vec3(0.62,0.94,0.95),band);
+  // Faint mid-latitude bands (Hubble 2023 shows subtle banding in equinox season)
+  float midBand=smoothstep(0.35,0.45,abs(lat))*smoothstep(0.65,0.55,abs(lat));
+  col=mix(col,vec3(0.74,0.98,0.97),midBand*0.28);
+  // North polar brightening (currently in sunlit season 2007-2028)
+  float polar=smoothstep(0.50,0.88,n.y);
+  col=mix(col,vec3(0.86,1.0,1.0),polar*0.22);
+  // Subtle methane cloud wisps
+  float wisps=smoothstep(0.64,0.70,fbm(n*5.0+vec3(uTime*0.008,0,0)));
+  col=mix(col,vec3(0.90,0.98,0.98),wisps*0.18);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.65+0.35;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Neptune: cobalt blue with dark spot + methane streamers ───────────────
+const FRAG_NEPTUNE = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float turbulence=fbm(n*2.0+vec3(uTime*0.012,0,0))*0.12;
+  float band=sin((n.y+turbulence)*7.0)*0.5+0.5;
+  // Rich cobalt blue
+  vec3 col=mix(vec3(0.10,0.20,0.72),vec3(0.20,0.36,0.88),band);
+  // 2021 Hubble dark spot (Northern Hemisphere, near 50°N)
+  float phi=atan(n.z,n.x)/(2.*3.14159);
+  float darkSpotDist=length(vec2(fract(phi-0.18+0.5)*2.0-1.0,(n.y-0.65)*3.5));
+  col=mix(col,vec3(0.04,0.07,0.30),smoothstep(0.20,0.0,darkSpotDist)*0.80);
+  // Scooter cloud (bright methane, orbits faster than the dark spot)
+  float scooterPhi=fract(phi+uTime*0.006+0.5);
+  float scooterDist=length(vec2(fract(scooterPhi-0.28)*2.8-1.4,(n.y-0.62)*7.0));
+  col=mix(col,vec3(0.82,0.92,1.0),smoothstep(0.08,0.0,scooterDist)*0.95);
+  // Fast mid-latitude streaks
+  float streak=smoothstep(0.60,0.66,fbm(n*5.0+vec3(uTime*0.04,0,0)));
+  float midLat=smoothstep(0.30,0.0,abs(n.y-0.3));
+  col=mix(col,vec3(0.65,0.80,0.98),streak*midLat*0.45);
+  // Southern polar methane haze
+  float sPolar=smoothstep(0.55,0.85,-n.y);
+  col=mix(col,vec3(0.14,0.28,0.80),sPolar*0.18);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.70+0.30;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Miranda: complex chaotic terrain + Verona Rupes cliff band ───────────
+const FRAG_MIRANDA = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*3.5);
+  float t2=fbm(n*8.0+vec3(6.));
+  float t3=fbm(n*16.0+vec3(3.));
+  // Greyish-white icy base
+  vec3 col=mix(vec3(0.60,0.58,0.55),vec3(0.82,0.80,0.78),t);
+  // Chaotic coronae terrain (the famous jumbled landscape)
+  float chaos=smoothstep(0.30,0.70,fbm(n*2.0+vec3(1.5)));
+  vec3 chaosCol=mix(vec3(0.36,0.33,0.30),vec3(0.70,0.68,0.65),t2);
+  col=mix(col,chaosCol,chaos*0.65);
+  // Verona Rupes cliff band — sharp albedo boundary near south pole
+  float cliffY=n.y+0.55+fbm(n*5.0)*0.08;
+  float cliffBand=smoothstep(0.025,0.0,abs(cliffY));
+  col=mix(col,vec3(0.12,0.11,0.10),cliffBand*0.85);
+  col=mix(col,vec3(0.95,0.93,0.90),cliffBand*0.25); // frost along cliff face
+  // Grooves and ridges (parallel features from ice tectonics)
+  float groove=abs(sin(fbm(n*6.0)*18.0))*smoothstep(0.52,0.72,fbm(n*4.0+vec3(7.)));
+  col=mix(col,vec3(0.24,0.22,0.20),groove*0.45);
+  // Bright impact craters
+  float crater=abs(t3-0.5)*2.0;
+  col=mix(col,vec3(0.92,0.90,0.88),smoothstep(0.88,0.95,crater)*0.45);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.85+0.15;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Charon: Mordor Macula polar cap + Argo Chasma (New Horizons 2015) ─────
+const FRAG_CHARON = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*3.5);
+  float t2=fbm(n*9.0+vec3(4.));
+  // Base: mid-grey rocky-icy surface
+  vec3 col=mix(vec3(0.50,0.48,0.45),vec3(0.72,0.70,0.68),t);
+  // Mordor Macula — dark reddish-brown north polar cap
+  // (tholins from Pluto's nitrogen atmosphere, transported to Charon)
+  float mordor=smoothstep(0.52,0.84,n.y);
+  col=mix(col,vec3(0.28,0.13,0.08),mordor*0.90);
+  // Argo Chasma — great canyon near equator
+  float chasmaY=abs(n.y-0.05+fbm(n*8.0)*0.06);
+  col=mix(col,vec3(0.18,0.16,0.14),smoothstep(0.030,0.0,chasmaY)*0.80);
+  col=mix(col,vec3(0.90,0.88,0.85),smoothstep(0.025,0.0,chasmaY)*0.25); // bright canyon walls
+  // Craters (Serenity Chasma, Vulcan Planum, etc.)
+  float crater=abs(t2-0.5)*2.0;
+  col=mix(col,vec3(0.85,0.83,0.80),smoothstep(0.88,0.95,crater)*0.40);
+  col=mix(col,vec3(0.10,0.09,0.08),smoothstep(0.78,0.85,t2)*0.50);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.85+0.15;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Eris: extremely high albedo methane ice (whitest body in solar system) ─
+const FRAG_BRIGHT_ICE = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*3.0);
+  float t2=fbm(n*7.0+vec3(5.));
+  // Very bright white (albedo ~0.96, brightest known solar system body)
+  vec3 col=mix(vec3(0.88,0.87,0.84),vec3(0.97,0.96,0.94),t);
+  // Pale cream patches (fresh nitrogen/methane ice)
+  col=mix(col,vec3(1.0,0.98,0.92),t2*0.14);
+  // Subtle darker substrate exposed in low spots
+  float dark=smoothstep(0.60,0.72,fbm(n*4.5+vec3(3.)));
+  col=mix(col,vec3(0.68,0.66,0.62),dark*0.22);
+  // Shallow craters (ice-softened topography)
+  float crater=abs(t2-0.5)*2.0;
+  col=mix(col,vec3(0.78,0.77,0.75),smoothstep(0.88,0.95,crater)*0.35);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.80+0.20;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Haumea: elongated fast-rotator, light icy surface with dark red spot ──
+const FRAG_HAUMEA = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*4.0);
+  float t2=fbm(n*10.0+vec3(3.));
+  // Bright whitish crystalline ice
+  vec3 col=mix(vec3(0.80,0.78,0.75),vec3(0.94,0.93,0.90),t);
+  // Dark red spot (Hubble photometry — large tholin-rich region)
+  float spotX=n.x*1.2;
+  float spotY=n.y*0.8;
+  float spot=smoothstep(0.30,0.10,length(vec2(spotX-0.3,spotY+0.2)));
+  col=mix(col,vec3(0.35,0.12,0.06),spot*0.75);
+  // Subtle darker band (slight compositional variation)
+  float band=smoothstep(0.05,0.0,abs(n.y+0.05+fbm(n*3.0)*0.1));
+  col=mix(col,vec3(0.60,0.55,0.50),band*0.30);
+  float crack=abs(t2-0.5)*2.0;
+  col=mix(col,vec3(0.88,0.85,0.82),smoothstep(0.88,0.95,crack)*0.30);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.82+0.18;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Makemake: dark reddish-brown tholins + methane ice patches ───────────
+const FRAG_DARK_KBO = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*3.5);
+  float t2=fbm(n*8.0+vec3(5.));
+  // Dark reddish-brown (Hubble color: V-I ~ 0.56, deep red)
+  vec3 col=mix(vec3(0.38,0.20,0.10),vec3(0.54,0.30,0.16),t);
+  // Bright methane/ethane ice deposits (Spitzer: patchy distribution)
+  float bright=smoothstep(0.58,0.70,t2);
+  col=mix(col,vec3(0.80,0.74,0.62),bright*0.55);
+  // Very dark equatorial dust band
+  float eq=smoothstep(0.06,0.0,abs(n.y+fbm(n*5.0)*0.10));
+  col=mix(col,vec3(0.15,0.07,0.03),eq*0.55);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.82+0.18;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Venus surface mode: Magellan radar-derived elevation color map ────────
+const FRAG_VENUS_SURFACE = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float elev=fbm(n*2.8+vec3(5.0))*0.7+fbm(n*6.5+vec3(2.0))*0.3;
+  // Magellan false-color ramp: deep basins=dark blue → lowlands=khaki → highlands=orange → peaks=white
+  vec3 basins=vec3(0.10,0.18,0.42);
+  vec3 plains=vec3(0.52,0.42,0.22);
+  vec3 highlands=vec3(0.76,0.40,0.10);
+  vec3 peaks=vec3(0.94,0.90,0.86);
+  vec3 col=basins;
+  col=mix(col,plains,smoothstep(0.28,0.44,elev));
+  col=mix(col,highlands,smoothstep(0.56,0.72,elev));
+  col=mix(col,peaks,smoothstep(0.78,0.88,elev));
+  // Tessera terrain (chaotic high-plateau, appears rougher)
+  float tessera=smoothstep(0.58,0.72,fbm(n*5.0+vec3(8.)));
+  col=mix(col,vec3(0.60,0.36,0.16),tessera*0.28);
+  // Volcanic features (lava channels)
+  float lava=smoothstep(0.68,0.74,fbm(n*9.0+vec3(uTime*0.002)));
+  col=mix(col,vec3(0.82,0.42,0.08),lava*0.30);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.85+0.15;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Titan infrared mode: Cassini VIMS composite surface (2.0/1.3μm) ──────
+const FRAG_TITAN_IR = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+${NOISE_GLSL}
+void main(){
+  vec3 n=normalize(vPos);
+  float t=fbm(n*3.5+vec3(4.0));
+  float t2=fbm(n*7.0+vec3(2.0));
+  // Xanadu Regio — bright highland/continent (VIMS bright in 2μm channel)
+  float xanadu=smoothstep(0.50,0.68,fbm(n*1.8+vec3(0.5,1.2,0.3)));
+  // Kraken Mare + Ligeia Mare (methane seas near north pole)
+  float nSea=smoothstep(0.68,0.88,n.y);
+  // Base: gold/tan (IR penetrates haze, shows water ice + organic sediment)
+  vec3 col=mix(vec3(0.48,0.30,0.10),vec3(0.70,0.50,0.22),t);
+  col=mix(col,vec3(0.85,0.76,0.55),xanadu*0.62);          // Xanadu: bright
+  col=mix(col,vec3(0.06,0.05,0.04),nSea*0.90);             // Methane seas: very dark
+  // Dune fields (equatorial dark linear features)
+  float dunes=smoothstep(0.53,0.63,fbm(vec3(n.x*6.0,n.y*2.0,n.z*6.0)+vec3(3.)));
+  float eqBias=smoothstep(0.22,0.0,abs(n.y));
+  col=mix(col,vec3(0.20,0.12,0.05),dunes*eqBias*0.55);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.72+0.28;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
+// ── Station/Satellite: metallic with gold solar panel strips ─────────────
+const FRAG_STATION = `
+uniform float uTime;
+varying vec3 vPos;
+varying vec3 vNormal;
+varying vec2 vUv;
+${NOISE_GLSL}
+void main(){
+  // Solar panel stripes (alternating dark/gold)
+  float panelStripe=step(0.5,fract(vUv.x*8.0));
+  vec3 solarPanel=mix(vec3(0.10,0.08,0.05),vec3(0.72,0.50,0.06),panelStripe);
+  // Module body (white/silver)
+  float moduleMask=smoothstep(0.25,0.35,abs(vUv.y-0.5)*2.0);
+  vec3 col=mix(solarPanel,vec3(0.88,0.87,0.85),moduleMask*0.90);
+  // Subtle metallic noise
+  float noise=fbm(normalize(vPos)*12.0)*0.06;
+  col=col*(0.96+noise);
+  float diff=max(dot(vNormal,normalize(vec3(1,1,0.5))),0.0)*0.80+0.20;
+  gl_FragColor=vec4(col*diff,1.0);
+}
+`;
+
 // ── Helper: choose frag shader by id ──────────────────────────────────────
-function getFragShader(body: CelestialBodyData): string {
+function getFragShader(body: CelestialBodyData, bodyViewMode?: string): string {
+  // View-mode overrides (surface / infrared modes)
+  if (body.id === 'venus' && bodyViewMode === 'surface') return FRAG_VENUS_SURFACE;
+  if (body.id === 'titan' && bodyViewMode === 'infrared') return FRAG_TITAN_IR;
+
   switch (body.id) {
     case 'sun':
     case 'centauri-a':
@@ -609,8 +887,8 @@ function getFragShader(body: CelestialBodyData): string {
     case 'mercury': return FRAG_MERCURY;
     case 'jupiter': return FRAG_JUPITER;
     case 'saturn': return FRAG_SATURN;
-    case 'uranus': return FRAG_ICE_GIANT;
-    case 'neptune': return FRAG_ICE_GIANT;
+    case 'uranus': return FRAG_URANUS;   // upgraded from FRAG_ICE_GIANT
+    case 'neptune': return FRAG_NEPTUNE; // upgraded from FRAG_ICE_GIANT
     case 'pluto': return FRAG_DWARF;
     case 'io': return FRAG_VOLCANIC;
     case 'europa': return FRAG_MOON_ICE;
@@ -619,10 +897,17 @@ function getFragShader(body: CelestialBodyData): string {
     case 'callisto': return FRAG_MOON;
     case 'phobos': return FRAG_MOON;
     case 'deimos': return FRAG_MOON;
-    case 'miranda': return FRAG_MOON_ICE;
+    case 'miranda': return FRAG_MIRANDA;  // upgraded: Verona Rupes cliff terrain
     case 'triton': return FRAG_TRITON;
-    case 'charon': return FRAG_MOON;
+    case 'charon': return FRAG_CHARON;    // upgraded: Mordor Macula + Argo Chasma
     case 'halley': return FRAG_COMET;
+    // New dwarf planets
+    case 'eris': return FRAG_BRIGHT_ICE;
+    case 'haumea': return FRAG_HAUMEA;
+    case 'makemake': return FRAG_DARK_KBO;
+    // Artificial satellites
+    case 'iss':
+    case 'hubble': return FRAG_STATION;
     // Exoplanet systems
     case 'trappist1-star':
     case 'proxima-centauri':
@@ -833,10 +1118,11 @@ interface Props {
   rotationPaused?: boolean;
   manualRotationRef?: React.MutableRefObject<number>;
   showAtmosphere?: boolean; // Global atmosphere toggle
+  bodyViewMode?: string;    // Per-body view override ('surface' | 'infrared' | 'default')
 }
 
 // Internal shader renderer (procedural GLSL — used for exoplanets, moons, fallback)
-const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef, showAtmosphere = true }) => {
+const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef, showAtmosphere = true, bodyViewMode }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
   const r = radius ?? body.displayRadius;
@@ -847,7 +1133,7 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
     ...getExtraUniforms(body),
   }), [body, isOverview]);
 
-  const fragShader = useMemo(() => getFragShader(body), [body]);
+  const fragShader = useMemo(() => getFragShader(body, bodyViewMode), [body, bodyViewMode]);
 
   useFrame((_, dt) => {
     if (!rotationPaused) {
@@ -867,8 +1153,12 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
 
   const detail = isOverview ? 16 : 64;
 
+  // Haumea is triaxially elongated — scale the group to approximate 2200×1500×1000 km ratio
+  const isHaumea = body.id === 'haumea';
+  const haumeaScale: [number, number, number] = isHaumea ? [1.0, 0.60, 0.72] : [1, 1, 1];
+
   return (
-    <group onClick={onClick}>
+    <group onClick={onClick} scale={haumeaScale}>
       {/* Planet sphere */}
       <mesh ref={meshRef}>
         <icosahedronGeometry args={[r, isOverview ? 3 : 6]} />
@@ -910,12 +1200,15 @@ const ShaderBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onC
 };
 
 // ── Public dispatcher: real texture when available, shader fallback ────────
-export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef, showAtmosphere = true }) => {
+export const CelestialBodyMesh: React.FC<Props> = ({ body, radius, isOverview = false, onClick, rotationPaused, manualRotationRef, showAtmosphere = true, bodyViewMode }) => {
   const r = radius ?? body.displayRadius;
-  if (TEXTURE_FILENAMES[body.id]) {
+  // Surface/infrared mode overrides always use the shader (bypass texture)
+  const forceShader = (body.id === 'venus' && bodyViewMode === 'surface') ||
+                      (body.id === 'titan' && bodyViewMode === 'infrared');
+  if (!forceShader && TEXTURE_FILENAMES[body.id]) {
     return <TexturedPlanetMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} showAtmosphere={showAtmosphere} />;
   }
-  return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} showAtmosphere={showAtmosphere} />;
+  return <ShaderBodyMesh body={body} radius={r} isOverview={isOverview} onClick={onClick} rotationPaused={rotationPaused} manualRotationRef={manualRotationRef} showAtmosphere={showAtmosphere} bodyViewMode={bodyViewMode} />;
 };
 
 // ── Saturn-style rings ─────────────────────────────────────────────────────

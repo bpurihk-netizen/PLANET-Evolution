@@ -234,10 +234,11 @@ interface OrbitingBodyProps {
   rotationPaused?: boolean;
   manualRotationRef?: React.MutableRefObject<number>;
   showAtmosphere?: boolean;
+  bodyViewMode?: string;
 }
 
 const OrbitingBody: React.FC<OrbitingBodyProps> = ({
-  body, isSelected, viewMode, onClick, angleRef, rotationPaused, manualRotationRef, showAtmosphere = true
+  body, isSelected, viewMode, onClick, angleRef, rotationPaused, manualRotationRef, showAtmosphere = true, bodyViewMode
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const isDetail = viewMode === 'detail' && isSelected;
@@ -281,6 +282,7 @@ const OrbitingBody: React.FC<OrbitingBodyProps> = ({
         rotationPaused={isDetail ? rotationPaused : false}
         manualRotationRef={isDetail ? manualRotationRef : undefined}
         showAtmosphere={showAtmosphere}
+        bodyViewMode={bodyViewMode}
       />
       {body.id === 'halley' && !isOverview && <CometTail radius={displayR} />}
       {isSelected && isOverview && (
@@ -349,7 +351,8 @@ const MoonOrbit: React.FC<{
   onClick: () => void;
   isSelected: boolean;
   showAtmosphere?: boolean;
-}> = ({ moon, orbitRadius, initialAngle, onClick, isSelected, showAtmosphere = true }) => {
+  bodyViewMode?: string;
+}> = ({ moon, orbitRadius, initialAngle, onClick, isSelected, showAtmosphere = true, bodyViewMode }) => {
   const groupRef = useRef<THREE.Group>(null);
   const angleRef = useRef(initialAngle);
 
@@ -368,7 +371,7 @@ const MoonOrbit: React.FC<{
         <sphereGeometry args={[Math.max(moon.displayRadius * 7, 1.2), 8, 8]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <CelestialBodyMesh body={moon} radius={Math.max(moon.displayRadius * 4, 0.18)} isOverview={false} onClick={onClick} showAtmosphere={showAtmosphere} />
+      <CelestialBodyMesh body={moon} radius={Math.max(moon.displayRadius * 4, 0.18)} isOverview={false} onClick={onClick} showAtmosphere={showAtmosphere} bodyViewMode={bodyViewMode} />
       {isSelected && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[moon.displayRadius * 4 * 1.4, moon.displayRadius * 4 * 1.7, 24]} />
@@ -485,12 +488,13 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel, showAtmosphere }) =
             rotationPaused={isSelected && state.viewMode === 'detail' ? state.obsRotationPaused : false}
             manualRotationRef={isSelected && state.viewMode === 'detail' ? manualRotationRef : undefined}
             showAtmosphere={showAtmosphere}
+            bodyViewMode={state.bodyViewModes?.[body.id]}
           />
         );
       })}
 
-      {/* Moon detail mode: render the selected moon centred at origin */}
-      {state.moonDetailMode && state.selectedBody?.type === 'MOON' && (
+      {/* Child-body detail mode: moon, station, or satellite centred at origin */}
+      {state.moonDetailMode && state.selectedBody && ['MOON', 'STATION', 'SATELLITE'].includes(state.selectedBody.type) && (
         <group>
           <CelestialBodyMesh
             body={state.selectedBody}
@@ -499,6 +503,7 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel, showAtmosphere }) =
             rotationPaused={state.obsRotationPaused}
             manualRotationRef={manualRotationRef}
             showAtmosphere={showAtmosphere}
+            bodyViewMode={state.bodyViewModes?.[state.selectedBody.id]}
           />
         </group>
       )}
@@ -516,6 +521,7 @@ const Scene: React.FC<SceneProps> = ({ state, activityLevel, showAtmosphere }) =
             onClick={() => state.enterMoonDetail(child.id, state.focusBodyId!)}
             isSelected={state.selectedBodyId === child.id}
             showAtmosphere={showAtmosphere}
+            bodyViewMode={state.bodyViewModes?.[child.id]}
           />
         );
       })}

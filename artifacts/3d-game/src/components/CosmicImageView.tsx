@@ -2,8 +2,9 @@
  * CosmicImageView — NASA画像を使った宇宙階層ビュー
  * R3Fアニメーションの代わりに、NASA Image Library の実際の天文画像でコンテンツを表示する。
  * lss / supercluster / cluster / group / galaxy レベルすべてを処理する。
+ * 追加: 系外惑星系の軌道図SVG・LSS大規模構造フィラメントアニメーション
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SolarSystemState, CosmicLevel } from '../hooks/useSolarSystem';
 import {
   ALL_LSS_FEATURES, ALL_SUPERCLUSTERS, ALL_GALAXY_CLUSTERS,
@@ -258,6 +259,225 @@ function useNasaImage(query: string | undefined) {
   return { image, loading };
 }
 
+// ── Exoplanet orbital diagram (SVG) ──────────────────────────────────────────
+
+interface OrbitDef { r: number; period: number; habitable?: boolean; colorClass: string; label: string; }
+
+const EXOPLANET_ORBITS: Record<string, { star: string; starColor: string; planets: OrbitDef[] }> = {
+  trappist1: {
+    star: 'TRAPPIST-1',
+    starColor: '#e05030',
+    planets: [
+      { r: 22, period: 1.51, colorClass: '#e07850', label: 'b' },
+      { r: 30, period: 2.42, colorClass: '#e8a060', label: 'c' },
+      { r: 39, period: 4.05, colorClass: '#a0c8f0', label: 'd' },
+      { r: 50, period: 6.10, colorClass: '#68c080', habitable: true, label: 'e' },
+      { r: 61, period: 9.21, colorClass: '#88d078', habitable: true, label: 'f' },
+      { r: 73, period: 12.4, colorClass: '#78b860', habitable: true, label: 'g' },
+      { r: 87, period: 18.8, colorClass: '#8890c0', label: 'h' },
+    ],
+  },
+  kepler442: {
+    star: 'Kepler-442',
+    starColor: '#f0a050',
+    planets: [
+      { r: 55, period: 112.3, colorClass: '#68b870', habitable: true, label: 'b' },
+    ],
+  },
+  'alpha-centauri': {
+    star: 'α Cen',
+    starColor: '#ffe8a0',
+    planets: [
+      { r: 40, period: 3.24, colorClass: '#e07850', label: 'B b?' },
+    ],
+  },
+};
+
+const ExoplanetOrbitalDiagram: React.FC<{ systemId: string }> = ({ systemId }) => {
+  const def = EXOPLANET_ORBITS[systemId];
+  const timeRef = useRef(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+
+  const draw = useCallback(() => {
+    const cv = canvasRef.current;
+    if (!cv || !def) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    const W = cv.width, H = cv.height;
+    const cx = W / 2, cy = H / 2;
+
+    ctx.clearRect(0, 0, W, H);
+    // Background
+    ctx.fillStyle = '#050912';
+    ctx.fillRect(0, 0, W, H);
+
+    // Habitable zone ring
+    const habPlanets = def.planets.filter(p => p.habitable);
+    if (habPlanets.length >= 1) {
+      const innerR = Math.min(...habPlanets.map(p => p.r)) - 8;
+      const outerR = Math.max(...habPlanets.map(p => p.r)) + 8;
+      const grad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+      grad.addColorStop(0, 'rgba(60,200,80,0)');
+      grad.addColorStop(0.3, 'rgba(60,200,80,0.12)');
+      grad.addColorStop(0.7, 'rgba(60,200,80,0.12)');
+      grad.addColorStop(1, 'rgba(60,200,80,0)');
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    // Orbit circles
+    def.planets.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, p.r, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(160,180,255,0.20)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    });
+
+    // Central star
+    const starGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 9);
+    starGrad.addColorStop(0, def.starColor);
+    starGrad.addColorStop(0.6, def.starColor + 'aa');
+    starGrad.addColorStop(1, def.starColor + '00');
+    ctx.beginPath();
+    ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+    ctx.fillStyle = starGrad;
+    ctx.fill();
+
+    // Planets
+    const t = timeRef.current;
+    def.planets.forEach(p => {
+      const ang = (t / (p.period * 0.6)) % (Math.PI * 2);
+      const px = cx + Math.cos(ang) * p.r;
+      const py = cy + Math.sin(ang) * p.r;
+      ctx.beginPath();
+      ctx.arc(px, py, p.habitable ? 4 : 3, 0, Math.PI * 2);
+      ctx.fillStyle = p.colorClass;
+      ctx.fill();
+      // Planet label
+      ctx.fillStyle = 'rgba(200,220,255,0.65)';
+      ctx.font = '7px monospace';
+      ctx.fillText(p.label, px + 4, py - 3);
+    });
+
+    // Star name
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.fillText(def.star, 6, H - 6);
+
+    // Habitable zone label
+    if (habPlanets.length > 0) {
+      ctx.fillStyle = 'rgba(80,220,100,0.55)';
+      ctx.font = '7px sans-serif';
+      ctx.fillText('HZ', W - 20, H - 6);
+    }
+  }, [def]);
+
+  useEffect(() => {
+    if (!def) return;
+    let last = 0;
+    const loop = (ts: number) => {
+      const dt = (ts - last) / 1000;
+      last = ts;
+      timeRef.current += dt;
+      draw();
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [def, draw]);
+
+  if (!def) return null;
+  return <canvas ref={canvasRef} width={200} height={120} className="w-full h-full" />;
+};
+
+// ── LSS cosmic web filament animation ────────────────────────────────────────
+
+const LSSCosmicWebCanvas: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+  const timeRef = useRef(0);
+
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    const W = cv.width, H = cv.height;
+
+    // Generate stable filament nodes using fixed seed
+    type Node = { x: number; y: number; r: number; bright: number };
+    const nodes: Node[] = [];
+    let s = 12345;
+    const rand = () => { s = (s * 1664525 + 1013904223) & 0x7fffffff; return s / 0x7fffffff; };
+    for (let i = 0; i < 60; i++) {
+      nodes.push({ x: rand() * W, y: rand() * H, r: rand() * 2.5 + 0.5, bright: rand() });
+    }
+
+    const draw = (t: number) => {
+      ctx.fillStyle = '#030508';
+      ctx.fillRect(0, 0, W, H);
+
+      // Filaments (connect nearby nodes with dim lines)
+      nodes.forEach((a, i) => {
+        nodes.slice(i + 1).forEach(b => {
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < W * 0.28) {
+            const alpha = (1 - dist / (W * 0.28)) * 0.20;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = `rgba(160,180,255,${alpha.toFixed(3)})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        });
+      });
+
+      // Nodes (galaxy cluster halos pulsing gently)
+      nodes.forEach((n, i) => {
+        const pulse = 0.6 + 0.4 * Math.sin(t * 0.3 + i * 0.7);
+        const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 3 * pulse);
+        grad.addColorStop(0, `rgba(180,200,255,${(0.7 * n.bright * pulse).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(120,140,255,0)');
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r * 3 * pulse, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+      });
+
+      // Voids (dark circular regions)
+      [[W * 0.2, H * 0.35, 28], [W * 0.7, H * 0.6, 22], [W * 0.5, H * 0.15, 18]].forEach(([vx, vy, vr]) => {
+        const g = ctx.createRadialGradient(vx, vy, 0, vx, vy, vr);
+        g.addColorStop(0, 'rgba(0,2,8,0.45)');
+        g.addColorStop(1, 'rgba(0,2,8,0)');
+        ctx.beginPath();
+        ctx.arc(vx, vy, vr, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+      });
+    };
+
+    let last = 0;
+    const loop = (ts: number) => {
+      const dt = (ts - last) / 1000;
+      last = ts;
+      timeRef.current += dt;
+      draw(timeRef.current);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  return <canvas ref={canvasRef} width={200} height={120} className="w-full h-full" />;
+};
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 interface CardProps {
@@ -265,8 +485,15 @@ interface CardProps {
   onDrillDown: (card: CosmicCard) => void;
 }
 
+// IDs that should show procedural orbital diagram when NASA image fails
+const ORBITAL_DIAGRAM_IDS = new Set(Object.keys(EXOPLANET_ORBITS));
+// IDs (LSS features) that show cosmic web canvas when NASA image fails
+const LSS_PROCEDURAL_IDS = new Set(['bootes-void', 'sloan-great-wall', 'hercules-corona', 'pisces-cetus', 'sculptor-wall', 'cfa2-great-wall', 'vela-supercluster']);
+
 const NasaImageCard: React.FC<CardProps> = ({ card, onDrillDown }) => {
   const { image, loading } = useNasaImage(card.nasaQuery);
+  const showOrbital = !loading && !image && ORBITAL_DIAGRAM_IDS.has(card.id);
+  const showCosmicWeb = !loading && !image && LSS_PROCEDURAL_IDS.has(card.id);
 
   return (
     <button
@@ -278,7 +505,7 @@ const NasaImageCard: React.FC<CardProps> = ({ card, onDrillDown }) => {
           : 'cursor-default border-white/8 bg-white/3',
       ].join(' ')}
     >
-      {/* NASA Image */}
+      {/* Image / procedural thumbnail */}
       <div className="relative w-full aspect-video bg-indigo-950/60 overflow-hidden">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -292,6 +519,10 @@ const NasaImageCard: React.FC<CardProps> = ({ card, onDrillDown }) => {
             loading="lazy"
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
+        ) : showOrbital ? (
+          <ExoplanetOrbitalDiagram systemId={card.id} />
+        ) : showCosmicWeb ? (
+          <LSSCosmicWebCanvas />
         ) : !loading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-4xl opacity-20">🌌</span>

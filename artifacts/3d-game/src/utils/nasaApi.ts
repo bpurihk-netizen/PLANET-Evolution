@@ -156,8 +156,22 @@ export const NASA_OBJECT_QUERIES: Record<string, string> = {
   // Star systems (used at galaxy level)
   'solar-system':   'solar system planets NASA',
   'alpha-centauri': 'Alpha Centauri star system',
-  'trappist1':      'TRAPPIST-1 exoplanet system',
-  'kepler442':      'Kepler 442 habitable exoplanet',
+  'trappist1':      'TRAPPIST-1 exoplanet system artist concept',
+  'kepler442':      'Kepler 442b habitable exoplanet artist',
+
+  // New solar system bodies
+  'eris':           'Eris dwarf planet Kuiper belt',
+  'haumea':         'Haumea dwarf planet elongated',
+  'makemake':       'Makemake dwarf planet Kuiper belt',
+  'iss':            'International Space Station orbit Earth',
+  'hubble':         'Hubble Space Telescope orbit',
+  'halley-giotto':  'Halleys comet Giotto mission 1986 nucleus',
+
+  // Existing bodies — additional enrichment
+  'titan-ir':       'Titan surface infrared Cassini VIMS',
+  'venus-surface':  'Venus surface Magellan radar map',
+  'neptune-dark':   'Neptune dark spot Hubble 2018',
+  'miranda-cliffs': 'Miranda moon cliffs Voyager',
 };
 
 // ── Background queries for each cosmic level ─────────────────────────────────

@@ -4,7 +4,7 @@ import { SolarSystemState } from '../hooks/useSolarSystem';
 import { StampRallyState } from '../hooks/useStampRally';
 import { BODY_STAMP_TRIGGERS, pickQuiz, QuizQuestion } from '../data/stampData';
 import { cn } from '@/lib/utils';
-import { X, Footprints, Swords, ChevronLeft, ChevronDown, HelpCircle, CheckCircle, XCircle } from 'lucide-react';
+import { X, Footprints, Swords, ChevronLeft, ChevronDown, HelpCircle, CheckCircle, XCircle, Layers, Thermometer } from 'lucide-react';
 
 interface InfoPanelProps {
   state: SolarSystemState;
@@ -136,6 +136,8 @@ function typeIcon(t: string): string {
     case 'MOON': return '🌕';
     case 'ASTEROID_BELT': return '🪨';
     case 'COMET': return '☄️';
+    case 'STATION': return '🛸';
+    case 'SATELLITE': return '🛰️';
     default: return '🌍';
   }
 }
@@ -345,6 +347,46 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
 
           {/* Action buttons */}
           <div className="flex flex-col gap-3 pt-1">
+            {/* ── Venus surface mode toggle ── */}
+            {body.id === 'venus' && (
+              <button
+                onClick={() => {
+                  const current = state.bodyViewModes?.['venus'] ?? 'default';
+                  state.setBodyViewMode('venus', current === 'surface' ? 'default' : 'surface');
+                }}
+                className={[
+                  'w-full py-3.5 border rounded-2xl font-bold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[52px]',
+                  (state.bodyViewModes?.['venus'] === 'surface')
+                    ? 'bg-orange-700/60 border-orange-400/60 text-orange-200 active:bg-orange-600/70'
+                    : 'bg-yellow-900/40 border-yellow-500/40 text-yellow-200 active:bg-yellow-800/50',
+                ].join(' ')}
+              >
+                <Layers size={16} />
+                {(state.bodyViewModes?.['venus'] === 'surface')
+                  ? '雲の表示に戻す'
+                  : 'マゼラン レーダー地形を表示'}
+              </button>
+            )}
+            {/* ── Titan infrared mode toggle ── */}
+            {body.id === 'titan' && (
+              <button
+                onClick={() => {
+                  const current = state.bodyViewModes?.['titan'] ?? 'default';
+                  state.setBodyViewMode('titan', current === 'infrared' ? 'default' : 'infrared');
+                }}
+                className={[
+                  'w-full py-3.5 border rounded-2xl font-bold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[52px]',
+                  (state.bodyViewModes?.['titan'] === 'infrared')
+                    ? 'bg-amber-700/60 border-amber-400/60 text-amber-200 active:bg-amber-600/70'
+                    : 'bg-orange-900/40 border-orange-500/40 text-orange-200 active:bg-orange-800/50',
+                ].join(' ')}
+              >
+                <Thermometer size={16} />
+                {(state.bodyViewModes?.['titan'] === 'infrared')
+                  ? '可視光表示に戻す'
+                  : 'カッシーニ 赤外線地形を表示'}
+              </button>
+            )}
             {body.canLand && state.currentSystemId === 'solar-system' && (
               <button
                 onClick={() => state.activateDeiland(body.id)}
