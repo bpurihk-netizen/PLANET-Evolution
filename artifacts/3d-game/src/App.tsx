@@ -206,15 +206,34 @@ function SolarExplorerApp() {
             </div>
           </div>
 
-          {/* Left-side level panel — overlay on the 3D canvas */}
-          <div className="absolute inset-0 z-[15] pointer-events-none">
-            <div className="pointer-events-auto w-fit">
-              <CosmicLevelPanel
-                state={state}
-                collapsed={cosmicPanelCollapsed}
-                onToggle={() => setCosmicPanelCollapsed(v => !v)}
-              />
+          {/* Left-side level panel — toggled by 階層 button */}
+          {showCosmicPanel && (
+            <div className="absolute inset-0 z-[15] pointer-events-none">
+              <div className="pointer-events-auto w-fit">
+                <CosmicLevelPanel
+                  state={state}
+                  collapsed={cosmicPanelCollapsed}
+                  onToggle={() => setCosmicPanelCollapsed(v => !v)}
+                />
+              </div>
             </div>
+          )}
+
+          {/* Floating 階層 toggle button (right side, same as system mode) */}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 z-30">
+            <button
+              onClick={() => setShowCosmicPanel(v => !v)}
+              className={[
+                'w-12 h-12 rounded-full border backdrop-blur-sm flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg gap-0.5',
+                showCosmicPanel
+                  ? 'bg-indigo-500/30 border-indigo-400/60 text-indigo-200'
+                  : 'bg-black/45 border-white/15 text-white/55'
+              ].join(' ')}
+              title="宇宙の階層ナビゲーション"
+            >
+              <span className="text-[18px] leading-none">🌌</span>
+              <span className="text-[8px] font-mono leading-none">階層</span>
+            </button>
           </div>
 
           {/* CosmicInfoPanel — bottom sheet when an object is tapped */}

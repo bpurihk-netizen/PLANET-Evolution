@@ -145,7 +145,7 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
           co2={co2}
           transformation={transformation}
         />
-        <PlayerShip posRef={playerPosRef} />
+        <PlayerShip posRef={playerPosRef} powerRank={powerRank} />
         <BossShip bossRef={bossRef} />
         <EnemyShips key={killCount} enemiesRef={enemiesRef} />
         <ExplosionSystem explosionsRef={explosionsRef} />

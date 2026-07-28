@@ -24,24 +24,40 @@ const BulletMesh: React.FC<{ bullet: Bullet }> = ({ bullet }) => {
 
   if (bullet.isDead) return null;
 
-  // Enemy bullet (mine or normal enemy bullet)
+  // ── Enemy bullets — bright red/danger look, clearly NOT collectible ─────────
   if (bullet.isEnemy) {
     if (bullet.type === 'mine') {
       return (
-        <mesh ref={ref as React.RefObject<THREE.Mesh>}>
-          <sphereGeometry args={[0.18, 6, 6]} />
-          <meshBasicMaterial color={new THREE.Color(1.0, 0.1, 0.8)} />
-        </mesh>
+        <group ref={ref as React.RefObject<THREE.Group>}>
+          {/* Dark red pulsing sphere */}
+          <mesh>
+            <sphereGeometry args={[0.20, 8, 8]} />
+            <meshStandardMaterial
+              color="#cc0022"
+              emissive="#ff0033"
+              emissiveIntensity={3.5}
+              transparent opacity={0.92}
+            />
+          </mesh>
+          {/* Danger spike ring */}
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.32, 0.038, 4, 12]} />
+            <meshBasicMaterial color="#ff0044" transparent opacity={0.85} />
+          </mesh>
+          <pointLight color="#ff0033" intensity={2.5} distance={2.2} />
+        </group>
       );
     }
+    // Normal enemy bullet — sharp red capsule (looks like a shot, not a coin)
     return (
       <mesh ref={ref as React.RefObject<THREE.Mesh>}>
-        <sphereGeometry args={[0.12, 6, 6]} />
-        <meshBasicMaterial color={new THREE.Color(1.0, 0.4, 0.0)} />
+        <capsuleGeometry args={[0.055, 0.44, 4, 8]} />
+        <meshBasicMaterial color={new THREE.Color(1.0, 0.07, 0.07)} />
       </mesh>
     );
   }
 
+  // ── Player bullets ──────────────────────────────────────────────────────────
   if (bullet.type === 'laser') {
     return (
       <mesh ref={ref as React.RefObject<THREE.Mesh>}>
@@ -135,7 +151,7 @@ const BulletMesh: React.FC<{ bullet: Bullet }> = ({ bullet }) => {
     );
   }
 
-  // normal / twin
+  // normal / twin — cyan capsule
   return (
     <mesh ref={ref as React.RefObject<THREE.Mesh>}>
       <capsuleGeometry args={[0.05, 0.4, 4, 8]} />

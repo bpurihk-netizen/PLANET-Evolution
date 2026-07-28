@@ -4,11 +4,15 @@ import * as THREE from 'three';
 
 interface PlayerShipProps {
   posRef: MutableRefObject<THREE.Vector3>;
+  powerRank?: number;
 }
 
 const TRAIL_LENGTH = 50;
 
-export const PlayerShip: React.FC<PlayerShipProps> = ({ posRef }) => {
+export const PlayerShip: React.FC<PlayerShipProps> = ({ posRef, powerRank = 0 }) => {
+  const tier = powerRank >= 9 ? 3 : powerRank >= 6 ? 2 : powerRank >= 3 ? 1 : 0;
+  const engineColors = ['#44aaff', '#00ffcc', '#cc44ff', '#ff88ff'] as const;
+  const engineColor = engineColors[tier];
   const outerGroupRef = useRef<THREE.Group>(null);
   const innerGroupRef = useRef<THREE.Group>(null);
   
@@ -34,7 +38,8 @@ export const PlayerShip: React.FC<PlayerShipProps> = ({ posRef }) => {
 
   const trailColors = useMemo(() => {
     const colors = new Float32Array(TRAIL_LENGTH * 3);
-    const baseColor = new THREE.Color('#2266ff');
+    const tierColorHex = ['#2266ff', '#00ffcc', '#aa44ff', '#ff88ff'];
+    const baseColor = new THREE.Color(tierColorHex[tier]);
     for (let i = 0; i < TRAIL_LENGTH; i++) {
       const ratio = i / (TRAIL_LENGTH - 1); 
       colors[i * 3] = baseColor.r * ratio;
@@ -42,7 +47,7 @@ export const PlayerShip: React.FC<PlayerShipProps> = ({ posRef }) => {
       colors[i * 3 + 2] = baseColor.b * ratio;
     }
     return colors;
-  }, []);
+  }, [tier]);
 
   const trailPositions1 = useMemo(() => new Float32Array(TRAIL_LENGTH * 3), []);
   const trailPositions2 = useMemo(() => new Float32Array(TRAIL_LENGTH * 3), []);
@@ -188,17 +193,65 @@ export const PlayerShip: React.FC<PlayerShipProps> = ({ posRef }) => {
           {/* Engine Flame Left */}
           <mesh ref={engineFlameL} position={[-0.25, 0, 0.9]} rotation={[Math.PI / 2, 0, 0]}>
             <coneGeometry args={[0.06, 0.4, 8]} />
-            <meshBasicMaterial color="#44aaff" transparent opacity={0.85} />
+            <meshBasicMaterial color={engineColor} transparent opacity={0.85} />
           </mesh>
           
           {/* Engine Flame Right */}
           <mesh ref={engineFlameR} position={[0.25, 0, 0.9]} rotation={[Math.PI / 2, 0, 0]}>
             <coneGeometry args={[0.06, 0.4, 8]} />
-            <meshBasicMaterial color="#44aaff" transparent opacity={0.85} />
+            <meshBasicMaterial color={engineColor} transparent opacity={0.85} />
           </mesh>
           
           {/* Engine Light */}
-          <pointLight ref={engineLightRef} color="#44aaff" intensity={2} distance={3} position={[0, 0, 0.8]} />
+          <pointLight ref={engineLightRef} color={engineColor} intensity={2} distance={3} position={[0, 0, 0.8]} />
+
+          {/* ── 強化ビジュアル tier 1 (rank 3+): ウィング先端ゴールドライト ── */}
+          {tier >= 1 && (
+            <>
+              <mesh position={[-0.67, 0, 0.15]}>
+                <sphereGeometry args={[0.07, 6, 6]} />
+                <meshStandardMaterial color="#ffdd44" emissive="#ffcc00" emissiveIntensity={4} />
+              </mesh>
+              <mesh position={[0.67, 0, 0.15]}>
+                <sphereGeometry args={[0.07, 6, 6]} />
+                <meshStandardMaterial color="#ffdd44" emissive="#ffcc00" emissiveIntensity={4} />
+              </mesh>
+              <pointLight color="#ffcc00" intensity={1.8} distance={2.5} position={[0, 0.1, 0]} />
+            </>
+          )}
+
+          {/* ── 強化ビジュアル tier 2 (rank 6+): サイドキャノン + エンジンリング ── */}
+          {tier >= 2 && (
+            <>
+              <mesh position={[-0.52, -0.08, -0.32]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.045, 0.035, 0.55, 6]} />
+                <meshPhysicalMaterial color="#5522bb" metalness={1} roughness={0.05} emissive="#4400aa" emissiveIntensity={1.5} />
+              </mesh>
+              <mesh position={[0.52, -0.08, -0.32]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.045, 0.035, 0.55, 6]} />
+                <meshPhysicalMaterial color="#5522bb" metalness={1} roughness={0.05} emissive="#4400aa" emissiveIntensity={1.5} />
+              </mesh>
+              <mesh position={[0, 0, 0.78]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.24, 0.028, 6, 22]} />
+                <meshBasicMaterial color="#dd44ff" transparent opacity={0.9} />
+              </mesh>
+            </>
+          )}
+
+          {/* ── 強化ビジュアル tier 3 (rank 9+): オーラリング + 外殻グロー ── */}
+          {tier >= 3 && (
+            <>
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.92, 0.045, 6, 32]} />
+                <meshBasicMaterial color="#00ffff" transparent opacity={0.65} />
+              </mesh>
+              <mesh>
+                <sphereGeometry args={[1.05, 8, 8]} />
+                <meshBasicMaterial color="#4488ff" transparent opacity={0.045} />
+              </mesh>
+              <pointLight color="#00ffff" intensity={3} distance={4} position={[0, 0, 0]} />
+            </>
+          )}
         </group>
       </group>
       

@@ -316,6 +316,32 @@ const CosmicObjectMesh: React.FC<{
   );
 };
 
+// ── 選択時カメラフォーカス ────────────────────────────────────────────────────
+const CameraFocusOnSelect: React.FC<{
+  selectedObj: CosmicObject | null;
+  defaultPos: [number, number, number];
+}> = ({ selectedObj, defaultPos }) => {
+  const { camera, controls } = useThree();
+
+  // Initial camera position
+  useEffect(() => {
+    camera.position.set(...defaultPos);
+    camera.lookAt(0, 0, 0);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedObj) return;
+    const orb = controls as any;
+    const { x, y, z } = selectedObj.pos;
+    const dist = Math.max(3, selectedObj.size * 5 + 2.5);
+    camera.position.set(x, y + selectedObj.size * 1.2, z + dist);
+    camera.lookAt(x, y, z);
+    if (orb?.target) { orb.target.set(x, y, z); orb.update(); }
+  }, [selectedObj?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return null;
+};
+
 // ── シーン ────────────────────────────────────────────────────────────────────
 const CosmicScene: React.FC<{
   objects: CosmicObject[];
@@ -324,12 +350,7 @@ const CosmicScene: React.FC<{
   cameraPos: [number, number, number];
   level: CosmicLevel;
 }> = ({ objects, selectedId, onSelect, cameraPos, level }) => {
-  const { camera } = useThree();
-
-  React.useEffect(() => {
-    camera.position.set(...cameraPos);
-    camera.lookAt(0, 0, 0);
-  }, [camera, cameraPos]);
+  const selectedObj = objects.find(o => o.id === selectedId) ?? null;
 
   return (
     <>
@@ -356,9 +377,11 @@ const CosmicScene: React.FC<{
           />
         )
       )}
+      <CameraFocusOnSelect selectedObj={selectedObj} defaultPos={cameraPos} />
       <OrbitControls
+        makeDefault
         enablePan enableZoom
-        minDistance={3}
+        minDistance={1.5}
         maxDistance={42}
         dampingFactor={0.08}
         enableDamping

@@ -315,17 +315,36 @@ const LSSFeatureMesh: React.FC<{
   );
 };
 
+// ── 選択時カメラフォーカス ────────────────────────────────────────────────────
+const CameraFocusOnSelect: React.FC<{ selectedId: string | null }> = ({ selectedId }) => {
+  const { camera, controls } = useThree();
+
+  React.useEffect(() => {
+    camera.position.set(0, 18, 28);
+    camera.lookAt(0, 0, 0);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    if (!selectedId) return;
+    const feature = ALL_LSS_FEATURES.find(f => f.id === selectedId);
+    if (!feature) return;
+    const orb = controls as any;
+    const { x, y, z } = feature.pos;
+    const scale = Math.max(0.55, Math.min(3.0, feature.sizeMLy / 200));
+    const dist = scale * 5 + 8;
+    camera.position.set(x, y + scale * 2, z + dist);
+    camera.lookAt(x, y, z);
+    if (orb?.target) { orb.target.set(x, y, z); orb.update(); }
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return null;
+};
+
 // ── 3Dシーン ─────────────────────────────────────────────────────────────────
 const LSSScene: React.FC<{
   selectedId: string | null;
   onSelect: (id: string) => void;
 }> = ({ selectedId, onSelect }) => {
-  const { camera } = useThree();
-  React.useEffect(() => {
-    camera.position.set(0, 18, 28);
-    camera.lookAt(0, 0, 0);
-  }, [camera]);
-
   return (
     <>
       <ambientLight intensity={0.25} />
@@ -342,10 +361,12 @@ const LSSScene: React.FC<{
           onSelect={onSelect}
         />
       ))}
+      <CameraFocusOnSelect selectedId={selectedId} />
       <OrbitControls
+        makeDefault
         enablePan
         enableZoom
-        minDistance={5}
+        minDistance={3}
         maxDistance={65}
         dampingFactor={0.08}
         enableDamping

@@ -622,24 +622,35 @@ interface EnemyShipsProps {
   enemiesRef: React.MutableRefObject<ShooterEntity[]>;
 }
 
+// Scale factors per enemy type — keeps them clearly smaller than the player ship
+const ENEMY_SCALE: Record<string, number> = {
+  scout: 0.52, heavy: 0.48, disc: 0.52, bomber: 0.48, elite: 0.52,
+  swarm: 0.38, splitter: 0.46, carrier: 0.40, ramjet: 0.52,
+  sentinel: 0.46, phantom: 0.52, crystal: 0.46, dreadnought: 0.34,
+};
+
 export const EnemyShips: React.FC<EnemyShipsProps> = ({ enemiesRef }) => {
   return (
     <>
       {enemiesRef.current.map(e => {
-        if (e.type === 'scout')       return <ScoutShip key={e.id} entity={e} />;
-        if (e.type === 'heavy')       return <HeavyShip key={e.id} entity={e} />;
-        if (e.type === 'disc')        return <DiscShip key={e.id} entity={e} />;
-        if (e.type === 'bomber')      return <BomberShip key={e.id} entity={e} />;
-        if (e.type === 'elite')       return <EliteShip key={e.id} entity={e} />;
-        if (e.type === 'swarm')       return <SwarmShip key={e.id} entity={e} />;
-        if (e.type === 'splitter')    return <SplitterShip key={e.id} entity={e} />;
-        if (e.type === 'carrier')     return <CarrierShip key={e.id} entity={e} />;
-        if (e.type === 'ramjet')      return <RamjetShip key={e.id} entity={e} />;
-        if (e.type === 'sentinel')    return <SentinelShip key={e.id} entity={e} />;
-        if (e.type === 'phantom')     return <PhantomShip key={e.id} entity={e} />;
-        if (e.type === 'crystal')     return <CrystalShip key={e.id} entity={e} />;
-        if (e.type === 'dreadnought') return <DreadnoughtShip key={e.id} entity={e} />;
-        return null;
+        const scale = ENEMY_SCALE[e.type] ?? 0.5;
+        let ship: React.ReactNode = null;
+        if (e.type === 'scout')       ship = <ScoutShip key={e.id} entity={e} />;
+        else if (e.type === 'heavy')  ship = <HeavyShip key={e.id} entity={e} />;
+        else if (e.type === 'disc')   ship = <DiscShip key={e.id} entity={e} />;
+        else if (e.type === 'bomber') ship = <BomberShip key={e.id} entity={e} />;
+        else if (e.type === 'elite')  ship = <EliteShip key={e.id} entity={e} />;
+        else if (e.type === 'swarm')  ship = <SwarmShip key={e.id} entity={e} />;
+        else if (e.type === 'splitter')    ship = <SplitterShip key={e.id} entity={e} />;
+        else if (e.type === 'carrier')     ship = <CarrierShip key={e.id} entity={e} />;
+        else if (e.type === 'ramjet')      ship = <RamjetShip key={e.id} entity={e} />;
+        else if (e.type === 'sentinel')    ship = <SentinelShip key={e.id} entity={e} />;
+        else if (e.type === 'phantom')     ship = <PhantomShip key={e.id} entity={e} />;
+        else if (e.type === 'crystal')     ship = <CrystalShip key={e.id} entity={e} />;
+        else if (e.type === 'dreadnought') ship = <DreadnoughtShip key={e.id} entity={e} />;
+        if (!ship) return null;
+        // Outer scale group: inner component still positions itself via useFrame on its own groupRef
+        return <group key={e.id} scale={scale}>{ship}</group>;
       })}
     </>
   );

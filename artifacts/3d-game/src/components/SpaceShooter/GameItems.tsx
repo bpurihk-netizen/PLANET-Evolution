@@ -23,10 +23,10 @@ const GameItemMesh: React.FC<{ item: GameItem }> = ({ item }) => {
 
   useFrame((state) => {
     if (!groupRef.current) return;
-    groupRef.current.position.copy(item.pos);
-    groupRef.current.rotation.y = state.clock.elapsedTime * 2.5;
-    groupRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 1.5) * 0.3;
-    const pulse = 1 + Math.sin(state.clock.elapsedTime * 5) * 0.12;
+    const t = state.clock.elapsedTime;
+    groupRef.current.position.set(item.pos.x, item.pos.y + Math.sin(t * 3.5 + item.pos.x) * 0.14, item.pos.z);
+    groupRef.current.rotation.y = t * 1.8;
+    const pulse = 1 + Math.sin(t * 5) * 0.08;
     groupRef.current.scale.setScalar(pulse);
   });
 
@@ -34,25 +34,43 @@ const GameItemMesh: React.FC<{ item: GameItem }> = ({ item }) => {
 
   return (
     <group ref={groupRef}>
-      {/* Diamond shape */}
-      <mesh>
-        <octahedronGeometry args={[0.38]} />
+      {/* Hexagonal coin disc — clearly different from round bullet spheres */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.44, 0.44, 0.14, 6]} />
         <meshStandardMaterial
           color={cfg.color}
           emissive={cfg.emissive}
-          emissiveIntensity={2.5}
-          transparent
-          opacity={0.92}
-          metalness={0.6}
-          roughness={0.2}
+          emissiveIntensity={3}
+          metalness={0.8}
+          roughness={0.1}
         />
       </mesh>
-      {/* Outer ring */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.5, 0.04, 6, 18]} />
-        <meshBasicMaterial color={cfg.color} transparent opacity={0.6} />
+
+      {/* Inner face inset */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+        <cylinderGeometry args={[0.30, 0.30, 0.02, 6]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.25} />
       </mesh>
-      <pointLight color={cfg.color} intensity={3} distance={3} />
+
+      {/* Outer sparkle ring */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.64, 0.04, 6, 18]} />
+        <meshBasicMaterial color={cfg.color} transparent opacity={0.75} />
+      </mesh>
+
+      {/* Four corner sparkle dots */}
+      {[0, 1, 2, 3].map(i => (
+        <mesh key={i} position={[
+          Math.cos((i / 4) * Math.PI * 2) * 0.64,
+          0,
+          Math.sin((i / 4) * Math.PI * 2) * 0.64,
+        ]}>
+          <sphereGeometry args={[0.06, 5, 5]} />
+          <meshBasicMaterial color="#ffffff" />
+        </mesh>
+      ))}
+
+      <pointLight color={cfg.color} intensity={4.5} distance={3.5} />
     </group>
   );
 };
