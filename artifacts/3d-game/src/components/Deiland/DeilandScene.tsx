@@ -4,10 +4,11 @@ import * as THREE from 'three';
 import { DeilandPlanet, PLANET_RADIUS } from './DeilandPlanet';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
 
-const CHAR_OFFSET = 0.15;
-const MOVE_SPEED  = 0.55;
-const TURN_SPEED  = 1.8;
+const CHAR_OFFSET      = 0.15;
+const MOVE_SPEED       = 0.55;
+const TURN_SPEED       = 1.8;
 const DESCENT_DURATION = 3.5;
+const ACTION_DURATION  = 0.55;   // seconds for one action swing
 
 // ── Biome → character outfit colours ──────────────────────────────────────────
 function getBiomeCharColors(biome: BiomeType) {
@@ -40,6 +41,9 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
   const descentRef  = useRef(0);
   const keysRef     = useRef(new Set<string>());
   const charRef     = useRef<THREE.Group>(null);
+  // animation extras
+  const sprintRef        = useRef(0);   // 0→1 smooth sprint blend
+  const actionTimerRef   = useRef(0);   // countdown for action swing (seconds)
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
@@ -55,7 +59,9 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
+    const elapsed = state.clock.elapsedTime;
+
     // Descent animation
     if (descentRef.current < 1) {
       descentRef.current = Math.min(1, descentRef.current + dt / DESCENT_DURATION);
@@ -75,18 +81,25 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
     my = Math.max(-1, Math.min(1, my));
     const isMoving = (Math.abs(mx) > 0.05 || Math.abs(my) > 0.05) && ease > 0.95;
 
-    // Character movement
+    // Sprint smoothing (fast when |my| > 0.75)
+    const wantSprint = Math.abs(my) > 0.75 && isMoving;
+    sprintRef.current += (wantSprint ? 1 : -1) * dt * 5;
+    sprintRef.current  = Math.max(0, Math.min(1, sprintRef.current));
+    const sp = sprintRef.current;
+
+    // Character movement (sprinting moves faster)
     if (ease > 0.95) {
       facingRef.current += mx * TURN_SPEED * dt;
       if (Math.abs(my) > 0.01) {
-        const dAngle = my * MOVE_SPEED * dt / PLANET_RADIUS;
+        const speedMult = 1 + sp * 0.7;
+        const dAngle = my * MOVE_SPEED * speedMult * dt / PLANET_RADIUS;
         thetaRef.current += Math.cos(facingRef.current) * dAngle;
         phiRef.current   += Math.sin(facingRef.current) * dAngle /
                             Math.max(Math.abs(Math.sin(thetaRef.current)), 0.05);
         thetaRef.current  = Math.max(0.12, Math.min(Math.PI - 0.12, thetaRef.current));
       }
     }
-    if (isMoving) walkTimeRef.current += dt;
+    if (isMoving) walkTimeRef.current += dt * (1 + sp * 0.5); // walk timer also speeds up
 
     // World positions
     const θ = thetaRef.current, φ = phiRef.current;
@@ -111,24 +124,62 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
       const m = new THREE.Matrix4().makeBasis(right, up, forward.clone().negate());
       charRef.current.quaternion.setFromRotationMatrix(m);
 
-      const wt  = walkTimeRef.current;
-      const bob   = isMoving ? Math.sin(wt * 8) * 0.018 : 0;
-      const swing = isMoving ? Math.sin(wt * 8) * 0.28  : 0;
+      const wt = walkTimeRef.current;
 
-      // Children layout (see JSX below):
-      //   c[0] = torso group
-      //   c[1] = head group (head sphere + eyes + cheeks + hat)
-      //   c[2] = right leg group
-      //   c[3] = left  leg group
-      //   c[4] = right arm group
-      //   c[5] = left  arm group
+      // ── Walk-cycle parameters (scale up for sprint) ──────────────────────
+      const walkFreq = 8 + sp * 4;                 // 8 Hz walk → 12 Hz sprint
+      const swingAmp = 0.28 + sp * 0.24;           // 0.28 → 0.52 rad stride
+      const bobAmp   = 0.018 + sp * 0.010;         // vertical bounce
+
+      // ── Idle breathing (fades out once walking starts) ───────────────────
+      const idleBlend = isMoving ? Math.max(0, 1 - wt * 4) : 1;
+      const breath    = Math.sin(elapsed * Math.PI) * 0.005 * idleBlend;
+
+      // ── Bob & limb angles ────────────────────────────────────────────────
+      //  Natural cross-body walk: right leg forward → left arm forward, and vice-versa
+      const phase = Math.sin(wt * walkFreq);
+      const bob   = isMoving ? phase * bobAmp : breath;
+      const legR  =  phase * swingAmp;         // right leg: forward on +phase
+      const legL  = -phase * swingAmp;         // left  leg: backward on +phase (opposite)
+      const armR  = -phase * swingAmp * 0.55;  // right arm: cross-body = opposite to right leg
+      const armL  =  phase * swingAmp * 0.55;  // left  arm: same direction as right leg
+
+      // ── Sprint forward-lean on torso ─────────────────────────────────────
+      const sprintLean = sp * 0.22;
+
+      // Children layout:
+      //   c[0] = torso group   c[1] = head group
+      //   c[2] = right leg     c[3] = left leg
+      //   c[4] = right arm     c[5] = left arm
       const c = charRef.current.children;
-      if (c[0]) c[0].position.y = 0.22 + bob;
-      if (c[1]) c[1].position.y = 0.38 + bob;
-      if (c[2]) { c[2].position.y = 0.08 + bob; (c[2] as THREE.Group).rotation.x =  swing; }
-      if (c[3]) { c[3].position.y = 0.08 + bob; (c[3] as THREE.Group).rotation.x = -swing; }
-      if (c[4]) { c[4].position.y = 0.22 + bob; (c[4] as THREE.Group).rotation.x =  swing * 0.5; }
-      if (c[5]) { c[5].position.y = 0.22 + bob; (c[5] as THREE.Group).rotation.x = -swing * 0.5; }
+      if (c[0]) {
+        c[0].position.y = 0.22 + bob;
+        (c[0] as THREE.Group).rotation.x = isMoving ? sprintLean : 0;
+        // Breathing: subtle torso scale when idle
+        if (!isMoving) {
+          const breathScale = 1 + Math.sin(elapsed * Math.PI) * 0.018;
+          c[0].scale.set(breathScale, 1, breathScale);
+        } else {
+          c[0].scale.set(1, 1, 1);
+        }
+      }
+      if (c[1]) {
+        c[1].position.y = 0.38 + bob;
+        // head follows torso lean slightly (half amplitude)
+        (c[1] as THREE.Group).rotation.x = isMoving ? sprintLean * 0.4 : 0;
+      }
+      if (c[2]) { c[2].position.y = 0.08 + bob; (c[2] as THREE.Group).rotation.x = isMoving ? legR : 0; }
+      if (c[3]) { c[3].position.y = 0.08 + bob; (c[3] as THREE.Group).rotation.x = isMoving ? legL : 0; }
+      if (c[4]) { c[4].position.y = 0.22 + bob; (c[4] as THREE.Group).rotation.x = isMoving ? armR : 0; }
+      if (c[5]) { c[5].position.y = 0.22 + bob; (c[5] as THREE.Group).rotation.x = isMoving ? armL : 0; }
+
+      // ── Action animation (right-arm chopping swing) ───────────────────────
+      if (actionTimerRef.current > 0) {
+        actionTimerRef.current = Math.max(0, actionTimerRef.current - dt);
+        const t = 1 - actionTimerRef.current / ACTION_DURATION; // 0 → 1
+        const actionSwing = Math.sin(t * Math.PI) * 1.1;        // arc up and back
+        if (c[4]) (c[4] as THREE.Group).rotation.x = -actionSwing; // override right arm
+      }
 
       // Fade-in during descent
       charRef.current.traverse(obj => {
