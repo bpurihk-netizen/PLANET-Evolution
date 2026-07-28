@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
 
@@ -136,6 +137,154 @@ function getBiomePalette(biome: BiomeType): Palette {
   }
 }
 
+// ── Biome → foliage / rock colour palette ─────────────────────────────────────
+function getBiomeFoliageColors(biome: BiomeType) {
+  switch (biome) {
+    case 'TEMPERATE': return { trunk: '#6b4226', leaf: '#3aad4a', leafEmissive: '#1a6b20', leafEmissiveI: 0.08 };
+    case 'OCEAN':     return { trunk: '#4a3a20', leaf: '#2a9060', leafEmissive: '#105030', leafEmissiveI: 0.10 };
+    case 'DESERT':    return { trunk: '#7a5a20', leaf: '#6a9a20', leafEmissive: '#3a5a00', leafEmissiveI: 0.05 };
+    case 'ICE':       return { trunk: '#80c0d8', leaf: '#a8e8f8', leafEmissive: '#60b8e8', leafEmissiveI: 0.25 };
+    case 'METHANE':   return { trunk: '#8b6520', leaf: '#c8a030', leafEmissive: '#906010', leafEmissiveI: 0.12 };
+    case 'TOXIC':     return { trunk: '#507020', leaf: '#90c820', leafEmissive: '#608000', leafEmissiveI: 0.15 };
+    default:          return { trunk: '#6b4226', leaf: '#2d8b45', leafEmissive: '#1a5a2a', leafEmissiveI: 0.05 };
+  }
+}
+
+function getBiomeRockProps(biome: BiomeType): { color: string; roughness: number; metalness: number } {
+  switch (biome) {
+    case 'TEMPERATE': return { color: '#8a7a6a', roughness: 0.90, metalness: 0.05 };
+    case 'OCEAN':     return { color: '#5a7090', roughness: 0.85, metalness: 0.10 };
+    case 'DESERT':    return { color: '#c09060', roughness: 0.95, metalness: 0.00 };
+    case 'ICE':       return { color: '#b0d8f0', roughness: 0.35, metalness: 0.15 };
+    case 'VOLCANIC':  return { color: '#5a2010', roughness: 0.80, metalness: 0.25 };
+    case 'AIRLESS':   return { color: '#707078', roughness: 0.70, metalness: 0.30 };
+    case 'TOXIC':     return { color: '#708030', roughness: 0.88, metalness: 0.08 };
+    case 'METHANE':   return { color: '#a07840', roughness: 0.92, metalness: 0.05 };
+    default:          return { color: '#7a7a8a', roughness: 0.80, metalness: 0.10 };
+  }
+}
+
+// ── Wind-swaying leaf wrapper ──────────────────────────────────────────────────
+const SwayingLeafGroup: React.FC<{ children: React.ReactNode; phase: number; amplitude?: number }> = ({
+  children, phase, amplitude = 0.038,
+}) => {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const t = clock.elapsedTime;
+    ref.current.rotation.z = Math.sin(t * 1.1 + phase) * amplitude;
+    ref.current.rotation.x = Math.sin(t * 0.75 + phase + 1.3) * amplitude * 0.45;
+  });
+  return <group ref={ref}>{children}</group>;
+};
+
+// ── Pulsing flower with point light ───────────────────────────────────────────
+const AnimatedFlower: React.FC<{ color: string; phase: number }> = ({ color, phase }) => {
+  const lightRef = useRef<THREE.PointLight>(null);
+  useFrame(({ clock }) => {
+    if (lightRef.current) {
+      lightRef.current.intensity = 0.28 + Math.sin(clock.elapsedTime * 2.1 + phase) * 0.18;
+    }
+  });
+  return (
+    <>
+      {/* stem */}
+      <mesh position={[0, 0.04, 0]}>
+        <cylinderGeometry args={[0.008, 0.008, 0.08, 3]} />
+        <meshLambertMaterial color="#2a6b20" />
+      </mesh>
+      {/* bloom */}
+      <mesh position={[0, 0.088, 0]}>
+        <sphereGeometry args={[0.038, 6, 5]} />
+        <meshLambertMaterial color={color} flatShading emissive={color} emissiveIntensity={0.35} />
+      </mesh>
+      {/* glow point light */}
+      <pointLight ref={lightRef} position={[0, 0.13, 0]} color={color} intensity={0.35} distance={0.9} decay={2} />
+    </>
+  );
+};
+
+// ── Biome-aware tree mesh (defined at module level so hooks work correctly) ────
+interface TreeMeshProps { scale: number; kind: Palette['treeKind']; biome: BiomeType; phase: number }
+const TreeMesh: React.FC<TreeMeshProps> = ({ scale, kind, biome, phase }) => {
+  const fc = getBiomeFoliageColors(biome);
+  const trunkMat = <meshLambertMaterial color={fc.trunk} flatShading />;
+
+  if (kind === 'dead') return (
+    <mesh position={[0, 0.15 * scale, 0]} castShadow>
+      <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.3 * scale, 4]} />
+      <meshLambertMaterial color="#4a3a2a" flatShading />
+    </mesh>
+  );
+
+  if (kind === 'cactus') return (
+    <SwayingLeafGroup phase={phase} amplitude={0.025}>
+      <mesh position={[0, 0.2 * scale, 0]} castShadow>
+        <cylinderGeometry args={[0.06 * scale, 0.08 * scale, 0.4 * scale, 5]} />
+        <meshLambertMaterial color={fc.leaf} flatShading emissive={fc.leafEmissive} emissiveIntensity={fc.leafEmissiveI} />
+      </mesh>
+      <mesh position={[0.12 * scale, 0.27 * scale, 0]} castShadow>
+        <cylinderGeometry args={[0.04 * scale, 0.04 * scale, 0.2 * scale, 4]} />
+        <meshLambertMaterial color={fc.leaf} flatShading emissive={fc.leafEmissive} emissiveIntensity={fc.leafEmissiveI} />
+      </mesh>
+    </SwayingLeafGroup>
+  );
+
+  if (kind === 'crystal') return (<>
+    <mesh position={[0, 0.15 * scale, 0]} castShadow>
+      <cylinderGeometry args={[0.03 * scale, 0.05 * scale, 0.3 * scale, 4]} />
+      <meshLambertMaterial color="#80c0e0" flatShading />
+    </mesh>
+    <SwayingLeafGroup phase={phase} amplitude={0.022}>
+      <mesh position={[0, 0.55 * scale, 0]} castShadow>
+        <coneGeometry args={[0.12 * scale, 0.6 * scale, 4]} />
+        <meshLambertMaterial color={fc.leaf} flatShading emissive={fc.leafEmissive} emissiveIntensity={fc.leafEmissiveI} transparent opacity={0.85} />
+      </mesh>
+    </SwayingLeafGroup>
+  </>);
+
+  if (kind === 'pine') return (<>
+    <mesh position={[0, 0.2 * scale, 0]} castShadow>{trunkMat}
+      <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.4 * scale, 5]} />
+    </mesh>
+    <SwayingLeafGroup phase={phase} amplitude={0.03}>
+      <mesh position={[0, 0.5 * scale, 0]} castShadow>
+        <coneGeometry args={[0.28 * scale, 0.45 * scale, 5]} />
+        <meshLambertMaterial color={fc.leaf} flatShading emissive={fc.leafEmissive} emissiveIntensity={fc.leafEmissiveI} />
+      </mesh>
+      <mesh position={[0, 0.82 * scale, 0]} castShadow>
+        <coneGeometry args={[0.17 * scale, 0.38 * scale, 5]} />
+        <meshLambertMaterial color={fc.leaf} flatShading emissive={fc.leafEmissive} emissiveIntensity={fc.leafEmissiveI * 1.3} />
+      </mesh>
+    </SwayingLeafGroup>
+  </>);
+
+  if (kind === 'palm') return (<>
+    <mesh position={[0, 0.2 * scale, 0]} castShadow>{trunkMat}
+      <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.4 * scale, 5]} />
+    </mesh>
+    <SwayingLeafGroup phase={phase} amplitude={0.055}>
+      <mesh position={[0, 0.55 * scale, 0]} castShadow>
+        <coneGeometry args={[0.32 * scale, 0.2 * scale, 6]} />
+        <meshLambertMaterial color={fc.leaf} flatShading emissive={fc.leafEmissive} emissiveIntensity={fc.leafEmissiveI} />
+      </mesh>
+    </SwayingLeafGroup>
+  </>);
+
+  // round (default)
+  return (<>
+    <mesh position={[0, 0.2 * scale, 0]} castShadow>{trunkMat}
+      <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.4 * scale, 5]} />
+    </mesh>
+    <SwayingLeafGroup phase={phase} amplitude={0.042}>
+      <mesh position={[0, 0.65 * scale, 0]} castShadow>
+        <icosahedronGeometry args={[0.28 * scale, 0]} />
+        <meshLambertMaterial color={fc.leaf} flatShading emissive={fc.leafEmissive} emissiveIntensity={fc.leafEmissiveI} />
+      </mesh>
+    </SwayingLeafGroup>
+  </>);
+};
+
 interface DeilandPlanetProps {
   body: CelestialBody;
   seed: number;
@@ -228,70 +377,6 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed }) => {
     return { trees, rocks, flowers, kind };
   }, [seed, palette, treeCount, flowerCount]);
 
-  const TreeMesh: React.FC<{ scale: number; kind: typeof objects.kind }> = ({ scale, kind }) => {
-    if (kind === 'dead' || kind === undefined) return (
-      <mesh position={[0, 0.15 * scale, 0]} castShadow>
-        <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.3 * scale, 4]} />
-        <meshLambertMaterial color="#4a3a2a" flatShading />
-      </mesh>
-    );
-    if (kind === 'cactus') return (<>
-      <mesh position={[0, 0.2 * scale, 0]} castShadow>
-        <cylinderGeometry args={[0.06 * scale, 0.08 * scale, 0.4 * scale, 5]} />
-        <meshLambertMaterial color="#3a7a2a" flatShading />
-      </mesh>
-      <mesh position={[0.12 * scale, 0.25 * scale, 0]} castShadow>
-        <cylinderGeometry args={[0.04 * scale, 0.04 * scale, 0.2 * scale, 4]} />
-        <meshLambertMaterial color="#3a7a2a" flatShading />
-      </mesh>
-    </>);
-    if (kind === 'crystal') return (<>
-      <mesh position={[0, 0.15 * scale, 0]} castShadow>
-        <cylinderGeometry args={[0.03 * scale, 0.05 * scale, 0.3 * scale, 4]} />
-        <meshLambertMaterial color="#80c0e0" flatShading />
-      </mesh>
-      <mesh position={[0, 0.55 * scale, 0]} castShadow>
-        <coneGeometry args={[0.12 * scale, 0.6 * scale, 4]} />
-        <meshLambertMaterial color="#80d8f0" flatShading transparent opacity={0.8} />
-      </mesh>
-    </>);
-    if (kind === 'pine') return (<>
-      <mesh position={[0, 0.2 * scale, 0]} castShadow>
-        <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.4 * scale, 5]} />
-        <meshLambertMaterial color="#6b4226" flatShading />
-      </mesh>
-      <mesh position={[0, 0.5 * scale, 0]} castShadow>
-        <coneGeometry args={[0.28 * scale, 0.45 * scale, 5]} />
-        <meshLambertMaterial color="#1a6b35" flatShading />
-      </mesh>
-      <mesh position={[0, 0.82 * scale, 0]} castShadow>
-        <coneGeometry args={[0.17 * scale, 0.38 * scale, 5]} />
-        <meshLambertMaterial color="#1a7a3a" flatShading />
-      </mesh>
-    </>);
-    if (kind === 'palm') return (<>
-      <mesh position={[0, 0.2 * scale, 0]} castShadow>
-        <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.4 * scale, 5]} />
-        <meshLambertMaterial color="#6b4226" flatShading />
-      </mesh>
-      <mesh position={[0, 0.55 * scale, 0]} castShadow>
-        <coneGeometry args={[0.32 * scale, 0.2 * scale, 6]} />
-        <meshLambertMaterial color="#3aad5c" flatShading />
-      </mesh>
-    </>);
-    // round (default)
-    return (<>
-      <mesh position={[0, 0.2 * scale, 0]} castShadow>
-        <cylinderGeometry args={[0.04 * scale, 0.07 * scale, 0.4 * scale, 5]} />
-        <meshLambertMaterial color="#6b4226" flatShading />
-      </mesh>
-      <mesh position={[0, 0.65 * scale, 0]} castShadow>
-        <icosahedronGeometry args={[0.28 * scale, 0]} />
-        <meshLambertMaterial color="#2d8b45" flatShading />
-      </mesh>
-    </>);
-  };
-
   return (
     <group>
       <mesh geometry={geometry} receiveShadow castShadow>
@@ -327,37 +412,31 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed }) => {
         const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), t.up);
         return (
           <group key={`t${i}`} position={t.pos} quaternion={q}>
-            <TreeMesh scale={t.scale} kind={objects.kind} />
+            <TreeMesh scale={t.scale} kind={objects.kind} biome={body.biome} phase={i * 1.37} />
           </group>
         );
       })}
 
-      {/* Rocks */}
+      {/* Rocks — dodecahedron + meshStandardMaterial for surface depth */}
       {objects.rocks.map((r, i) => {
-        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), r.up);
+        const q  = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), r.up);
+        const rp = getBiomeRockProps(body.biome);
         return (
           <group key={`r${i}`} position={r.pos} quaternion={q}>
-            <mesh position={[0, 0.09 * r.scale, 0]} rotation={[0.3, r.rotY, 0.2]} castShadow>
-              <icosahedronGeometry args={[0.17 * r.scale, 0]} />
-              <meshLambertMaterial color="#8a7a6a" flatShading />
+            <mesh position={[0, 0.10 * r.scale, 0]} rotation={[0.3, r.rotY, 0.2]} castShadow receiveShadow>
+              <dodecahedronGeometry args={[0.16 * r.scale, 0]} />
+              <meshStandardMaterial color={rp.color} roughness={rp.roughness} metalness={rp.metalness} flatShading />
             </mesh>
           </group>
         );
       })}
 
-      {/* Flowers */}
+      {/* Flowers — animated bloom + pulsing point light */}
       {objects.flowers.map((f, i) => {
         const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), f.up);
         return (
           <group key={`f${i}`} position={f.pos} quaternion={q}>
-            <mesh position={[0, 0.04, 0]}>
-              <cylinderGeometry args={[0.008, 0.008, 0.08, 3]} />
-              <meshLambertMaterial color="#2a6b20" />
-            </mesh>
-            <mesh position={[0, 0.085, 0]}>
-              <sphereGeometry args={[0.035, 5, 4]} />
-              <meshLambertMaterial color={f.color} flatShading />
-            </mesh>
+            <AnimatedFlower color={f.color} phase={i * 2.09} />
           </group>
         );
       })}
