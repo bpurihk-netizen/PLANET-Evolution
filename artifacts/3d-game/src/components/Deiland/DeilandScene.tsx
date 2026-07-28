@@ -1,8 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DeilandPlanet, PLANET_RADIUS } from './DeilandPlanet';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
+import { BuildingInstance, BuildingType } from './DeilandBuildings';
 
 const CHAR_OFFSET      = 0.15;
 const MOVE_SPEED       = 0.55;
@@ -26,6 +27,16 @@ function getBiomeCharColors(biome: BiomeType) {
   }
 }
 
+// ── Sphere surface position helper ───────────────────────────────────────────
+function makeBuildingAt(id: string, type: BuildingType, theta: number, phi: number): BuildingInstance {
+  const up = new THREE.Vector3(
+    Math.sin(theta) * Math.cos(phi),
+    Math.cos(theta),
+    Math.sin(theta) * Math.sin(phi),
+  ).normalize();
+  return { id, type, pos: up.clone().multiplyScalar(PLANET_RADIUS + 0.06), up };
+}
+
 interface DeilandWorldProps {
   body: CelestialBody;
   joystickRef: React.MutableRefObject<{ x: number; y: number }>;
@@ -44,6 +55,15 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
   // animation extras
   const sprintRef        = useRef(0);   // 0→1 smooth sprint blend
   const actionTimerRef   = useRef(0);   // countdown for action swing (seconds)
+
+  // Demo buildings — placed near spawn so all 4 types are visible.
+  // Task #86 (building construction) will replace this with gameplay-driven state.
+  const buildings = useMemo<BuildingInstance[]>(() => [
+    makeBuildingAt('demo-hut',      'hut',      0.27,  0.38),
+    makeBuildingAt('demo-farm',     'farm',     0.44,  0.22),
+    makeBuildingAt('demo-workshop', 'workshop', 0.25, -0.34),
+    makeBuildingAt('demo-shrine',   'shrine',   0.37,  0.58),
+  ], []);
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
@@ -231,7 +251,7 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
       />
       <pointLight position={[0, 0, 0]} intensity={0.15} color="#ffffff" />
 
-      <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} />
+      <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} />
 
       {/* ── Character ─────────────────────────────────────────── */}
       <group ref={charRef}>

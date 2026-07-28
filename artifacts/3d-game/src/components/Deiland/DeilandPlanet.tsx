@@ -2,6 +2,7 @@ import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
+import { BuildingInstance, BuildingMesh } from './DeilandBuildings';
 
 export const PLANET_RADIUS = 4;
 
@@ -286,11 +287,12 @@ const TreeMesh: React.FC<TreeMeshProps> = ({ scale, kind, biome, phase }) => {
 };
 
 interface DeilandPlanetProps {
-  body: CelestialBody;
-  seed: number;
+  body:      CelestialBody;
+  seed:      number;
+  buildings?: BuildingInstance[];
 }
 
-export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed }) => {
+export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildings = [] }) => {
   const palette = useMemo(() => getBiomePalette(body.biome), [body.biome]);
 
   const { geometry, treeCount, flowerCount } = useMemo(() => {
@@ -437,6 +439,16 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed }) => {
         return (
           <group key={`f${i}`} position={f.pos} quaternion={q}>
             <AnimatedFlower color={f.color} phase={i * 2.09} />
+          </group>
+        );
+      })}
+
+      {/* Buildings */}
+      {buildings.map((b, i) => {
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.up);
+        return (
+          <group key={b.id} position={b.pos} quaternion={q}>
+            <BuildingMesh type={b.type} biome={body.biome} phase={i * 1.57} />
           </group>
         );
       })}
