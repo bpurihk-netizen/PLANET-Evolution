@@ -2,12 +2,28 @@ import React, { useRef, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DeilandPlanet, PLANET_RADIUS } from './DeilandPlanet';
-import { CelestialBody } from '../../data/celestialBodies';
+import { CelestialBody, BiomeType } from '../../data/celestialBodies';
 
 const CHAR_OFFSET = 0.15;
 const MOVE_SPEED  = 0.55;
 const TURN_SPEED  = 1.8;
 const DESCENT_DURATION = 3.5;
+
+// ── Biome → character outfit colours ──────────────────────────────────────────
+function getBiomeCharColors(biome: BiomeType) {
+  switch (biome) {
+    case 'TEMPERATE': return { body: '#4a8fd4', pants: '#2c5f8a', hat: '#7a3a10', shoe: '#3a2810' };
+    case 'OCEAN':     return { body: '#1a6ab0', pants: '#0a3a6a', hat: '#204080', shoe: '#101830' };
+    case 'DESERT':    return { body: '#d4a86a', pants: '#8b6530', hat: '#b06820', shoe: '#6a3a10' };
+    case 'ICE':       return { body: '#c8e8ff', pants: '#6090c0', hat: '#4070a0', shoe: '#305070' };
+    case 'VOLCANIC':  return { body: '#8b3020', pants: '#5a1a00', hat: '#3a0a00', shoe: '#2a0800' };
+    case 'TOXIC':     return { body: '#80b020', pants: '#506010', hat: '#406000', shoe: '#283808' };
+    case 'AIRLESS':   return { body: '#8a8aa0', pants: '#505060', hat: '#404050', shoe: '#282830' };
+    case 'GAS':       return { body: '#8060a0', pants: '#503070', hat: '#302050', shoe: '#201030' };
+    case 'METHANE':   return { body: '#c07030', pants: '#804020', hat: '#503010', shoe: '#301808' };
+    default:          return { body: '#707080', pants: '#404050', hat: '#303040', shoe: '#202028' };
+  }
+}
 
 interface DeilandWorldProps {
   body: CelestialBody;
@@ -17,14 +33,13 @@ interface DeilandWorldProps {
 function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
   const { camera } = useThree();
 
-  // Start near top of sphere so camera up=(0,1,0) is correct
-  const thetaRef   = useRef(0.35);
-  const phiRef     = useRef(0);
-  const facingRef  = useRef(0);
+  const thetaRef    = useRef(0.35);
+  const phiRef      = useRef(0);
+  const facingRef   = useRef(0);
   const walkTimeRef = useRef(0);
   const descentRef  = useRef(0);
-  const keysRef    = useRef(new Set<string>());
-  const charRef    = useRef<THREE.Group>(null);
+  const keysRef     = useRef(new Set<string>());
+  const charRef     = useRef<THREE.Group>(null);
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
@@ -96,24 +111,31 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
       const m = new THREE.Matrix4().makeBasis(right, up, forward.clone().negate());
       charRef.current.quaternion.setFromRotationMatrix(m);
 
-      const wt = walkTimeRef.current;
+      const wt  = walkTimeRef.current;
       const bob   = isMoving ? Math.sin(wt * 8) * 0.018 : 0;
-      const swing = isMoving ? Math.sin(wt * 8) * 0.28 : 0;
+      const swing = isMoving ? Math.sin(wt * 8) * 0.28  : 0;
+
+      // Children layout (see JSX below):
+      //   c[0] = torso group
+      //   c[1] = head group (head sphere + eyes + cheeks + hat)
+      //   c[2] = right leg group
+      //   c[3] = left  leg group
+      //   c[4] = right arm group
+      //   c[5] = left  arm group
       const c = charRef.current.children;
       if (c[0]) c[0].position.y = 0.22 + bob;
       if (c[1]) c[1].position.y = 0.38 + bob;
-      if (c[2]) c[2].position.y = 0.39 + bob;
-      if (c[3]) c[3].position.y = 0.39 + bob;
-      if (c[4]) { c[4].position.y = 0.1 + bob; (c[4] as THREE.Mesh).rotation.x =  swing; }
-      if (c[5]) { c[5].position.y = 0.1 + bob; (c[5] as THREE.Mesh).rotation.x = -swing; }
-      if (c[6]) { c[6].position.y = 0.22 + bob; (c[6] as THREE.Mesh).rotation.x =  swing * 0.5; }
-      if (c[7]) { c[7].position.y = 0.22 + bob; (c[7] as THREE.Mesh).rotation.x = -swing * 0.5; }
-      if (c[8]) c[8].position.y = 0.46 + bob;
+      if (c[2]) { c[2].position.y = 0.08 + bob; (c[2] as THREE.Group).rotation.x =  swing; }
+      if (c[3]) { c[3].position.y = 0.08 + bob; (c[3] as THREE.Group).rotation.x = -swing; }
+      if (c[4]) { c[4].position.y = 0.22 + bob; (c[4] as THREE.Group).rotation.x =  swing * 0.5; }
+      if (c[5]) { c[5].position.y = 0.22 + bob; (c[5] as THREE.Group).rotation.x = -swing * 0.5; }
 
+      // Fade-in during descent
       charRef.current.traverse(obj => {
         if ((obj as THREE.Mesh).isMesh) {
-          ((obj as THREE.Mesh).material as THREE.MeshLambertMaterial).transparent = true;
-          ((obj as THREE.Mesh).material as THREE.MeshLambertMaterial).opacity = Math.min(1, ease * 3 - 1);
+          const mat = (obj as THREE.Mesh).material as THREE.MeshLambertMaterial;
+          mat.transparent = true;
+          mat.opacity = Math.min(1, ease * 3 - 1);
         }
       });
     }
@@ -129,21 +151,28 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
     const lookSpace   = new THREE.Vector3(0, 0, 0);
     const targetLook  = new THREE.Vector3().lerpVectors(lookSpace, lookSurface, ease);
 
-    // Lerp camera up toward sphere normal
-    const worldUp = new THREE.Vector3(0, 1, 0);
+    const worldUp  = new THREE.Vector3(0, 1, 0);
     const targetUp = worldUp.clone().lerp(up, ease);
     camera.up.lerp(targetUp.normalize(), 0.08);
-
     camera.position.lerp(targetCamPos, 0.08);
     camera.lookAt(targetLook);
   });
 
-  const mat = (color: string) => <meshLambertMaterial color={color} flatShading />;
+  const colors = getBiomeCharColors(body.biome);
+  const skin  = <meshLambertMaterial color="#f4c4a1" />;
+  const body_ = <meshLambertMaterial color={colors.body} />;
+  const pants = <meshLambertMaterial color={colors.pants} />;
+  const hat_  = <meshLambertMaterial color={colors.hat} />;
+  const shoe_ = <meshLambertMaterial color={colors.shoe} />;
+  const eye_  = <meshLambertMaterial color="#1a1a2e" />;
+  const cheek = <meshLambertMaterial color="#e88080" transparent opacity={0.75} />;
+  const white = <meshLambertMaterial color="#ffffff" />;
 
   return (
     <>
       <ambientLight intensity={0.55} />
-      <directionalLight position={[8, 12, 6]} intensity={1.1} castShadow
+      <directionalLight
+        position={[8, 12, 6]} intensity={1.1} castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-camera-far={60}
         shadow-camera-left={-15} shadow-camera-right={15}
@@ -153,18 +182,78 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
 
       <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} />
 
-      {/* Character */}
+      {/* ── Character ─────────────────────────────────────────── */}
       <group ref={charRef}>
-        <mesh position={[0, 0.22, 0]} castShadow>{mat('#3a7bd5')}<boxGeometry args={[0.12, 0.16, 0.08]} /></mesh>
-        <mesh position={[0, 0.38, 0]} castShadow>{mat('#f4c4a1')}<boxGeometry args={[0.1, 0.1, 0.1]} /></mesh>
-        <mesh position={[0.027, 0.39, 0.051]}>{mat('#1a1a2e')}<boxGeometry args={[0.014, 0.014, 0.01]} /></mesh>
-        <mesh position={[-0.027, 0.39, 0.051]}>{mat('#1a1a2e')}<boxGeometry args={[0.014, 0.014, 0.01]} /></mesh>
-        <mesh position={[0.034, 0.1, 0]} castShadow>{mat('#2c3e50')}<boxGeometry args={[0.048, 0.12, 0.048]} /></mesh>
-        <mesh position={[-0.034, 0.1, 0]} castShadow>{mat('#2c3e50')}<boxGeometry args={[0.048, 0.12, 0.048]} /></mesh>
-        <mesh position={[0.1, 0.22, 0]} castShadow>{mat('#3a7bd5')}<boxGeometry args={[0.04, 0.1, 0.04]} /></mesh>
-        <mesh position={[-0.1, 0.22, 0]} castShadow>{mat('#3a7bd5')}<boxGeometry args={[0.04, 0.1, 0.04]} /></mesh>
-        <mesh position={[0, 0.46, 0]}>{mat('#8B4513')}<cylinderGeometry args={[0.058, 0.066, 0.06, 6]} /></mesh>
+
+        {/* c[0] Torso */}
+        <group position={[0, 0.22, 0]}>
+          {/* torso capsule */}
+          <mesh castShadow>{body_}<capsuleGeometry args={[0.055, 0.07, 4, 8]} /></mesh>
+          {/* collar band */}
+          <mesh position={[0, 0.06, 0]}>{white}<torusGeometry args={[0.046, 0.009, 6, 14]} /></mesh>
+        </group>
+
+        {/* c[1] Head group (eyes, cheeks, hat all live inside so they bob together) */}
+        <group position={[0, 0.38, 0]}>
+          {/* head sphere */}
+          <mesh castShadow>{skin}<sphereGeometry args={[0.058, 14, 12]} /></mesh>
+
+          {/* right eye white */}
+          <mesh position={[0.024, 0.006, 0.051]}>{white}<sphereGeometry args={[0.013, 7, 7]} /></mesh>
+          {/* left eye white */}
+          <mesh position={[-0.024, 0.006, 0.051]}>{white}<sphereGeometry args={[0.013, 7, 7]} /></mesh>
+          {/* right iris */}
+          <mesh position={[0.024, 0.006, 0.062]}>{eye_}<sphereGeometry args={[0.009, 6, 6]} /></mesh>
+          {/* left iris */}
+          <mesh position={[-0.024, 0.006, 0.062]}>{eye_}<sphereGeometry args={[0.009, 6, 6]} /></mesh>
+          {/* right eye shine */}
+          <mesh position={[0.027, 0.010, 0.065]}>{white}<sphereGeometry args={[0.003, 4, 4]} /></mesh>
+          {/* left eye shine */}
+          <mesh position={[-0.021, 0.010, 0.065]}>{white}<sphereGeometry args={[0.003, 4, 4]} /></mesh>
+
+          {/* right cheek blush */}
+          <mesh position={[0.044, -0.010, 0.040]}>{cheek}<sphereGeometry args={[0.016, 7, 6]} /></mesh>
+          {/* left cheek blush */}
+          <mesh position={[-0.044, -0.010, 0.040]}>{cheek}<sphereGeometry args={[0.016, 7, 6]} /></mesh>
+
+          {/* hat cylinder */}
+          <mesh position={[0, 0.082, 0]} castShadow>{hat_}<cylinderGeometry args={[0.042, 0.046, 0.068, 7]} /></mesh>
+          {/* hat brim */}
+          <mesh position={[0, 0.050, 0]}>{hat_}<cylinderGeometry args={[0.072, 0.068, 0.012, 10]} /></mesh>
+          {/* hat band */}
+          <mesh position={[0, 0.054, 0]}>{white}<torusGeometry args={[0.047, 0.006, 5, 12]} /></mesh>
+        </group>
+
+        {/* c[2] Right leg */}
+        <group position={[0.028, 0.08, 0]}>
+          <mesh castShadow>{pants}<capsuleGeometry args={[0.022, 0.058, 4, 7]} /></mesh>
+          {/* shoe */}
+          <mesh position={[0, -0.048, 0.010]} castShadow>{shoe_}<capsuleGeometry args={[0.019, 0.022, 4, 6]} /></mesh>
+        </group>
+
+        {/* c[3] Left leg */}
+        <group position={[-0.028, 0.08, 0]}>
+          <mesh castShadow>{pants}<capsuleGeometry args={[0.022, 0.058, 4, 7]} /></mesh>
+          {/* shoe */}
+          <mesh position={[0, -0.048, 0.010]} castShadow>{shoe_}<capsuleGeometry args={[0.019, 0.022, 4, 6]} /></mesh>
+        </group>
+
+        {/* c[4] Right arm */}
+        <group position={[0.098, 0.22, 0]}>
+          <mesh castShadow>{body_}<capsuleGeometry args={[0.019, 0.068, 4, 6]} /></mesh>
+          {/* hand */}
+          <mesh position={[0, -0.052, 0]}>{skin}<sphereGeometry args={[0.02, 7, 6]} /></mesh>
+        </group>
+
+        {/* c[5] Left arm */}
+        <group position={[-0.098, 0.22, 0]}>
+          <mesh castShadow>{body_}<capsuleGeometry args={[0.019, 0.068, 4, 6]} /></mesh>
+          {/* hand */}
+          <mesh position={[0, -0.052, 0]}>{skin}<sphereGeometry args={[0.02, 7, 6]} /></mesh>
+        </group>
+
       </group>
+      {/* ────────────────────────────────────────────────────────── */}
     </>
   );
 }
