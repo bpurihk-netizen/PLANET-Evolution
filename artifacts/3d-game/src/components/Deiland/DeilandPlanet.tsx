@@ -206,8 +206,8 @@ const AnimatedFlower: React.FC<{ color: string; phase: number }> = ({ color, pha
 };
 
 // ── Biome-aware tree mesh (defined at module level so hooks work correctly) ────
-interface TreeMeshProps { scale: number; kind: Palette['treeKind']; biome: BiomeType; phase: number }
-const TreeMesh: React.FC<TreeMeshProps> = ({ scale, kind, biome, phase }) => {
+export interface TreeMeshProps { scale: number; kind: Palette['treeKind']; biome: BiomeType; phase: number }
+export const TreeMesh: React.FC<TreeMeshProps> = ({ scale, kind, biome, phase }) => {
   const fc = getBiomeFoliageColors(biome);
   const trunkMat = <meshLambertMaterial color={fc.trunk} flatShading />;
 

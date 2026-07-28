@@ -1,9 +1,13 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DeilandPlanet, PLANET_RADIUS } from './DeilandPlanet';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
 import { BuildingInstance, BuildingType } from './DeilandBuildings';
+import {
+  TreeInstance, GrowingTree,
+  getHarvestYield, STAGE_DURATION,
+} from './DeilandTrees';
 
 const CHAR_OFFSET      = 0.15;
 const MOVE_SPEED       = 0.55;
@@ -172,11 +176,19 @@ function makeBuildingAt(id: string, type: BuildingType, theta: number, phi: numb
 }
 
 interface DeilandWorldProps {
-  body: CelestialBody;
-  joystickRef: React.MutableRefObject<{ x: number; y: number }>;
+  body:               CelestialBody;
+  joystickRef:        React.MutableRefObject<{ x: number; y: number }>;
+  plantCallbackRef:   React.MutableRefObject<(() => void) | null>;
+  harvestCallbackRef: React.MutableRefObject<((id: string) => void) | null>;
+  setInventory:       React.Dispatch<React.SetStateAction<{ wood: number; fruit: number }>>;
+  setNearbyHarvestId: (id: string | null) => void;
 }
 
-function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
+function DeilandWorld({
+  body, joystickRef,
+  plantCallbackRef, harvestCallbackRef,
+  setInventory, setNearbyHarvestId,
+}: DeilandWorldProps) {
   const { camera } = useThree();
 
   const thetaRef    = useRef(0.35);
@@ -190,6 +202,11 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
   const sprintRef        = useRef(0);   // 0→1 smooth sprint blend
   const actionTimerRef   = useRef(0);   // countdown for action swing (seconds)
   const dayTimeRef       = useRef(0.08); // 0→1 day cycle; start at morning
+  // Tree growth system
+  const treeDataRef      = useRef<TreeInstance[]>([]);
+  const [treeVersion, setTreeVersion] = useState(0); // bump to trigger re-renders
+  const nearbyHarvestRef = useRef<string | null>(null);
+  const plantCounterRef  = useRef(0);
 
   // Demo buildings — placed near spawn so all 4 types are visible.
   // Task #86 (building construction) will replace this with gameplay-driven state.
@@ -199,6 +216,41 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
     makeBuildingAt('demo-workshop', 'workshop', 0.25, -0.34),
     makeBuildingAt('demo-shrine',   'shrine',   0.37,  0.58),
   ], []);
+
+  // Register plant / harvest callbacks so the outer HUD can call them
+  useEffect(() => {
+    plantCallbackRef.current = () => {
+      const θ = thetaRef.current, φ = phiRef.current;
+      const up = new THREE.Vector3(
+        Math.sin(θ) * Math.cos(φ), Math.cos(θ), Math.sin(θ) * Math.sin(φ),
+      ).normalize();
+      treeDataRef.current = [
+        ...treeDataRef.current,
+        {
+          id:          `tree-${++plantCounterRef.current}`,
+          pos:         up.clone().multiplyScalar(PLANET_RADIUS + 0.05),
+          up:          up.clone(),
+          growthStage: 0,
+          growthTimer: 0,
+          biome:       body.biome,
+          phase:       Math.random() * Math.PI * 2,
+        },
+      ];
+      setTreeVersion(v => v + 1);
+    };
+
+    harvestCallbackRef.current = (id: string) => {
+      const tree = treeDataRef.current.find(t => t.id === id);
+      if (!tree || tree.growthStage < 4) return;
+      treeDataRef.current = treeDataRef.current.filter(t => t.id !== id);
+      nearbyHarvestRef.current = null;
+      setNearbyHarvestId(null);
+      setTreeVersion(v => v + 1);
+      const yld = getHarvestYield(tree.biome);
+      setInventory(inv => ({ wood: inv.wood + yld.wood, fruit: inv.fruit + yld.fruit }));
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body.biome, setInventory, setNearbyHarvestId]);
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
@@ -365,6 +417,34 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
     camera.up.lerp(targetUp.normalize(), 0.08);
     camera.position.lerp(targetCamPos, 0.08);
     camera.lookAt(targetLook);
+
+    // ── Tree growth ────────────────────────────────────────────────────────────
+    let treeChanged = false;
+    treeDataRef.current.forEach(tree => {
+      if (tree.growthStage < 4) {
+        tree.growthTimer += dt;
+        if (tree.growthTimer >= STAGE_DURATION) {
+          tree.growthTimer -= STAGE_DURATION;
+          tree.growthStage = Math.min(4, tree.growthStage + 1);
+          treeChanged = true;
+        }
+      }
+    });
+    if (treeChanged) setTreeVersion(v => v + 1);
+
+    // ── Nearby harvestable-tree detection ──────────────────────────────────────
+    let nearestId: string | null = null;
+    let nearestDist = 0.85; // world-unit proximity threshold
+    treeDataRef.current.forEach(tree => {
+      if (tree.growthStage >= 4) {
+        const dist = charPos.distanceTo(tree.pos);
+        if (dist < nearestDist) { nearestId = tree.id; nearestDist = dist; }
+      }
+    });
+    if (nearestId !== nearbyHarvestRef.current) {
+      nearbyHarvestRef.current = nearestId;
+      setNearbyHarvestId(nearestId);
+    }
   });
 
   const colors = getBiomeCharColors(body.biome);
@@ -382,6 +462,18 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
       <DeilandSky biome={body.biome} dayTimeRef={dayTimeRef} />
 
       <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} />
+
+      {/* ── Growing trees */}
+      {treeDataRef.current.map(tree => {
+        const q = new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0), tree.up,
+        );
+        return (
+          <group key={tree.id} position={tree.pos} quaternion={q}>
+            <GrowingTree instance={tree} />
+          </group>
+        );
+      })}
 
       {/* ── Character ─────────────────────────────────────────── */}
       <group ref={charRef}>
@@ -462,13 +554,68 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
 export const DeilandScene: React.FC<{
   body: CelestialBody;
   joystickRef: React.MutableRefObject<{ x: number; y: number }>;
-}> = ({ body, joystickRef }) => (
-  <Canvas
-    shadows
-    camera={{ fov: 55, near: 0.05, far: 300, position: [0, PLANET_RADIUS * 6, PLANET_RADIUS * 2] }}
-    gl={{ antialias: true }}
-    style={{ width: '100%', height: '100%', background: '#050510' }}
-  >
-    <DeilandWorld body={body} joystickRef={joystickRef} />
-  </Canvas>
-);
+}> = ({ body, joystickRef }) => {
+  const [inventory, setInventory]             = useState({ wood: 0, fruit: 0 });
+  const [nearbyHarvestId, setNearbyHarvestId] = useState<string | null>(null);
+  const plantCallbackRef   = useRef<(() => void) | null>(null);
+  const harvestCallbackRef = useRef<((id: string) => void) | null>(null);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <Canvas
+        shadows
+        camera={{ fov: 55, near: 0.05, far: 300, position: [0, PLANET_RADIUS * 6, PLANET_RADIUS * 2] }}
+        gl={{ antialias: true }}
+        style={{ width: '100%', height: '100%', background: '#050510' }}
+      >
+        <DeilandWorld
+          body={body} joystickRef={joystickRef}
+          plantCallbackRef={plantCallbackRef}
+          harvestCallbackRef={harvestCallbackRef}
+          setInventory={setInventory}
+          setNearbyHarvestId={setNearbyHarvestId}
+        />
+      </Canvas>
+
+      {/* ── Inventory HUD ─────────────────────────────────────── */}
+      <div style={{
+        position: 'absolute', top: 12, right: 12, zIndex: 10,
+        background: 'rgba(0,0,0,0.55)', borderRadius: 8,
+        padding: '6px 14px', color: '#fff', fontFamily: 'sans-serif',
+        fontSize: 14, display: 'flex', gap: 16,
+        userSelect: 'none', pointerEvents: 'none',
+      }}>
+        <span>🪵 {inventory.wood}</span>
+        <span>🍎 {inventory.fruit}</span>
+      </div>
+
+      {/* ── Action buttons ────────────────────────────────────── */}
+      <div style={{
+        position: 'absolute', bottom: 96, left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex', gap: 10, zIndex: 10,
+      }}>
+        <button
+          onClick={() => plantCallbackRef.current?.()}
+          style={{
+            background: 'rgba(20,80,30,0.88)', color: '#fff',
+            border: '1px solid #4aab6a', borderRadius: 22,
+            padding: '9px 20px', fontSize: 15, cursor: 'pointer',
+            fontFamily: 'sans-serif',
+          }}
+        >🌱 植える</button>
+        {nearbyHarvestId && (
+          <button
+            onClick={() => harvestCallbackRef.current?.(nearbyHarvestId)}
+            style={{
+              background: 'rgba(100,60,10,0.88)', color: '#fff',
+              border: '1px solid #d4a44a', borderRadius: 22,
+              padding: '9px 20px', fontSize: 15, cursor: 'pointer',
+              fontFamily: 'sans-serif',
+            }}
+          >🍎 収穫</button>
+        )}
+      </div>
+    </div>
+  );
+};
