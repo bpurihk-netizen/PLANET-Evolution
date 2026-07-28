@@ -385,13 +385,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
         <meshLambertMaterial vertexColors flatShading />
       </mesh>
 
-      {/* Sky dome */}
-      <mesh>
-        <sphereGeometry args={[80, 16, 16]} />
-        <meshBasicMaterial color={palette.sky} side={THREE.BackSide} />
-      </mesh>
-
-      {/* Clouds (temperate only) */}
+      {/* Clouds (temperate only) — sky dome is rendered by DeilandSky in the scene layer */}
       {(body.biome === 'TEMPERATE' || body.biome === 'OCEAN') && [0,1,2,3,4,5].map(i => {
         const rng2 = (n: number) => Math.abs(Math.sin(seed * 3.3 + n * 77.7)) % 1;
         const theta = 0.4 + rng2(i) * 1.2;

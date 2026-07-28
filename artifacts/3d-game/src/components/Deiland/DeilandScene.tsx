@@ -10,6 +10,7 @@ const MOVE_SPEED       = 0.55;
 const TURN_SPEED       = 1.8;
 const DESCENT_DURATION = 3.5;
 const ACTION_DURATION  = 0.55;   // seconds for one action swing
+const DAY_SPEED        = 1 / 180; // 3-minute full day cycle
 
 // ── Biome → character outfit colours ──────────────────────────────────────────
 function getBiomeCharColors(biome: BiomeType) {
@@ -26,6 +27,139 @@ function getBiomeCharColors(biome: BiomeType) {
     default:          return { body: '#707080', pants: '#404050', hat: '#303040', shoe: '#202028' };
   }
 }
+
+// ── Day/night sky helpers ─────────────────────────────────────────────────────
+function getBiomeDaySky(biome: BiomeType): string {
+  switch (biome) {
+    case 'TEMPERATE': return '#5588cc';
+    case 'OCEAN':     return '#1840a0';
+    case 'DESERT':    return '#e8c080';
+    case 'ICE':       return '#a0c8e8';
+    case 'VOLCANIC':  return '#200500';
+    case 'TOXIC':     return '#604000';
+    case 'AIRLESS':   return '#080808';
+    case 'GAS':       return '#302050';
+    case 'METHANE':   return '#804010';
+    default:          return '#080810';
+  }
+}
+
+interface SkyStop { t: number; sky: THREE.Color; ambInt: number; sunInt: number }
+
+/** Animated sky dome + starfield + dynamic sun/moon lights */
+const DeilandSky: React.FC<{
+  biome:      BiomeType;
+  dayTimeRef: React.MutableRefObject<number>;
+}> = ({ biome, dayTimeRef }) => {
+  const skyMatRef   = useRef<THREE.MeshBasicMaterial>(null);
+  const ambRef      = useRef<THREE.AmbientLight>(null);
+  const sunRef      = useRef<THREE.DirectionalLight>(null);
+  const moonRef     = useRef<THREE.DirectionalLight>(null);
+  const starsMatRef = useRef<THREE.PointsMaterial>(null);
+
+  const bSky = getBiomeDaySky(biome);
+
+  const stops = useMemo<SkyStop[]>(() => [
+    { t: 0.00, sky: new THREE.Color('#ff9060'), ambInt: 0.32, sunInt: 0.08 }, // dawn
+    { t: 0.10, sky: new THREE.Color(bSky),      ambInt: 0.52, sunInt: 0.80 }, // morning
+    { t: 0.38, sky: new THREE.Color(bSky),      ambInt: 0.62, sunInt: 1.10 }, // noon
+    { t: 0.52, sky: new THREE.Color('#dd5820'), ambInt: 0.42, sunInt: 0.28 }, // dusk
+    { t: 0.62, sky: new THREE.Color('#1a0606'), ambInt: 0.20, sunInt: 0.00 }, // late dusk
+    { t: 0.72, sky: new THREE.Color('#050818'), ambInt: 0.13, sunInt: 0.00 }, // night
+    { t: 0.90, sky: new THREE.Color('#050818'), ambInt: 0.13, sunInt: 0.00 }, // deep night
+    { t: 1.00, sky: new THREE.Color('#ff9060'), ambInt: 0.32, sunInt: 0.08 }, // wrap → dawn
+  ], [bSky]);
+
+  // Pre-built star geometry (stable across frames)
+  const starGeometry = useMemo(() => {
+    const pos = new Float32Array(500 * 3);
+    for (let i = 0; i < 500; i++) {
+      const u  = (Math.abs(Math.sin(i * 127.1 + 0.3)) % 1) * 2 - 1;
+      const th = Math.acos(Math.max(-1, Math.min(1, u)));
+      const ph = (Math.abs(Math.sin(i * 311.7)) % 1) * Math.PI * 2;
+      pos[i*3]   = 72 * Math.sin(th) * Math.cos(ph);
+      pos[i*3+1] = 72 * Math.cos(th);
+      pos[i*3+2] = 72 * Math.sin(th) * Math.sin(ph);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    return geo;
+  }, []);
+
+  const tmpColor = useMemo(() => new THREE.Color(), []);
+
+  useFrame(() => {
+    const t = dayTimeRef.current;
+
+    // Piecewise interpolation between stops
+    let lo = stops[0], hi = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (t >= stops[i].t && t <= stops[i + 1].t) { lo = stops[i]; hi = stops[i + 1]; break; }
+    }
+    const f = hi.t > lo.t ? (t - lo.t) / (hi.t - lo.t) : 0;
+
+    // Sky dome colour
+    if (skyMatRef.current) {
+      tmpColor.copy(lo.sky).lerp(hi.sky, f);
+      skyMatRef.current.color.copy(tmpColor);
+    }
+
+    // Ambient
+    if (ambRef.current) ambRef.current.intensity = lo.ambInt + (hi.ambInt - lo.ambInt) * f;
+
+    // Sun arc: t=0 → east horizon (sunX=+20,Y=0), t=0.25 → overhead (X=0,Y=+20),
+    //          t=0.5 → west horizon (X=-20,Y=0), t=0.75 → underground (X=0,Y=-20)
+    const angle = t * Math.PI * 2;
+    const sunX  = Math.cos(angle) * 20;  // cos & sin are orthogonal → true arc
+    const sunY  = Math.sin(angle) * 20;
+    const sunInt = lo.sunInt + (hi.sunInt - lo.sunInt) * f;
+    if (sunRef.current) {
+      sunRef.current.position.set(sunX, sunY, 6);
+      sunRef.current.intensity = sunInt;
+    }
+
+    // Moon (opposite hemisphere, dim blue)
+    if (moonRef.current) {
+      moonRef.current.position.set(-sunX, -sunY, -6);
+      moonRef.current.intensity = Math.max(0, -Math.sin(angle)) * 0.28;
+    }
+
+    // Stars: fade in at dusk, fade out at dawn
+    let starOp = 0;
+    if (t >= 0.72 && t <= 0.90)    starOp = 1.0;
+    else if (t > 0.60 && t < 0.72) starOp = (t - 0.60) / 0.12;
+    else if (t > 0.90 && t < 1.00) starOp = (1.00 - t) / 0.10;
+    if (starsMatRef.current) starsMatRef.current.opacity = starOp * 0.92;
+  });
+
+  return (
+    <>
+      {/* Sky dome */}
+      <mesh renderOrder={-1}>
+        <sphereGeometry args={[80, 16, 16]} />
+        <meshBasicMaterial ref={skyMatRef} color={bSky} side={THREE.BackSide} depthWrite={false} />
+      </mesh>
+      {/* Starfield */}
+      <points geometry={starGeometry} renderOrder={-2}>
+        <pointsMaterial ref={starsMatRef} size={0.45} color="#ffffff" transparent opacity={0} sizeAttenuation depthWrite={false} />
+      </points>
+      {/* Lights */}
+      <ambientLight ref={ambRef} intensity={0.52} />
+      <directionalLight
+        ref={sunRef}
+        position={[0, 20, 6]}
+        intensity={1.1}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-far={60}
+        shadow-camera-left={-15} shadow-camera-right={15}
+        shadow-camera-top={15}  shadow-camera-bottom={-15}
+      />
+      <directionalLight ref={moonRef} color="#405880" intensity={0} position={[0, -20, -6]} />
+      <pointLight position={[0, 0, 0]} intensity={0.12} color="#ffffff" />
+    </>
+  );
+};
 
 // ── Sphere surface position helper ───────────────────────────────────────────
 function makeBuildingAt(id: string, type: BuildingType, theta: number, phi: number): BuildingInstance {
@@ -55,6 +189,7 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
   // animation extras
   const sprintRef        = useRef(0);   // 0→1 smooth sprint blend
   const actionTimerRef   = useRef(0);   // countdown for action swing (seconds)
+  const dayTimeRef       = useRef(0.08); // 0→1 day cycle; start at morning
 
   // Demo buildings — placed near spawn so all 4 types are visible.
   // Task #86 (building construction) will replace this with gameplay-driven state.
@@ -81,6 +216,9 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
 
   useFrame((state, dt) => {
     const elapsed = state.clock.elapsedTime;
+
+    // Advance day/night cycle
+    dayTimeRef.current = (dayTimeRef.current + dt * DAY_SPEED) % 1;
 
     // Descent animation
     if (descentRef.current < 1) {
@@ -241,15 +379,7 @@ function DeilandWorld({ body, joystickRef }: DeilandWorldProps) {
 
   return (
     <>
-      <ambientLight intensity={0.55} />
-      <directionalLight
-        position={[8, 12, 6]} intensity={1.1} castShadow
-        shadow-mapSize={[1024, 1024]}
-        shadow-camera-far={60}
-        shadow-camera-left={-15} shadow-camera-right={15}
-        shadow-camera-top={15}  shadow-camera-bottom={-15}
-      />
-      <pointLight position={[0, 0, 0]} intensity={0.15} color="#ffffff" />
+      <DeilandSky biome={body.biome} dayTimeRef={dayTimeRef} />
 
       <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} />
 
