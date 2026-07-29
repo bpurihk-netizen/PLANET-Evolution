@@ -800,7 +800,7 @@ function DeilandWorld({
     if (charRef.current) {
       charRef.current.position.copy(charPos);
       const right = new THREE.Vector3().crossVectors(forward, up).normalize();
-      const m = new THREE.Matrix4().makeBasis(right, up, forward.clone().negate());
+      const m = new THREE.Matrix4().makeBasis(right, up, forward);
       charRef.current.quaternion.setFromRotationMatrix(m);
 
       const wt = walkTimeRef.current;
