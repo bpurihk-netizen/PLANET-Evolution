@@ -244,6 +244,9 @@ interface DeilandWorldProps {
   // NPC / culture
   population:   number;
   cultureLevel: number;
+  // Context interaction
+  cutCallbackRef:        React.MutableRefObject<((id: string) => void) | null>;
+  setNearbyYoungTreeId:  (id: string | null) => void;
   // Environment
   envMultiplierRef:  React.MutableRefObject<number>;
   onTreePlanted:     () => void;
@@ -265,6 +268,7 @@ function DeilandWorld({
   buildings, setBuildings,
   buildMode, confirmBuildCallbackRef, onBuildComplete,
   population, cultureLevel,
+  cutCallbackRef, setNearbyYoungTreeId,
   envMultiplierRef, onTreePlanted, onBuildingPlaced,
   seedCallbackRef, waterCallbackRef, harvestFarmCallbackRef,
   setNearbyFarmBuilding, setNearbyWaterPlotId, setNearbyHarvestFarmId,
@@ -286,8 +290,9 @@ function DeilandWorld({
   // Tree growth system
   const treeDataRef      = useRef<TreeInstance[]>([]);
   const [treeVersion, setTreeVersion] = useState(0); // bump to trigger re-renders
-  const nearbyHarvestRef = useRef<string | null>(null);
-  const plantCounterRef  = useRef(0);
+  const nearbyHarvestRef    = useRef<string | null>(null);
+  const nearbyYoungTreeRef  = useRef<string | null>(null);
+  const plantCounterRef     = useRef(0);
   // Farming
   const farmPlotsRef          = useRef<FarmPlot[]>([]);
   const [farmVersion, setFarmVersion] = useState(0);
@@ -325,6 +330,7 @@ function DeilandWorld({
       ];
       setTreeVersion(v => v + 1);
       onTreePlanted(); // notify env system
+      actionTimerRef.current = ACTION_DURATION; // planting animation
     };
 
     harvestCallbackRef.current = (id: string) => {
@@ -336,6 +342,27 @@ function DeilandWorld({
       setTreeVersion(v => v + 1);
       const yld = getHarvestYield(tree.biome);
       setInventory(inv => ({ ...inv, wood: inv.wood + yld.wood, fruit: inv.fruit + yld.fruit }));
+      actionTimerRef.current = ACTION_DURATION; // harvest swing animation
+    };
+
+    // Cut any tree (even young ones) for wood; triggered from context button
+    cutCallbackRef.current = (id: string) => {
+      const tree = treeDataRef.current.find(t => t.id === id);
+      if (!tree) return;
+      treeDataRef.current = treeDataRef.current.filter(t => t.id !== id);
+      // Clear both proximity refs so buttons disappear immediately
+      if (nearbyHarvestRef.current === id) { nearbyHarvestRef.current = null; setNearbyHarvestId(null); }
+      if (nearbyYoungTreeRef.current === id) { nearbyYoungTreeRef.current = null; setNearbyYoungTreeId(null); }
+      setTreeVersion(v => v + 1);
+      // Yield depends on growth stage
+      if (tree.growthStage >= 4) {
+        const yld = getHarvestYield(tree.biome);
+        setInventory(inv => ({ ...inv, wood: inv.wood + yld.wood, fruit: inv.fruit + yld.fruit }));
+      } else {
+        const woodYield = tree.growthStage >= 2 ? 1 : 0; // saplings give 1 wood; seeds give 0
+        if (woodYield > 0) setInventory(inv => ({ ...inv, wood: inv.wood + woodYield }));
+      }
+      actionTimerRef.current = ACTION_DURATION; // chop animation
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body.biome, setInventory, setNearbyHarvestId]);
@@ -387,6 +414,7 @@ function DeilandWorld({
         },
       ];
       setFarmVersion(v => v + 1);
+      actionTimerRef.current = ACTION_DURATION;
     };
 
     waterCallbackRef.current = (id: string) => {
@@ -394,6 +422,7 @@ function DeilandWorld({
       if (!plot) return;
       plot.waterLevel = Math.min(FARM_WATER_MAX, plot.waterLevel + 1);
       setFarmVersion(v => v + 1);
+      actionTimerRef.current = ACTION_DURATION;
     };
 
     harvestFarmCallbackRef.current = (id: string) => {
@@ -407,6 +436,7 @@ function DeilandWorld({
       setNearbyHarvestFarmId(null);
       setFarmVersion(v => v + 1);
       setFoodCount(prev => prev + FARM_FOOD_YIELD);
+      actionTimerRef.current = ACTION_DURATION;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body.biome, setFoodCount, setNearbyHarvestFarmId]);
@@ -651,6 +681,21 @@ function DeilandWorld({
       setNearbyHarvestId(nearestId);
     }
 
+    // ── Nearby young-tree detection (stage 1–3 → can cut for wood) ────────
+    const INTERACTION_RADIUS = 1.5;
+    let nearYoungId: string | null = null;
+    let nearYoungDist = INTERACTION_RADIUS;
+    treeDataRef.current.forEach(tree => {
+      if (tree.growthStage >= 1 && tree.growthStage < 4) {
+        const dist = charPos.distanceTo(tree.pos);
+        if (dist < nearYoungDist) { nearYoungId = tree.id; nearYoungDist = dist; }
+      }
+    });
+    if (nearYoungId !== nearbyYoungTreeRef.current) {
+      nearbyYoungTreeRef.current = nearYoungId;
+      setNearbyYoungTreeId(nearYoungId);
+    }
+
     // ── Farm growth ────────────────────────────────────────────────────────
     let farmChanged = false;
     farmPlotsRef.current.forEach(plot => {
@@ -890,7 +935,8 @@ export const DeilandScene: React.FC<{
   const [buildMode, setBuildMode]             = useState<BuildingType | null>(null);
   const [buildMenuOpen, setBuildMenuOpen]     = useState(false);
   const [stoneCooldown, setStoneCooldown]     = useState(0);
-  const [nearbyHarvestId, setNearbyHarvestId] = useState<string | null>(null);
+  const [nearbyHarvestId, setNearbyHarvestId]         = useState<string | null>(null);
+  const [nearbyYoungTreeId, setNearbyYoungTreeId]     = useState<string | null>(null);
 
   // Farming
   const [foodCount, setFoodCount]                         = useState(0);
@@ -931,6 +977,7 @@ export const DeilandScene: React.FC<{
 
   const plantCallbackRef        = useRef<(() => void) | null>(null);
   const harvestCallbackRef      = useRef<((id: string) => void) | null>(null);
+  const cutCallbackRef          = useRef<((id: string) => void) | null>(null);
   const confirmBuildCallbackRef = useRef<(() => void) | null>(null);
   const seedCallbackRef         = useRef<(() => void) | null>(null);
   const waterCallbackRef        = useRef<((id: string) => void) | null>(null);
@@ -997,9 +1044,11 @@ export const DeilandScene: React.FC<{
           cameraYawRef={cameraYawRef} isTpsMode={isTpsMode}
           plantCallbackRef={plantCallbackRef}
           harvestCallbackRef={harvestCallbackRef}
+          cutCallbackRef={cutCallbackRef}
           confirmBuildCallbackRef={confirmBuildCallbackRef}
           setInventory={setInventory}
           setNearbyHarvestId={setNearbyHarvestId}
+          setNearbyYoungTreeId={setNearbyYoungTreeId}
           buildings={buildings} setBuildings={setBuildings}
           buildMode={buildMode}
           onBuildComplete={() => setBuildMode(null)}
@@ -1156,82 +1205,102 @@ export const DeilandScene: React.FC<{
         </div>
       )}
 
-      {/* ── Action buttons (bottom centre) ───────────────────────── */}
+      {/* ── Context action layer ──────────────────────────────────── */}
+      {(() => {
+        // Determine highest-priority context action
+        type CtxAction = { emoji: string; label: string; bg: string; border: string; glow: string; onClick: () => void };
+        let ctx: CtxAction;
+        if (nearbyHarvestId) {
+          ctx = { emoji: '🍎', label: '収穫', bg: 'rgba(130,70,10,0.94)', border: '#e8b455', glow: '#e8b45555',
+            onClick: () => harvestCallbackRef.current?.(nearbyHarvestId) };
+        } else if (nearbyYoungTreeId) {
+          ctx = { emoji: '🪓', label: '切る', bg: 'rgba(90,45,10,0.94)', border: '#d09050', glow: '#d0905055',
+            onClick: () => cutCallbackRef.current?.(nearbyYoungTreeId) };
+        } else if (nearbyHarvestFarmId) {
+          ctx = { emoji: '🧺', label: `作物収穫 +${FARM_FOOD_YIELD}🍞`, bg: 'rgba(90,55,10,0.94)', border: '#e0b040', glow: '#e0b04055',
+            onClick: () => harvestFarmCallbackRef.current?.(nearbyHarvestFarmId) };
+        } else if (nearbyWaterPlotId) {
+          ctx = { emoji: '💧', label: '水やり', bg: 'rgba(10,55,130,0.94)', border: '#55aaff', glow: '#55aaff55',
+            onClick: () => waterCallbackRef.current?.(nearbyWaterPlotId) };
+        } else if (nearbyFarmBuilding) {
+          ctx = { emoji: '🌾', label: '種まき', bg: 'rgba(65,95,10,0.94)', border: '#b8e040', glow: '#b8e04055',
+            onClick: () => seedCallbackRef.current?.() };
+        } else {
+          ctx = { emoji: '🌱', label: '植える', bg: 'rgba(22,85,32,0.94)', border: '#5acd7a', glow: '#5acd7a55',
+            onClick: () => plantCallbackRef.current?.() };
+        }
+
+        return (
+          <>
+            {/* Primary context button (large, glowing) */}
+            {!buildMode && (
+              <div style={{ position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 12 }}>
+                <button
+                  onClick={ctx.onClick}
+                  style={{
+                    background: ctx.bg, color: '#fff',
+                    border: `2px solid ${ctx.border}`,
+                    borderRadius: 30, padding: '11px 28px',
+                    fontSize: 16, fontWeight: 700, cursor: 'pointer',
+                    fontFamily: 'sans-serif',
+                    boxShadow: `0 0 16px ${ctx.glow}, 0 2px 8px rgba(0,0,0,0.6)`,
+                    letterSpacing: '0.02em',
+                    transition: 'background 0.25s, border-color 0.25s, box-shadow 0.25s',
+                  }}
+                >
+                  {ctx.emoji} {ctx.label}
+                </button>
+              </div>
+            )}
+
+            {/* Build-mode confirm/cancel (replaces context button) */}
+            {buildMode && (
+              <div style={{ position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 12, display: 'flex', gap: 10 }}>
+                <button onClick={() => setBuildMode(null)}
+                  style={{ background: 'rgba(90,22,22,0.94)', color: '#fff', border: '2px solid #c85858', borderRadius: 26, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'sans-serif', boxShadow: '0 0 10px #c8585855' }}>
+                  ✕ キャンセル
+                </button>
+                <button onClick={() => confirmBuildCallbackRef.current?.()}
+                  style={{ background: 'rgba(18,88,62,0.94)', color: '#fff', border: '2px solid #46d09a', borderRadius: 26, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'sans-serif', boxShadow: '0 0 10px #46d09a55' }}>
+                  ✅ 確定
+                </button>
+              </div>
+            )}
+          </>
+        );
+      })()}
+
+      {/* ── Secondary action strip (persistent) ─────────────────────── */}
       <div style={{
         position: 'absolute', bottom: 96, left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex', gap: 7, zIndex: 10,
         flexWrap: 'wrap', justifyContent: 'center', maxWidth: 380,
       }}>
-        {/* Plant tree (hidden in build mode) */}
-        {!buildMode && (
-          <button onClick={() => plantCallbackRef.current?.()}
-            style={{ background: 'rgba(20,80,30,0.88)', color: '#fff', border: '1px solid #4aab6a', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-            🌱 植える
-          </button>
-        )}
-        {/* Harvest tree (conditional) */}
-        {nearbyHarvestId && !buildMode && (
-          <button onClick={() => harvestCallbackRef.current?.(nearbyHarvestId)}
-            style={{ background: 'rgba(100,60,10,0.88)', color: '#fff', border: '1px solid #d4a44a', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-            🍎 収穫
-          </button>
-        )}
-        {/* ── Farm buttons ────────────────────────────────────────── */}
-        {nearbyFarmBuilding && !buildMode && (
-          <button onClick={() => seedCallbackRef.current?.()}
-            style={{ background: 'rgba(60,90,10,0.88)', color: '#fff', border: '1px solid #aadd44', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-            🌾 種まき
-          </button>
-        )}
-        {nearbyWaterPlotId && !buildMode && (
-          <button onClick={() => waterCallbackRef.current?.(nearbyWaterPlotId)}
-            style={{ background: 'rgba(10,50,120,0.88)', color: '#fff', border: '1px solid #4488ff', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-            💧 水やり
-          </button>
-        )}
-        {nearbyHarvestFarmId && !buildMode && (
-          <button onClick={() => harvestFarmCallbackRef.current?.(nearbyHarvestFarmId)}
-            style={{ background: 'rgba(80,50,10,0.88)', color: '#fff', border: '1px solid #ddaa44', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-            🧺 作物収穫 +{FARM_FOOD_YIELD}🍞
-          </button>
-        )}
         {/* Mine stone */}
         {!buildMode && (
           <button onClick={handleGatherStone} disabled={stoneCooldown > 0}
-            style={{ background: stoneCooldown > 0 ? 'rgba(40,40,40,0.6)' : 'rgba(60,50,20,0.88)', color: stoneCooldown > 0 ? '#777' : '#fff', border: `1px solid ${stoneCooldown > 0 ? '#555' : '#a09040'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: stoneCooldown > 0 ? 'not-allowed' : 'pointer', fontFamily: 'sans-serif' }}>
-            ⛏️ 採掘{stoneCooldown > 0 ? ` (${stoneCooldown}s)` : ''}
+            style={{ background: stoneCooldown > 0 ? 'rgba(40,40,40,0.7)' : 'rgba(62,52,20,0.88)', color: stoneCooldown > 0 ? '#777' : '#fff', border: `1px solid ${stoneCooldown > 0 ? '#555' : '#a09040'}`, borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: stoneCooldown > 0 ? 'not-allowed' : 'pointer', fontFamily: 'sans-serif' }}>
+            ⛏️{stoneCooldown > 0 ? ` ${stoneCooldown}s` : ' 採掘'}
           </button>
         )}
-        {/* Build mode: cancel + confirm  /  normal mode: build menu toggle */}
-        {buildMode ? (
-          <>
-            <button onClick={() => setBuildMode(null)}
-              style={{ background: 'rgba(80,20,20,0.88)', color: '#fff', border: '1px solid #c05050', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-              ✕ キャンセル
-            </button>
-            <button onClick={() => confirmBuildCallbackRef.current?.()}
-              style={{ background: 'rgba(20,80,60,0.88)', color: '#fff', border: '1px solid #40c090', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-              ✅ 確定
-            </button>
-          </>
-        ) : (
-          <>
-            {/* View toggle: TPS ↔ top-down */}
-            <button onClick={() => setIsTpsMode(m => !m)}
-              style={{ background: isTpsMode ? 'rgba(10,40,80,0.88)' : 'rgba(40,20,80,0.88)', color: '#fff', border: `1px solid ${isTpsMode ? '#4488cc' : '#8844cc'}`, borderRadius: 22, padding: '8px 14px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-              {isTpsMode ? '👁 TPS' : '🗺 俯瞰'}
-            </button>
-            <button onClick={() => setBuildMenuOpen(o => !o)}
-              style={{ background: buildMenuOpen ? 'rgba(60,80,20,0.95)' : 'rgba(40,60,10,0.88)', color: '#fff', border: `1px solid ${buildMenuOpen ? '#aacc44' : '#88aa33'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-              🏗️ 建設{buildMenuOpen ? ' ▲' : ' ▼'}
-            </button>
-            <button onClick={() => setCulturePanelOpen(o => !o)}
-              style={{ background: culturePanelOpen ? 'rgba(30,40,110,0.95)' : 'rgba(18,22,70,0.88)', color: '#fff', border: `1px solid ${culturePanelOpen ? '#7080e0' : '#5060c0'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-              🎭 文化{population > 0 ? ` +${Math.max(1, Math.floor(population / 2))}/s` : ''}
-            </button>
-          </>
+        {/* View toggle: TPS ↔ top-down */}
+        <button onClick={() => setIsTpsMode(m => !m)}
+          style={{ background: isTpsMode ? 'rgba(10,40,80,0.88)' : 'rgba(40,20,80,0.88)', color: '#fff', border: `1px solid ${isTpsMode ? '#4488cc' : '#8844cc'}`, borderRadius: 22, padding: '8px 12px', fontSize: 13, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+          {isTpsMode ? '👁 TPS' : '🗺 俯瞰'}
+        </button>
+        {/* Build menu toggle */}
+        {!buildMode && (
+          <button onClick={() => setBuildMenuOpen(o => !o)}
+            style={{ background: buildMenuOpen ? 'rgba(60,80,20,0.95)' : 'rgba(40,60,10,0.88)', color: '#fff', border: `1px solid ${buildMenuOpen ? '#aacc44' : '#88aa33'}`, borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🏗️{buildMenuOpen ? ' ▲' : ' 建設'}
+          </button>
         )}
+        {/* Culture panel toggle */}
+        <button onClick={() => setCulturePanelOpen(o => !o)}
+          style={{ background: culturePanelOpen ? 'rgba(30,40,110,0.95)' : 'rgba(18,22,70,0.88)', color: '#fff', border: `1px solid ${culturePanelOpen ? '#7080e0' : '#5060c0'}`, borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+          🎭{population > 0 ? ` +${Math.max(1, Math.floor(population / 2))}` : ' 文化'}
+        </button>
       </div>
     </div>
   );
