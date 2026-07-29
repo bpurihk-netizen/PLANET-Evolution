@@ -2,16 +2,20 @@ import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
-import { BuildingInstance, BuildingMesh, BUILD_ANIM_DUR } from './DeilandBuildings';
+import { BuildingInstance, BuildingMesh, BuildingType, BUILD_ANIM_DUR } from './DeilandBuildings';
 
-/** Wraps BuildingMesh with a scale-Y build-in animation driven by building.buildTimer */
+/** Wraps BuildingMesh with a scale-Y build-in animation driven by building.buildTimer.
+ *  At cultureLevel ≥ 3 a pulsing golden beacon sphere + pointLight appear above the building. */
 const AnimatedBuilding: React.FC<{
-  building: BuildingInstance;
-  biome:    BiomeType;
-  phase:    number;
-}> = ({ building, biome, phase }) => {
+  building:     BuildingInstance;
+  biome:        BiomeType;
+  phase:        number;
+  cultureLevel: number;
+}> = ({ building, biome, phase, cultureLevel }) => {
   const groupRef = useRef<THREE.Group>(null);
-  useFrame((_, dt) => {
+  const lightRef = useRef<THREE.PointLight>(null);
+
+  useFrame((state, dt) => {
     if (building.buildTimer < BUILD_ANIM_DUR) {
       building.buildTimer = Math.min(BUILD_ANIM_DUR, building.buildTimer + dt);
     }
@@ -20,10 +24,43 @@ const AnimatedBuilding: React.FC<{
       const sy = 1 - Math.pow(1 - t, 3); // easeOut cubic
       groupRef.current.scale.set(1, Math.max(0.001, sy), 1);
     }
+    // Culture beacon pulse
+    if (lightRef.current && cultureLevel >= 3) {
+      const pulse = 0.5 + 0.5 * Math.sin(state.clock.elapsedTime * 1.5 + phase);
+      lightRef.current.intensity = 0.08 + pulse * 0.08 * Math.min(1, cultureLevel / 6);
+    }
   });
+
+  // Approximate roof height per building type (world units, pre-scale)
+  const ROOF_H: Partial<Record<BuildingType, number>> = {
+    hut: 0.74, farm: 0.36, workshop: 0.82, shrine: 1.02,
+  };
+  const roofH = ROOF_H[building.type] ?? 0.70;
+
   return (
     <group ref={groupRef} scale={[1, 0.001, 1]}>
       <BuildingMesh type={building.type} biome={biome} phase={phase} />
+      {cultureLevel >= 3 && (
+        <>
+          {/* Golden culture beacon */}
+          <mesh position={[0, roofH + 0.13, 0]}>
+            <sphereGeometry args={[0.072, 7, 7]} />
+            <meshLambertMaterial
+              color="#ffe080"
+              emissive="#ffaa00"
+              emissiveIntensity={0.45 + Math.min(1, cultureLevel / 8)}
+            />
+          </mesh>
+          <pointLight
+            ref={lightRef}
+            position={[0, roofH + 0.13, 0]}
+            color="#ffdd80"
+            intensity={0.10}
+            distance={2.8}
+            decay={2}
+          />
+        </>
+      )}
     </group>
   );
 };
@@ -311,12 +348,13 @@ export const TreeMesh: React.FC<TreeMeshProps> = ({ scale, kind, biome, phase })
 };
 
 interface DeilandPlanetProps {
-  body:      CelestialBody;
-  seed:      number;
-  buildings?: BuildingInstance[];
+  body:          CelestialBody;
+  seed:          number;
+  buildings?:    BuildingInstance[];
+  cultureLevel?: number;
 }
 
-export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildings = [] }) => {
+export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildings = [], cultureLevel = 0 }) => {
   const palette = useMemo(() => getBiomePalette(body.biome), [body.biome]);
 
   const { geometry, treeCount, flowerCount } = useMemo(() => {
@@ -466,7 +504,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
         const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.up);
         return (
           <group key={b.id} position={b.pos} quaternion={q}>
-            <AnimatedBuilding building={b} biome={body.biome} phase={i * 1.57} />
+            <AnimatedBuilding building={b} biome={body.biome} phase={i * 1.57} cultureLevel={cultureLevel} />
           </group>
         );
       })}

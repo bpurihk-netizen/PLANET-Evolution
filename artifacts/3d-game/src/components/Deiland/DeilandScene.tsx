@@ -8,8 +8,14 @@ import {
   TreeInstance, GrowingTree,
   getHarvestYield, STAGE_DURATION,
 } from './DeilandTrees';
+import { DeilandNPCs } from './DeilandNPCs';
 
 type Inventory = { wood: number; stone: number; fruit: number };
+
+type CultureCategory = 'music' | 'art' | 'science';
+type Culture = Record<CultureCategory, number>; // invested level per branch (0–5)
+/** Cost to advance a culture branch TO level n (index = current level 0–4) */
+const CULTURE_INVEST_COSTS = [20, 40, 80, 160, 320] as const;
 
 const CHAR_OFFSET      = 0.15;
 const MOVE_SPEED       = 0.55;
@@ -211,6 +217,9 @@ interface DeilandWorldProps {
   buildMode:               BuildingType | null;
   confirmBuildCallbackRef: React.MutableRefObject<(() => void) | null>;
   onBuildComplete:         () => void;
+  // NPC / culture
+  population:   number;
+  cultureLevel: number;
 }
 
 function DeilandWorld({
@@ -219,6 +228,7 @@ function DeilandWorld({
   setInventory, setNearbyHarvestId,
   buildings, setBuildings,
   buildMode, confirmBuildCallbackRef, onBuildComplete,
+  population, cultureLevel,
 }: DeilandWorldProps) {
   const { camera } = useThree();
 
@@ -522,7 +532,10 @@ function DeilandWorld({
     <>
       <DeilandSky biome={body.biome} dayTimeRef={dayTimeRef} />
 
-      <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} />
+      <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} cultureLevel={cultureLevel} />
+
+      {/* ── NPC citizens ─────────────────────────────────────────── */}
+      <DeilandNPCs population={population} biome={body.biome} />
 
       {/* ── Build-mode ghost ──────────────────────────────────────── */}
       {buildMode && (
@@ -628,6 +641,15 @@ export const DeilandScene: React.FC<{
   const [stoneCooldown, setStoneCooldown]     = useState(0);
   const [nearbyHarvestId, setNearbyHarvestId] = useState<string | null>(null);
 
+  // Culture system
+  const [culturePoints, setCulturePoints] = useState(0);
+  const [culture, setCulture]             = useState<Culture>({ music: 0, art: 0, science: 0 });
+  const [culturePanelOpen, setCulturePanelOpen] = useState(false);
+
+  // Derived
+  const population   = Math.min(20, buildings.length * 2);
+  const cultureLevel = culture.music + culture.art + culture.science;
+
   const plantCallbackRef        = useRef<(() => void) | null>(null);
   const harvestCallbackRef      = useRef<((id: string) => void) | null>(null);
   const confirmBuildCallbackRef = useRef<(() => void) | null>(null);
@@ -639,6 +661,14 @@ export const DeilandScene: React.FC<{
   const prevPts   = CIV_STEPS[civLevel - 1] ?? 0;
   const nextPts   = civLevel < CIV_STEPS.length ? CIV_STEPS[civLevel] : prevPts + 50;
   const civBar    = Math.min(1, (civPoints - prevPts) / Math.max(1, nextPts - prevPts));
+
+  // Culture point accumulation — population/2 pts/sec when citizens exist
+  useEffect(() => {
+    if (population <= 0) return;
+    const rate = Math.max(1, Math.floor(population / 2));
+    const timer = setInterval(() => setCulturePoints(p => p + rate), 1000);
+    return () => clearInterval(timer);
+  }, [population]);
 
   // Stone-gathering cooldown countdown
   useEffect(() => {
@@ -652,6 +682,21 @@ export const DeilandScene: React.FC<{
     setInventory(inv => ({ ...inv, stone: inv.stone + 3 }));
     setStoneCooldown(8);
   };
+
+  const investCulture = (cat: CultureCategory) => {
+    const level = culture[cat];
+    if (level >= 5) return;
+    const cost = CULTURE_INVEST_COSTS[level];
+    if (culturePoints < cost) return;
+    setCulturePoints(p => p - cost);
+    setCulture(prev => ({ ...prev, [cat]: prev[cat] + 1 }));
+  };
+
+  const CULTURE_CATS: Array<{ key: CultureCategory; label: string; emoji: string }> = [
+    { key: 'music',   label: '音楽', emoji: '🎵' },
+    { key: 'art',     label: '芸術', emoji: '🎨' },
+    { key: 'science', label: '科学', emoji: '🔬' },
+  ];
 
   const buildLabels: Record<BuildingType, string> = {
     hut: '🏠 小屋', farm: '🌾 農地', workshop: '⚒️ 工房', shrine: '⛩️ 祠',
@@ -675,6 +720,8 @@ export const DeilandScene: React.FC<{
           buildings={buildings} setBuildings={setBuildings}
           buildMode={buildMode}
           onBuildComplete={() => setBuildMode(null)}
+          population={population}
+          cultureLevel={cultureLevel}
         />
       </Canvas>
 
@@ -689,7 +736,9 @@ export const DeilandScene: React.FC<{
         <div style={{ background: '#333', borderRadius: 3, height: 6, overflow: 'hidden' }}>
           <div style={{ background: '#f0c840', height: '100%', width: `${Math.round(civBar * 100)}%`, transition: 'width 0.5s ease' }} />
         </div>
-        <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{civPoints} pt</div>
+        <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>
+          {civPoints} pt ｜ 人口 {population}人
+        </div>
       </div>
 
       {/* ── Inventory HUD (top-right) ────────────────────────────── */}
@@ -704,6 +753,53 @@ export const DeilandScene: React.FC<{
         <span>🪨 {inventory.stone}</span>
         <span>🍎 {inventory.fruit}</span>
       </div>
+
+      {/* ── Culture panel ────────────────────────────────────────── */}
+      {culturePanelOpen && (
+        <div style={{
+          position: 'absolute', top: 76, left: 12, zIndex: 20,
+          background: 'rgba(8,10,28,0.93)', borderRadius: 10,
+          border: '1px solid #4050a0', padding: '10px 14px',
+          color: '#fff', fontFamily: 'sans-serif', fontSize: 13, minWidth: 210,
+        }}>
+          <div style={{ fontSize: 12, color: '#aac0ff', marginBottom: 8 }}>
+            🎭 文化ポイント: <b>{culturePoints}</b> pt
+            {population > 0 && (
+              <span style={{ color: '#7890aa', marginLeft: 6 }}>
+                (+{Math.max(1, Math.floor(population / 2))}/s)
+              </span>
+            )}
+          </div>
+          {CULTURE_CATS.map(({ key, label, emoji }) => {
+            const lv   = culture[key];
+            const cost = lv < 5 ? CULTURE_INVEST_COSTS[lv] : null;
+            const canI = cost !== null && culturePoints >= cost;
+            return (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 16 }}>{emoji}</span>
+                <span style={{ flex: 1 }}>{label} Lv.{lv}</span>
+                <span style={{ fontSize: 10, color: '#dda', letterSpacing: 1 }}>
+                  {'★'.repeat(lv)}{'☆'.repeat(5 - lv)}
+                </span>
+                <button
+                  disabled={!canI}
+                  onClick={() => investCulture(key)}
+                  style={{
+                    background:   canI ? 'rgba(60,80,200,0.9)' : 'rgba(35,35,60,0.6)',
+                    color:        canI ? '#fff' : '#666',
+                    border:       `1px solid ${canI ? '#6080e0' : '#444'}`,
+                    borderRadius: 6, padding: '3px 8px', fontSize: 11,
+                    cursor:       canI ? 'pointer' : 'not-allowed',
+                    fontFamily:   'sans-serif',
+                  }}
+                >
+                  {cost !== null ? `↑ ${cost}pt` : '✓MAX'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Build menu (pops above action row) ───────────────────── */}
       {buildMenuOpen && !buildMode && (
@@ -793,10 +889,16 @@ export const DeilandScene: React.FC<{
             </button>
           </>
         ) : (
-          <button onClick={() => setBuildMenuOpen(o => !o)}
-            style={{ background: buildMenuOpen ? 'rgba(60,80,20,0.95)' : 'rgba(40,60,10,0.88)', color: '#fff', border: `1px solid ${buildMenuOpen ? '#aacc44' : '#88aa33'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
-            🏗️ 建設{buildMenuOpen ? ' ▲' : ' ▼'}
-          </button>
+          <>
+            <button onClick={() => setBuildMenuOpen(o => !o)}
+              style={{ background: buildMenuOpen ? 'rgba(60,80,20,0.95)' : 'rgba(40,60,10,0.88)', color: '#fff', border: `1px solid ${buildMenuOpen ? '#aacc44' : '#88aa33'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+              🏗️ 建設{buildMenuOpen ? ' ▲' : ' ▼'}
+            </button>
+            <button onClick={() => setCulturePanelOpen(o => !o)}
+              style={{ background: culturePanelOpen ? 'rgba(30,40,110,0.95)' : 'rgba(18,22,70,0.88)', color: '#fff', border: `1px solid ${culturePanelOpen ? '#7080e0' : '#5060c0'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+              🎭 文化{population > 0 ? ` +${Math.max(1, Math.floor(population / 2))}/s` : ''}
+            </button>
+          </>
         )}
       </div>
     </div>
