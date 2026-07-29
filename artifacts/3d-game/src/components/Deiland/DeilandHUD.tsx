@@ -21,8 +21,7 @@ const KNOB_RADIUS     = 22;   // knob radius px
 const DEAD_ZONE       = 0.18; // normalised dead zone
 const CAM_SWIPE_SENS  = 0.006; // radians per pixel of horizontal swipe
 const CAM_PITCH_SENS  = 0.20;  // degrees per pixel of vertical swipe
-const CAM_PITCH_MIN   = -22;   // degrees below base elevation (look more horizontal)
-const CAM_PITCH_MAX   =  45;   // degrees above base elevation (bird's eye)
+// No pitch clamping — free full-360° look in both directions
 
 /** Apply dead zone + remap so full range [0,1] is reachable above dead zone. */
 function applyDeadZone(raw: number, dz: number): number {
@@ -72,6 +71,10 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
       const t = e.changedTouches[i];
       if (gyroMode) continue;
 
+      // Skip touches that land directly on a button — those are UI clicks, not swipe/joystick
+      const hitEl = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
+      if (hitEl?.closest('button')) continue;
+
       if (t.clientX < window.innerWidth * 0.55 && activeTouch.current === null) {
         // ── Left zone → joystick ────────────────────────────────────────────
         activeTouch.current = t.identifier;
@@ -114,10 +117,8 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
         const dy = t.clientY - camTouchRef.current.lastY;
         cameraYawRef.current -= dx * CAM_SWIPE_SENS;
         // Swipe down (positive dy) → raise camera; swipe up → lower camera
-        // Swipe UP (negative dy) → raise camera; swipe DOWN → lower camera
-        cameraPitchRef.current = Math.max(
-          CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, cameraPitchRef.current - dy * CAM_PITCH_SENS),
-        );
+        // Swipe UP (negative dy) → raise camera; swipe DOWN → lower camera; no clamping
+        cameraPitchRef.current -= dy * CAM_PITCH_SENS;
         camTouchRef.current.lastX = t.clientX;
         camTouchRef.current.lastY = t.clientY;
         e.preventDefault();

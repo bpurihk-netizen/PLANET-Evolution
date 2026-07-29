@@ -893,9 +893,9 @@ function DeilandWorld({
       const backDir = forward.clone().negate();
       const yawQuat = new THREE.Quaternion().setFromAxisAngle(up, cameraYawRef.current);
       const armHoriz = backDir.clone().applyQuaternion(yawQuat);
-      // Elevation: 42° base + pitch offset from swipe (clamped 15°–82°)
+      // Elevation: 42° base + pitch offset from swipe — unclamped for free 360° look
       const armRight  = new THREE.Vector3().crossVectors(armHoriz, up).normalize();
-      const elevDeg   = Math.max(15, Math.min(82, 42 + cameraPitchRef.current));
+      const elevDeg   = 42 + cameraPitchRef.current;
       const elevQuat  = new THREE.Quaternion().setFromAxisAngle(armRight, -elevDeg * Math.PI / 180);
       const armDir    = armHoriz.clone().applyQuaternion(elevQuat).normalize();
 
@@ -1561,31 +1561,54 @@ export const DeilandScene: React.FC<{
         <div style={{
           position: 'absolute', bottom: 150, left: '50%',
           transform: 'translateX(-50%)', zIndex: 20,
-          display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center',
-          maxWidth: 400,
+          background: 'rgba(8,16,8,0.88)', borderRadius: 14,
+          border: '1px solid rgba(110,187,90,0.35)',
+          padding: '10px 10px 8px',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+          minWidth: 280,
         }}>
-          {(['hut', 'farm', 'workshop', 'shrine'] as BuildingType[]).map(type => {
-            const r = BUILD_RECIPES[type];
-            const canAfford = inventory.wood >= r.wood && inventory.stone >= r.stone;
-            return (
-              <button key={type}
-                disabled={!canAfford}
-                onClick={() => { setBuildMode(type); setBuildMenuOpen(false); }}
-                style={{
-                  background:   canAfford ? 'rgba(30,60,20,0.93)' : 'rgba(35,35,35,0.72)',
-                  color:        canAfford ? '#fff' : '#777',
-                  border:       `1px solid ${canAfford ? '#6abb5a' : '#555'}`,
-                  borderRadius: 10, padding: '8px 12px', fontSize: 13,
-                  cursor:       canAfford ? 'pointer' : 'not-allowed',
-                  fontFamily:   'sans-serif', textAlign: 'center', minWidth: 76,
-                }}
-              >
-                <div>{buildLabels[type]}</div>
-                {r.wood  > 0 && <div style={{ fontSize: 11 }}>🪵 {r.wood}</div>}
-                {r.stone > 0 && <div style={{ fontSize: 11 }}>🪨 {r.stone}</div>}
-              </button>
-            );
-          })}
+          {/* Header row with title + close */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ color: '#aadd88', fontFamily: 'sans-serif', fontSize: 13, fontWeight: 700 }}>
+              🏗️ 建設メニュー
+            </span>
+            <button
+              onClick={() => setBuildMenuOpen(false)}
+              style={{
+                background: 'rgba(180,50,50,0.75)', color: '#fff',
+                border: '1px solid rgba(255,100,100,0.6)', borderRadius: 20,
+                padding: '3px 12px', fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'sans-serif',
+              }}
+            >
+              ✕ 閉じる
+            </button>
+          </div>
+          {/* Building buttons */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {(['hut', 'farm', 'workshop', 'shrine'] as BuildingType[]).map(type => {
+              const r = BUILD_RECIPES[type];
+              const canAfford = inventory.wood >= r.wood && inventory.stone >= r.stone;
+              return (
+                <button key={type}
+                  disabled={!canAfford}
+                  onClick={() => { setBuildMode(type); setBuildMenuOpen(false); }}
+                  style={{
+                    background:   canAfford ? 'rgba(30,60,20,0.93)' : 'rgba(35,35,35,0.72)',
+                    color:        canAfford ? '#fff' : '#777',
+                    border:       `1px solid ${canAfford ? '#6abb5a' : '#555'}`,
+                    borderRadius: 10, padding: '8px 12px', fontSize: 13,
+                    cursor:       canAfford ? 'pointer' : 'not-allowed',
+                    fontFamily:   'sans-serif', textAlign: 'center', minWidth: 76,
+                  }}
+                >
+                  <div>{buildLabels[type]}</div>
+                  {r.wood  > 0 && <div style={{ fontSize: 11 }}>🪵 {r.wood}</div>}
+                  {r.stone > 0 && <div style={{ fontSize: 11 }}>🪨 {r.stone}</div>}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
