@@ -24,6 +24,11 @@ export interface CosmicWarpTarget {
 export type ViewMode = 'overview' | 'detail';
 export type ShooterMode = 'off' | 'prompt' | 'playing' | 'victory' | 'defeat';
 
+// Re-export save types so consumers only need one import
+export type { DeilandPlanetSave } from './deilandSave';
+
+import { DeilandPlanetSave, loadDeilandSaves, persistDeilandSaves } from './deilandSave';
+
 /** Stats reported by DeilandScene when the player exits or when values change. */
 export interface DeilandStats {
   bodyId:        string;
@@ -84,6 +89,8 @@ export interface SolarSystemState {
 
   // Deiland civilisation stats (updated live while in Deiland mode)
   deilandStats: DeilandStats | null;
+  // Per-planet persistent saves (loaded from / written to localStorage)
+  deilandSaves: Record<string, DeilandPlanetSave>;
 
   // Actions
   enterGlobe: () => void;
@@ -108,7 +115,8 @@ export interface SolarSystemState {
   declineShooter: () => void;
   endShooter: (result: 'victory' | 'defeat') => void;
 
-  updateDeilandStats: (stats: DeilandStats) => void;
+  updateDeilandStats:  (stats: DeilandStats) => void;
+  saveDeilandPlanet:   (save: DeilandPlanetSave) => void;
 
   // Observation / sketching mode
   obsRotationPaused: boolean;
@@ -190,6 +198,15 @@ export function useSolarSystem(): SolarSystemState {
   const [showAtmosphere, setShowAtmosphere] = useState(true);
   const [bodyViewModes, setBodyViewModesState] = useState<Record<string, string>>({});
   const [deilandStats, setDeilandStats] = useState<DeilandStats | null>(null);
+  const [deilandSaves, setDeilandSaves] = useState<Record<string, DeilandPlanetSave>>(loadDeilandSaves);
+
+  // Persist to localStorage whenever saves change
+  useEffect(() => { persistDeilandSaves(deilandSaves); }, [deilandSaves]);
+
+  const saveDeilandPlanet = useCallback((save: DeilandPlanetSave) => {
+    setDeilandSaves(prev => ({ ...prev, [save.bodyId]: save }));
+  }, []);
+
   const updateDeilandStats = useCallback((stats: DeilandStats) => {
     setDeilandStats(prev => {
       // Skip state update when nothing changed — prevents render loops from inline callbacks
@@ -524,7 +541,9 @@ export function useSolarSystem(): SolarSystemState {
     toggleObsFlatLight,
     toggleShowAtmosphere,
     deilandStats,
+    deilandSaves,
     updateDeilandStats,
+    saveDeilandPlanet,
     bodyViewModes,
     setBodyViewMode,
     cosmicLevel,

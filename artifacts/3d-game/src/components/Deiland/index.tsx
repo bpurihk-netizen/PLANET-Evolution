@@ -26,7 +26,8 @@ export const Deiland: React.FC<DeilandProps> = ({ state }) => {
     [updateDeilandStats, bodyId, bodyNameJa],
   );
 
-  const body = state.deilandBody;
+  const body        = state.deilandBody;
+  const initialSave = bodyId ? state.deilandSaves[bodyId] : undefined;
   if (!body) return null;
 
   return (
@@ -37,6 +38,8 @@ export const Deiland: React.FC<DeilandProps> = ({ state }) => {
           body={body} joystickRef={joystickRef} cameraYawRef={cameraYawRef}
           jumpRef={jumpRef} tapNavRef={tapNavRef}
           onStatsUpdate={onStatsUpdate}
+          initialSave={initialSave}
+          onSaveDeiland={state.saveDeilandPlanet}
         />
       </div>
       {/* DOM overlay (joystick, exit button, camera swipe, jump button) */}

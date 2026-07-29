@@ -509,13 +509,39 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
               </button>
             )}
             {body.canLand && state.currentSystemId === 'solar-system' && (
-              <button
-                onClick={() => state.activateDeiland(body.id)}
-                className="w-full py-3.5 bg-emerald-900/50 active:bg-emerald-800/70 border border-emerald-500/50 rounded-2xl text-emerald-200 font-bold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[52px]"
-              >
-                <Footprints size={16} />
-                {displayName}の表面を探索する
-              </button>
+              <>
+                <button
+                  onClick={() => state.activateDeiland(body.id)}
+                  className="w-full py-3.5 bg-emerald-900/50 active:bg-emerald-800/70 border border-emerald-500/50 rounded-2xl text-emerald-200 font-bold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[52px]"
+                >
+                  <Footprints size={16} />
+                  {displayName}の表面を探索する
+                </button>
+                {/* ── Civilisation summary (shown after first visit) ── */}
+                {(() => {
+                  const ds = state.deilandSaves?.[body.id];
+                  if (!ds) return null;
+                  return (
+                    <div className="bg-emerald-950/30 border border-emerald-500/25 rounded-xl px-4 py-3">
+                      <div className="text-emerald-400/80 text-xs tracking-widest font-mono mb-2">🏗️ 惑星文明サマリー</div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <span className="text-white/50">文明レベル</span>
+                        <span className="text-emerald-300 font-bold">Lv.{ds.civLevel}</span>
+                        <span className="text-white/50">木の本数</span>
+                        <span className="text-emerald-300">{ds.treeCount} 本</span>
+                        <span className="text-white/50">建設物</span>
+                        <span className="text-white/80">{ds.buildings.length} 棟</span>
+                        {ds.foodCount > 0 && (
+                          <>
+                            <span className="text-white/50">食料収穫</span>
+                            <span className="text-yellow-300">{ds.foodCount} 食</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
             )}
             {body.hasAsteroids && (
               <button

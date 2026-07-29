@@ -14,6 +14,11 @@ import {
   FARM_STAGE_DURATION, WATER_SPEED_MULT, WATER_DECAY_RATE,
   FARM_WATER_MAX, FARM_FOOD_YIELD,
 } from './DeilandFarms';
+import {
+  DeilandPlanetSave,
+  serializeTree, serializeBuilding, serializeFarm,
+  deserializeTree, deserializeBuilding, deserializeFarm,
+} from '../../hooks/deilandSave';
 
 type Inventory = { wood: number; stone: number; fruit: number };
 
@@ -340,6 +345,12 @@ interface DeilandWorldProps {
   // Auto-navigation
   tapNavRef:     React.MutableRefObject<{ x: number; y: number } | null>;
   setAutoMoving: (v: boolean) => void;
+  // Save refs (updated from outer DeilandScene, read by save logic)
+  treeDataForSaveRef: React.MutableRefObject<TreeInstance[]>;
+  farmDataForSaveRef: React.MutableRefObject<FarmPlot[]>;
+  // Initial data from save
+  initialTrees: TreeInstance[];
+  initialFarms: FarmPlot[];
 }
 
 function DeilandWorld({
@@ -355,6 +366,8 @@ function DeilandWorld({
   setNearbyFarmBuilding, setNearbyWaterPlotId, setNearbyHarvestFarmId,
   setFoodCount,
   tapNavRef, setAutoMoving,
+  treeDataForSaveRef, farmDataForSaveRef,
+  initialTrees, initialFarms,
 }: DeilandWorldProps) {
   const { camera, gl } = useThree();
 
@@ -407,6 +420,30 @@ function DeilandWorld({
   const ghostPosRef  = useRef(new THREE.Vector3());
   const ghostUpRef   = useRef(new THREE.Vector3(0, 1, 0));
   const ghostQuatRef = useRef(new THREE.Quaternion());
+
+  // ── Restore from save on first mount ────────────────────────────────────────
+  useEffect(() => {
+    // Extract trailing integer from an ID string, regardless of prefix
+    const trailingInt = (id: string) => { const m = id.match(/(\d+)$/); return m ? parseInt(m[1], 10) : 0; };
+
+    if (initialTrees.length > 0) {
+      treeDataRef.current = initialTrees;
+      // Set counter past the highest existing ID to prevent collision on next plant
+      plantCounterRef.current = Math.max(0, ...initialTrees.map(t => trailingInt(t.id)));
+      setTreeVersion(v => v + 1);
+    }
+    if (initialFarms.length > 0) {
+      farmPlotsRef.current = initialFarms;
+      // Farm IDs are "farm-N" (not "farm-plot-N") — use trailingInt to be prefix-agnostic
+      farmPlotCounterRef.current = Math.max(0, ...initialFarms.map(f => trailingInt(f.id)));
+      setFarmVersion(v => v + 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount-only: initialTrees/initialFarms are stable for this component's lifetime
+
+  // ── Keep parent save refs in sync ────────────────────────────────────────────
+  useEffect(() => { treeDataForSaveRef.current = treeDataRef.current; }, [treeVersion, treeDataForSaveRef]);
+  useEffect(() => { farmDataForSaveRef.current = farmPlotsRef.current; }, [farmVersion, farmDataForSaveRef]);
 
   // Register plant / harvest callbacks so the outer HUD can call them
   useEffect(() => {
@@ -1184,12 +1221,18 @@ export const DeilandScene: React.FC<{
   jumpRef:         React.MutableRefObject<boolean>;
   tapNavRef:       React.MutableRefObject<{ x: number; y: number } | null>;
   onStatsUpdate?:  (civLevel: number, foodCount: number, scienceLevel: number) => void;
-}> = ({ body, joystickRef, cameraYawRef, jumpRef, tapNavRef, onStatsUpdate }) => {
+  initialSave?:    DeilandPlanetSave;
+  onSaveDeiland?:  (save: DeilandPlanetSave) => void;
+}> = ({ body, joystickRef, cameraYawRef, jumpRef, tapNavRef, onStatsUpdate, initialSave, onSaveDeiland }) => {
   const [isTpsMode, setIsTpsMode] = useState(true);
   const [isAutoMoving, setIsAutoMoving] = useState(false);
   const setAutoMoving = useCallback((v: boolean) => setIsAutoMoving(v), []);
-  const [inventory, setInventory]             = useState<Inventory>({ wood: 0, stone: 5, fruit: 0 });
-  const [buildings, setBuildings]             = useState<BuildingInstance[]>([]);
+
+  // ── Initialise from save (lazy initialiser runs once on mount) ───────────────
+  const [inventory, setInventory] = useState<Inventory>(() =>
+    initialSave?.inventory ?? { wood: 0, stone: 5, fruit: 0 });
+  const [buildings, setBuildings] = useState<BuildingInstance[]>(() =>
+    initialSave?.buildings.map(deserializeBuilding) ?? []);
   const [buildMode, setBuildMode]             = useState<BuildingType | null>(null);
   const [buildMenuOpen, setBuildMenuOpen]     = useState(false);
   const [stoneCooldown, setStoneCooldown]     = useState(0);
@@ -1197,15 +1240,63 @@ export const DeilandScene: React.FC<{
   const [nearbyYoungTreeId, setNearbyYoungTreeId]     = useState<string | null>(null);
 
   // Farming
-  const [foodCount, setFoodCount]                         = useState(0);
+  const [foodCount, setFoodCount] = useState(() => initialSave?.foodCount ?? 0);
   const [nearbyFarmBuilding, setNearbyFarmBuilding]       = useState(false);
   const [nearbyWaterPlotId, setNearbyWaterPlotId]         = useState<string | null>(null);
   const [nearbyHarvestFarmId, setNearbyHarvestFarmId]     = useState<string | null>(null);
 
   // Culture system
-  const [culturePoints, setCulturePoints] = useState(0);
-  const [culture, setCulture]             = useState<Culture>({ music: 0, art: 0, science: 0 });
+  const [culturePoints, setCulturePoints] = useState(() => initialSave?.culturePoints ?? 0);
+  const [culture, setCulture] = useState<Culture>(() =>
+    initialSave?.culture ?? { music: 0, art: 0, science: 0 });
   const [culturePanelOpen, setCulturePanelOpen] = useState(false);
+
+  // ── Save infrastructure ──────────────────────────────────────────────────────
+  // Refs that DeilandWorld keeps in sync so we can read them during save
+  const treeDataForSaveRef = useRef<TreeInstance[]>([]);
+  const farmDataForSaveRef = useRef<FarmPlot[]>([]);
+  // Always-current snapshot of React state (safe to read in cleanup/interval)
+  const latestValuesRef = useRef({ buildings, inventory, foodCount, culturePoints, culture });
+  useEffect(() => {
+    latestValuesRef.current = { buildings, inventory, foodCount, culturePoints, culture };
+  }); // no deps — runs every render to keep ref fresh
+  const onSaveDeilandRef = useRef(onSaveDeiland);
+  useEffect(() => { onSaveDeilandRef.current = onSaveDeiland; });
+
+  const CIV_STEPS_SAVE = [0, 10, 30, 60, 100, 150] as const;
+  const performSave = useCallback(() => {
+    const cb = onSaveDeilandRef.current;
+    if (!cb) return;
+    const { buildings: bldgs, inventory: inv, foodCount: fc, culturePoints: cp, culture: cul }
+      = latestValuesRef.current;
+    const trees = treeDataForSaveRef.current.map(serializeTree);
+    const farms = farmDataForSaveRef.current.map(serializeFarm);
+    const civPts = bldgs.reduce((s, b) => s + BUILD_RECIPES[b.type].civPoints, 0);
+    const civLevelVal = Math.max(1, CIV_STEPS_SAVE.filter(t => civPts >= t).length);
+    cb({
+      bodyId:        body.id,
+      trees, farms,
+      buildings:     bldgs.map(serializeBuilding),
+      inventory:     inv,
+      foodCount:     fc,
+      culturePoints: cp,
+      culture:       cul,
+      civLevel:      civLevelVal,
+      treeCount:     trees.length,
+    });
+  }, [body.id]); // body.id is stable for this component's lifetime
+
+  // Autosave every 30 s + save on unmount
+  useEffect(() => {
+    const timer = setInterval(performSave, 30_000);
+    return () => { clearInterval(timer); performSave(); };
+  }, [performSave]);
+
+  // Memoised initial data for DeilandWorld (avoids re-creating Vector3 on each outer render)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initialTrees = useMemo(() => initialSave?.trees.map(deserializeTree) ?? [], []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initialFarms = useMemo(() => initialSave?.farms.map(deserializeFarm) ?? [], []);
 
   // Derived
   const populationCap = 20 + Math.floor(foodCount / 5); // food extends cap beyond 20
@@ -1328,6 +1419,10 @@ export const DeilandScene: React.FC<{
           setNearbyWaterPlotId={setNearbyWaterPlotId}
           setNearbyHarvestFarmId={setNearbyHarvestFarmId}
           setFoodCount={setFoodCount}
+          treeDataForSaveRef={treeDataForSaveRef}
+          farmDataForSaveRef={farmDataForSaveRef}
+          initialTrees={initialTrees}
+          initialFarms={initialFarms}
         />
       </Canvas>
 
