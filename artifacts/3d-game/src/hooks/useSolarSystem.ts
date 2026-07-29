@@ -24,6 +24,15 @@ export interface CosmicWarpTarget {
 export type ViewMode = 'overview' | 'detail';
 export type ShooterMode = 'off' | 'prompt' | 'playing' | 'victory' | 'defeat';
 
+/** Stats reported by DeilandScene when the player exits or when values change. */
+export interface DeilandStats {
+  bodyId:        string;
+  bodyNameJa:    string;
+  civLevel:      number; // 1–6 (from CIV_STEPS milestones)
+  foodCount:     number; // cumulative food harvested
+  scienceLevel:  number; // culture.science 0–5
+}
+
 export interface SolarSystemState {
   // Globe mode (3D celestial globe — all 88 constellations)
   globeMode: boolean;
@@ -73,6 +82,9 @@ export interface SolarSystemState {
   selectedBody: CelestialBody | null;
   deilandBody: CelestialBody | null;
 
+  // Deiland civilisation stats (updated live while in Deiland mode)
+  deilandStats: DeilandStats | null;
+
   // Actions
   enterGlobe: () => void;
   exitGlobe: () => void;
@@ -95,6 +107,8 @@ export interface SolarSystemState {
   startShooter: () => void;
   declineShooter: () => void;
   endShooter: (result: 'victory' | 'defeat') => void;
+
+  updateDeilandStats: (stats: DeilandStats) => void;
 
   // Observation / sketching mode
   obsRotationPaused: boolean;
@@ -175,6 +189,20 @@ export function useSolarSystem(): SolarSystemState {
   const [obsFlatLight, setObsFlatLight] = useState(false);
   const [showAtmosphere, setShowAtmosphere] = useState(true);
   const [bodyViewModes, setBodyViewModesState] = useState<Record<string, string>>({});
+  const [deilandStats, setDeilandStats] = useState<DeilandStats | null>(null);
+  const updateDeilandStats = useCallback((stats: DeilandStats) => {
+    setDeilandStats(prev => {
+      // Skip state update when nothing changed — prevents render loops from inline callbacks
+      if (prev &&
+          prev.bodyId      === stats.bodyId      &&
+          prev.civLevel    === stats.civLevel    &&
+          prev.foodCount   === stats.foodCount   &&
+          prev.scienceLevel === stats.scienceLevel) {
+        return prev;
+      }
+      return stats;
+    });
+  }, []);
 
   const setBodyViewMode = useCallback((bodyId: string, mode: string) => {
     setBodyViewModesState(prev => ({ ...prev, [bodyId]: mode }));
@@ -495,6 +523,8 @@ export function useSolarSystem(): SolarSystemState {
     toggleObsRotation,
     toggleObsFlatLight,
     toggleShowAtmosphere,
+    deilandStats,
+    updateDeilandStats,
     bodyViewModes,
     setBodyViewMode,
     cosmicLevel,

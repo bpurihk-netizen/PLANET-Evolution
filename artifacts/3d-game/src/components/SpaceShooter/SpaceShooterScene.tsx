@@ -33,6 +33,7 @@ interface SpaceShooterSceneProps {
   averageIntelligence: number;
   satelliteCount: number;
   startRank: number;
+  deilandHpBonus: number;
   temperature: number;
   waterAmount: number;
   co2: number;
@@ -42,7 +43,7 @@ interface SpaceShooterSceneProps {
 export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
   onVictory, onDefeat, civLevel, metallicCoreRatio,
   energyEfficiency, averageIntelligence, satelliteCount,
-  startRank, temperature, waterAmount, co2, transformation
+  startRank, deilandHpBonus, temperature, waterAmount, co2, transformation
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const explosionsRef = useRef<Explosion[]>([]);
@@ -76,7 +77,7 @@ export const SpaceShooterScene: React.FC<SpaceShooterSceneProps> = ({
     activeEffects,
   } = useShooterState({
     onVictory, onDefeat, civLevel, metallicCoreRatio,
-    energyEfficiency, averageIntelligence, satelliteCount, startRank,
+    energyEfficiency, averageIntelligence, satelliteCount, startRank, deilandHpBonus,
   });
 
   useEffect(() => {

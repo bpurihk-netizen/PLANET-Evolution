@@ -97,12 +97,13 @@ type UseShooterStateProps = {
   averageIntelligence: number;
   satelliteCount: number;
   startRank: number;
+  deilandHpBonus: number; // extra HP from Deiland farming (0–2)
 };
 
 export const useShooterState = ({
   onVictory, onDefeat, civLevel, metallicCoreRatio,
   energyEfficiency, averageIntelligence, satelliteCount,
-  startRank
+  startRank, deilandHpBonus,
 }: UseShooterStateProps) => {
   // game objects
   const playerPosRef = useRef(new THREE.Vector3(0, 0, 3.5));
@@ -149,14 +150,15 @@ export const useShooterState = ({
   const asteroidSpawnTimerRef = useRef(0);
   const gameTimerRef = useRef(60);
 
-  // game state
-  const [playerHP, setPlayerHP] = useState(3);
+  // game state — HP boosted by Deiland farming level (up to +2)
+  const initHP = 3 + Math.min(2, deilandHpBonus);
+  const [playerHP, setPlayerHP] = useState(initHP);
   const [score, setScore] = useState(0);
   const [killCount, setKillCount] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60);
   const [isGameOver, setIsGameOver] = useState(false);
 
-  const playerHPRef = useRef(3);
+  const playerHPRef = useRef(initHP);
   const scoreRef = useRef(0);
   const killCountRef = useRef(0);
   const isGameOverRef = useRef(false);

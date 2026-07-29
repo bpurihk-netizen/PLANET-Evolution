@@ -1178,12 +1178,13 @@ const EnvGauges: React.FC<{
 };
 
 export const DeilandScene: React.FC<{
-  body:         CelestialBody;
-  joystickRef:  React.MutableRefObject<{ x: number; y: number }>;
-  cameraYawRef: React.MutableRefObject<number>;
-  jumpRef:      React.MutableRefObject<boolean>;
-  tapNavRef:    React.MutableRefObject<{ x: number; y: number } | null>;
-}> = ({ body, joystickRef, cameraYawRef, jumpRef, tapNavRef }) => {
+  body:            CelestialBody;
+  joystickRef:     React.MutableRefObject<{ x: number; y: number }>;
+  cameraYawRef:    React.MutableRefObject<number>;
+  jumpRef:         React.MutableRefObject<boolean>;
+  tapNavRef:       React.MutableRefObject<{ x: number; y: number } | null>;
+  onStatsUpdate?:  (civLevel: number, foodCount: number, scienceLevel: number) => void;
+}> = ({ body, joystickRef, cameraYawRef, jumpRef, tapNavRef, onStatsUpdate }) => {
   const [isTpsMode, setIsTpsMode] = useState(true);
   const [isAutoMoving, setIsAutoMoving] = useState(false);
   const setAutoMoving = useCallback((v: boolean) => setIsAutoMoving(v), []);
@@ -1247,6 +1248,11 @@ export const DeilandScene: React.FC<{
   const prevPts   = CIV_STEPS[civLevel - 1] ?? 0;
   const nextPts   = civLevel < CIV_STEPS.length ? CIV_STEPS[civLevel] : prevPts + 50;
   const civBar    = Math.min(1, (civPoints - prevPts) / Math.max(1, nextPts - prevPts));
+
+  // Report stats to parent so the shooter can use them as bonuses
+  useEffect(() => {
+    onStatsUpdate?.(civLevel, foodCount, culture.science);
+  }, [civLevel, foodCount, culture.science, onStatsUpdate]);
 
   // Culture point accumulation — population/2 pts/sec when citizens exist
   useEffect(() => {
