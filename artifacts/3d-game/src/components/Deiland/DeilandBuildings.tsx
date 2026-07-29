@@ -7,6 +7,11 @@
  *
  * Building types:  'hut' | 'farm' | 'workshop' | 'shrine'
  * Biome theming:   wall / roof / door / accent / light colours via getBiomeBuildingColors()
+ *
+ * Biome-aware recipes:
+ *   getBiomeRecipes(biome)  — returns per-biome BuildRecipe table
+ *   getBiomeWoodAlias(biome) — display name/emoji for the biome's organic material
+ *   biomeHasTrees(biome)    — true when organic comes from harvesting plants
  */
 
 import React, { useRef } from 'react';
@@ -90,6 +95,45 @@ interface BuildingMeshProps {
   biome:   BiomeType;
   /** Used to desync lantern pulses across multiple buildings */
   phase?:  number;
+}
+
+// ── Biome organic-material alias ──────────────────────────────────────────────
+export interface BiomeWoodAlias { emoji: string; name: string }
+
+export function getBiomeWoodAlias(biome: BiomeType): BiomeWoodAlias {
+  switch (biome) {
+    case 'TEMPERATE':   return { emoji: '🪵', name: '木材' };
+    case 'OCEAN':       return { emoji: '🪸', name: '流木' };
+    case 'DESERT':      return { emoji: '🏺', name: '粘土' };
+    case 'ICE':         return { emoji: '🧊', name: '氷塊' };
+    case 'VOLCANIC':    return { emoji: '🔴', name: '溶岩石' };
+    case 'TOXIC':       return { emoji: '🍄', name: '菌糸' };
+    case 'AIRLESS':     return { emoji: '💎', name: '鉱石' };
+    case 'GAS':         return { emoji: '🫧', name: '結晶' };
+    case 'METHANE':     return { emoji: '🟤', name: '炭素塊' };
+    case 'FROZEN_ROCK': return { emoji: '🪨', name: '氷岩' };
+    default:            return { emoji: '🪵', name: '木材' };
+  }
+}
+
+/** Biomes that have plantable/harvestable trees (organic = tree-sourced). */
+export function biomeHasTrees(biome: BiomeType): boolean {
+  return biome === 'TEMPERATE' || biome === 'OCEAN' || biome === 'ICE' || biome === 'DESERT';
+}
+
+/**
+ * Per-biome building recipes.
+ * Non-tree biomes use less organic material and rely more on stone,
+ * since players must gather organics manually rather than from trees.
+ */
+export function getBiomeRecipes(biome: BiomeType): Record<BuildingType, BuildRecipe> {
+  if (biomeHasTrees(biome)) return BUILD_RECIPES;
+  return {
+    hut:      { wood: 3, stone: 5,  civPoints: 10 },
+    farm:     { wood: 1, stone: 2,  civPoints:  8 },
+    workshop: { wood: 5, stone: 8,  civPoints: 20 },
+    shrine:   { wood: 2, stone: 8,  civPoints: 15 },
+  };
 }
 
 export const BuildingMesh: React.FC<BuildingMeshProps> = ({ type, biome, phase = 0 }) => {

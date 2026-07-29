@@ -52,7 +52,7 @@ export function getHarvestYield(biome: BiomeType): { wood: number; fruit: number
   switch (biome) {
     case 'TEMPERATE': return { wood: 2, fruit: 2 };
     case 'OCEAN':     return { wood: 1, fruit: 3 };
-    case 'DESERT':    return { wood: 0, fruit: 2 };
+    case 'DESERT':    return { wood: 1, fruit: 2 };  // cacti yield 1 clay-equiv (粘土)
     case 'ICE':       return { wood: 2, fruit: 0 };
     default:          return { wood: 1, fruit: 0 };
   }

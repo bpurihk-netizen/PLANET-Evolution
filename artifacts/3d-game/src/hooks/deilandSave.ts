@@ -52,6 +52,8 @@ export interface DeilandPlanetSave {
   foodCount:     number;
   culturePoints: number;
   culture:       { music: number; art: number; science: number };
+  /** Symbol tree cultivation progress (optional — absent in old saves) */
+  symbolTree?:   { stage: number; growthTimer: number; waterCooldown: number } | null;
   /** Cached summary — avoids full deserialisation in InfoPanel */
   civLevel:  number;
   treeCount: number;

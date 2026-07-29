@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DeilandPlanet, getPlanetRadius } from './DeilandPlanet';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
-import { BuildingInstance, BuildingType, BUILD_RECIPES } from './DeilandBuildings';
+import { BuildingInstance, BuildingType, BUILD_RECIPES, getBiomeWoodAlias, getBiomeRecipes, biomeHasTrees } from './DeilandBuildings';
 import {
   TreeInstance, GrowingTree,
   getHarvestYield, STAGE_DURATION,
@@ -71,6 +71,23 @@ function getBiomeEnvDefaults(biome: BiomeType): { temp: number; co2: number; wat
     case 'METHANE':     return { temp: -20, co2: 600, water: 20 };
     case 'FROZEN_ROCK': return { temp: -60, co2: 200, water: 10 };
     default:            return { temp: 20,  co2: 400, water: 50 };
+  }
+}
+
+// ── Biome → initial inventory ────────────────────────────────────────────────
+function getBiomeInitialInventory(biome: BiomeType): { wood: number; stone: number; fruit: number } {
+  switch (biome) {
+    case 'TEMPERATE':   return { wood: 0, stone: 3, fruit: 2 };
+    case 'OCEAN':       return { wood: 0, stone: 2, fruit: 3 };
+    case 'DESERT':      return { wood: 0, stone: 5, fruit: 1 };
+    case 'ICE':         return { wood: 0, stone: 4, fruit: 0 };
+    case 'VOLCANIC':    return { wood: 2, stone: 5, fruit: 0 };
+    case 'TOXIC':       return { wood: 2, stone: 4, fruit: 0 };
+    case 'AIRLESS':     return { wood: 2, stone: 6, fruit: 0 };
+    case 'GAS':         return { wood: 2, stone: 4, fruit: 0 };
+    case 'METHANE':     return { wood: 2, stone: 4, fruit: 0 };
+    case 'FROZEN_ROCK': return { wood: 1, stone: 4, fruit: 0 };
+    default:            return { wood: 0, stone: 5, fruit: 0 };
   }
 }
 
@@ -308,6 +325,273 @@ const NavMarker: React.FC<{
   );
 };
 
+// ── Symbol tree ───────────────────────────────────────────────────────────────
+interface SymbolTree {
+  stage:         number;  // 0–7
+  growthTimer:   number;  // seconds accumulated at current stage
+  waterCooldown: number;  // seconds until water action available
+}
+const SYM_STAGE_MAX   = 7;
+const SYM_STAGE_DUR   = 300;  // 5 real-time minutes per stage at base rate
+const SYM_WATER_CD    = 30;   // seconds between waterings
+const SYM_WATER_BOOST = 40;   // +40s progress per water
+const SYM_FERT_BOOST  = 80;   // +80s progress per fertilize (costs 1 fruit)
+
+interface SymbolTreeLabel { emoji: string; name: string }
+function getSymbolTreeLabel(biome: BiomeType): SymbolTreeLabel {
+  switch (biome) {
+    case 'TEMPERATE':   return { emoji: '🌳', name: '生命の大樹' };
+    case 'OCEAN':       return { emoji: '🌴', name: '海の聖木' };
+    case 'DESERT':      return { emoji: '🌵', name: '砂漠の聖柱' };
+    case 'ICE':         return { emoji: '❄️', name: '氷晶の古木' };
+    case 'VOLCANIC':    return { emoji: '🌋', name: '炎の聖木' };
+    case 'TOXIC':       return { emoji: '🍄', name: '毒霧の神樹' };
+    case 'AIRLESS':     return { emoji: '💫', name: '星光の結晶樹' };
+    case 'GAS':         return { emoji: '🌀', name: '嵐の渦木' };
+    case 'METHANE':     return { emoji: '🔶', name: '炭素の古木' };
+    default:            return { emoji: '🌟', name: '神秘の聖木' };
+  }
+}
+
+function getSymbolTreeBg(biome: BiomeType): string {
+  switch (biome) {
+    case 'TEMPERATE':   return 'radial-gradient(ellipse at 50% 85%, #1a4010 0%, #080e04 100%)';
+    case 'OCEAN':       return 'radial-gradient(ellipse at 50% 85%, #082040 0%, #02080e 100%)';
+    case 'DESERT':      return 'radial-gradient(ellipse at 50% 85%, #3a2000 0%, #0e0800 100%)';
+    case 'ICE':         return 'radial-gradient(ellipse at 50% 85%, #0a1e30 0%, #02060e 100%)';
+    case 'VOLCANIC':    return 'radial-gradient(ellipse at 50% 85%, #280800 0%, #0a0200 100%)';
+    case 'TOXIC':       return 'radial-gradient(ellipse at 50% 85%, #0e1e02 0%, #04080000 100%)';
+    default:            return 'radial-gradient(ellipse at 50% 85%, #08081a 0%, #020208 100%)';
+  }
+}
+
+// Symbol-tree SVG visual (stages 0–7)
+const SymbolTreeSVG: React.FC<{ stage: number; biome: BiomeType }> = ({ stage, biome }) => {
+  const trunkColor = (
+    biome === 'ICE' ? '#80c0d8' : biome === 'VOLCANIC' ? '#3a1208' :
+    biome === 'DESERT' ? '#c88840' : biome === 'TOXIC' ? '#507010' :
+    biome === 'AIRLESS' ? '#606070' : '#7a4020'
+  );
+  const leafColor = (
+    biome === 'TEMPERATE' ? '#2a8a28' : biome === 'OCEAN' ? '#1a6848' :
+    biome === 'DESERT' ? '#20a060' : biome === 'ICE' ? '#70c8f0' :
+    biome === 'VOLCANIC' ? '#e85010' : biome === 'TOXIC' ? '#80c818' :
+    biome === 'AIRLESS' ? '#5070b0' : biome === 'GAS' ? '#a060e0' :
+    biome === 'METHANE' ? '#d07028' : '#50a868'
+  );
+  const glowColor = stage >= 7 ? '#ffd700' : leafColor;
+  const trunkH  = 38 + stage * 18;
+  const trunkW  = 7  + stage * 2.5;
+  const canopyR = 28 + stage * 16;
+  const legendary = stage >= 7;
+
+  return (
+    <svg viewBox="-160 -320 320 340" width="220" height="240"
+      style={{ overflow: 'visible', filter: stage >= 5 ? `drop-shadow(0 0 ${8 + (stage-5)*6}px ${glowColor}88)` : 'none' }}>
+      {/* Ground shadow */}
+      <ellipse cx="0" cy="14" rx={28 + stage * 7} ry={4 + stage * 1.5} fill="rgba(0,0,0,0.35)" />
+      {/* Ambient glow aura */}
+      {stage >= 5 && (
+        <circle cx="0" cy={-(trunkH + canopyR * 0.55)} r={canopyR + 25 + (stage-5)*10}
+          fill={glowColor} opacity={0.10 + (stage-5)*0.05} />
+      )}
+      {/* Lateral branches (stage 3+) */}
+      {stage >= 3 && (<>
+        <line x1="0" y1={-trunkH * 0.55} x2={-38 - stage*4} y2={-trunkH * 0.55 - 18 - stage*4}
+          stroke={trunkColor} strokeWidth={trunkW * 0.55} strokeLinecap="round" />
+        <line x1="0" y1={-trunkH * 0.55} x2={ 38 + stage*4} y2={-trunkH * 0.55 - 18 - stage*4}
+          stroke={trunkColor} strokeWidth={trunkW * 0.55} strokeLinecap="round" />
+      </>)}
+      {/* Upper branches (stage 5+) */}
+      {stage >= 5 && (<>
+        <line x1="0" y1={-trunkH * 0.78} x2={-28 - stage*3} y2={-trunkH * 0.78 - 14 - stage*3}
+          stroke={trunkColor} strokeWidth={trunkW * 0.35} strokeLinecap="round" />
+        <line x1="0" y1={-trunkH * 0.78} x2={ 28 + stage*3} y2={-trunkH * 0.78 - 14 - stage*3}
+          stroke={trunkColor} strokeWidth={trunkW * 0.35} strokeLinecap="round" />
+      </>)}
+      {/* Root flares (stage 2+) */}
+      {stage >= 2 && ([-18,-10,10,18] as number[]).map((dx,i) => (
+        <ellipse key={i} cx={dx} cy={0} rx={6 + stage * 1.5} ry={3.5}
+          fill={trunkColor} opacity={0.7} />
+      ))}
+      {/* Trunk */}
+      <rect x={-trunkW/2} y={-trunkH} width={trunkW} height={trunkH}
+        fill={trunkColor} rx={trunkW * 0.35} />
+      {/* Side canopy */}
+      {stage >= 2 && (<>
+        <circle cx={-canopyR * 0.58} cy={-(trunkH + canopyR * 0.28)} r={canopyR * 0.68}
+          fill={leafColor} opacity={0.82} />
+        <circle cx={ canopyR * 0.58} cy={-(trunkH + canopyR * 0.28)} r={canopyR * 0.68}
+          fill={leafColor} opacity={0.82} />
+      </>)}
+      {/* Main canopy */}
+      <circle cx="0" cy={-(trunkH + canopyR * 0.52)} r={canopyR} fill={leafColor} opacity={0.95} />
+      {/* Top cluster (stage 4+) */}
+      {stage >= 4 && (
+        <circle cx="0" cy={-(trunkH + canopyR * 1.25)} r={canopyR * 0.52}
+          fill={leafColor} opacity={0.88} />
+      )}
+      {/* Flowers / fruits (stage 5+) */}
+      {stage >= 5 && Array.from({ length: 6 + (stage - 5) * 3 }).map((_, i) => {
+        const angle = (i / (6 + (stage - 5) * 3)) * Math.PI * 2;
+        const fr = canopyR * 0.75;
+        const cx2 = Math.cos(angle) * fr;
+        const cy2 = -(trunkH + canopyR * 0.52) + Math.sin(angle) * fr * 0.55;
+        return (
+          <circle key={i} cx={cx2} cy={cy2} r={3.5 + (stage - 5) * 1.2}
+            fill={legendary ? '#ffd700' : '#ff8888'} opacity={0.88} />
+        );
+      })}
+      {/* Crown star (legendary) */}
+      {legendary && (<>
+        <circle cx="0" cy={-(trunkH + canopyR * 1.85)} r={11} fill="#ffd700" />
+        {[0,72,144,216,288].map((deg, i) => {
+          const rad = (deg - 90) * Math.PI / 180;
+          return (
+            <line key={i} x1="0" y1={-(trunkH + canopyR * 1.85)}
+              x2={Math.cos(rad) * 20} y2={-(trunkH + canopyR * 1.85) + Math.sin(rad) * 20}
+              stroke="#ffd700" strokeWidth="3" strokeLinecap="round" />
+          );
+        })}
+      </>)}
+    </svg>
+  );
+};
+
+// Symbol-tree cultivation modal (full-screen HTML overlay)
+interface SymbolTreeModalProps {
+  tree:        SymbolTree;
+  biome:       BiomeType;
+  fruitCount:  number;
+  onClose:     () => void;
+  onWater:     () => void;
+  onFertilize: () => void;
+}
+
+const SymbolTreeModal: React.FC<SymbolTreeModalProps> = ({
+  tree, biome, fruitCount, onClose, onWater, onFertilize,
+}) => {
+  const lbl  = getSymbolTreeLabel(biome);
+  const bg   = getSymbolTreeBg(biome);
+  const prog = Math.min(1, tree.growthTimer / SYM_STAGE_DUR);
+  const isDone = tree.stage >= SYM_STAGE_MAX;
+
+  const REWARDS: Record<number, string> = {
+    2: '文化ポイント +5',
+    4: '文化ポイント +10・果物 +2 🎁',
+    6: '文化ポイント +15',
+    7: '🌟 伝説の聖木として完成！',
+  };
+  const nextRewardStage = ([2,4,6,7] as number[]).find(s => s > tree.stage);
+  const nextReward = nextRewardStage !== undefined ? REWARDS[nextRewardStage] : null;
+
+  const btnBase: React.CSSProperties = {
+    borderRadius: 24, padding: '10px 22px', fontSize: 15, fontWeight: 700,
+    cursor: 'pointer', fontFamily: 'sans-serif', border: '2px solid',
+    transition: 'opacity 0.2s',
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 60,
+      background: bg, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'sans-serif', userSelect: 'none',
+    }}>
+      {/* Close button */}
+      <button onClick={onClose} style={{
+        position: 'absolute', top: 14, right: 14,
+        background: 'rgba(180,50,50,0.7)', color: '#fff',
+        border: '1px solid rgba(255,100,100,0.6)', borderRadius: 20,
+        padding: '4px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+      }}>✕ 閉じる</button>
+
+      {/* Title */}
+      <div style={{ color: '#e8e0c8', fontSize: 18, fontWeight: 700, marginBottom: 6, letterSpacing: '0.04em' }}>
+        {lbl.emoji} {lbl.name}
+      </div>
+      <div style={{ color: '#a09070', fontSize: 12, marginBottom: 20 }}>
+        段階 {tree.stage} / {SYM_STAGE_MAX}{isDone ? '　🌟 完成' : ''}
+      </div>
+
+      {/* Tree visual */}
+      <div style={{ marginBottom: 20, position: 'relative' }}>
+        <SymbolTreeSVG stage={tree.stage} biome={biome} />
+      </div>
+
+      {/* Progress bar */}
+      {!isDone && (
+        <div style={{ width: 260, marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8a8070', fontSize: 11, marginBottom: 4 }}>
+            <span>成長 {Math.round(prog * 100)}%</span>
+            <span>次の段階まで約 {Math.ceil((SYM_STAGE_DUR - tree.growthTimer) / 60)} 分</span>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+            <div style={{
+              background: `linear-gradient(90deg, ${tree.stage >= 5 ? '#ffd700' : '#60c840'}, ${tree.stage >= 5 ? '#ffa020' : '#40e060'})`,
+              height: '100%', width: `${Math.round(prog * 100)}%`,
+              transition: 'width 0.6s ease', borderRadius: 4,
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Next reward hint */}
+      {nextReward && (
+        <div style={{
+          color: '#c8b880', fontSize: 12, marginBottom: 18, textAlign: 'center',
+          background: 'rgba(255,200,80,0.08)', borderRadius: 8, padding: '6px 16px',
+          border: '1px solid rgba(255,200,80,0.2)',
+        }}>
+          ★ 段階 {nextRewardStage}で {nextReward}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {!isDone && (
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={onWater}
+            disabled={tree.waterCooldown > 0}
+            style={{
+              ...btnBase,
+              background: tree.waterCooldown > 0 ? 'rgba(30,50,80,0.7)' : 'rgba(10,60,140,0.9)',
+              color: tree.waterCooldown > 0 ? '#666' : '#fff',
+              borderColor: tree.waterCooldown > 0 ? '#334' : '#55aaff',
+              cursor: tree.waterCooldown > 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            💧 水やり{tree.waterCooldown > 0 ? ` (${tree.waterCooldown}s)` : ''}
+          </button>
+          <button
+            onClick={onFertilize}
+            disabled={fruitCount < 1}
+            style={{
+              ...btnBase,
+              background: fruitCount < 1 ? 'rgba(40,40,20,0.7)' : 'rgba(60,100,10,0.9)',
+              color: fruitCount < 1 ? '#666' : '#fff',
+              borderColor: fruitCount < 1 ? '#444' : '#90d030',
+              cursor: fruitCount < 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            🌿 施肥 (-1🍎){fruitCount < 1 ? ' 実不足' : ''}
+          </button>
+        </div>
+      )}
+
+      {isDone && (
+        <div style={{ color: '#ffd700', fontSize: 16, fontWeight: 700, textAlign: 'center',
+          textShadow: '0 0 12px #ffd700aa', letterSpacing: '0.05em' }}>
+          ✨ 伝説の聖木が完成しました ✨<br/>
+          <span style={{ fontSize: 12, color: '#d0b060', fontWeight: 400 }}>惑星の守護者として輝き続けます</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface DeilandWorldProps {
   body:               CelestialBody;
   joystickRef:        React.MutableRefObject<{ x: number; y: number }>;
@@ -516,7 +800,7 @@ function DeilandWorld({
   useEffect(() => {
     confirmBuildCallbackRef.current = () => {
       if (!buildMode) return;
-      const recipe = BUILD_RECIPES[buildMode];
+      const recipe = getBiomeRecipes(body.biome)[buildMode];
       setBuildings(prev => [
         ...prev,
         {
@@ -1244,12 +1528,15 @@ export const DeilandScene: React.FC<{
 
   // ── Initialise from save (lazy initialiser runs once on mount) ───────────────
   const [inventory, setInventory] = useState<Inventory>(() =>
-    initialSave?.inventory ?? { wood: 0, stone: 5, fruit: 0 });
+    initialSave?.inventory ?? getBiomeInitialInventory(body.biome));
   const [buildings, setBuildings] = useState<BuildingInstance[]>(() =>
     initialSave?.buildings.map(deserializeBuilding) ?? []);
   const [buildMode, setBuildMode]             = useState<BuildingType | null>(null);
   const [buildMenuOpen, setBuildMenuOpen]     = useState(false);
   const [stoneCooldown, setStoneCooldown]     = useState(0);
+  const [organicCooldown, setOrganicCooldown] = useState(0);
+  const [symbolTree, setSymbolTree]           = useState<SymbolTree | null>(() => initialSave?.symbolTree ?? null);
+  const [symbolTreeOpen, setSymbolTreeOpen]   = useState(false);
   const [nearbyHarvestId, setNearbyHarvestId]         = useState<string | null>(null);
   const [nearbyYoungTreeId, setNearbyYoungTreeId]     = useState<string | null>(null);
 
@@ -1276,6 +1563,9 @@ export const DeilandScene: React.FC<{
   }); // no deps — runs every render to keep ref fresh
   const onSaveDeilandRef = useRef(onSaveDeiland);
   useEffect(() => { onSaveDeilandRef.current = onSaveDeiland; });
+  // Symbol-tree save ref (kept in sync each render; read during performSave)
+  const symbolTreeSaveRef = useRef(symbolTree);
+  useEffect(() => { symbolTreeSaveRef.current = symbolTree; });
 
   const CIV_STEPS_SAVE = [0, 10, 30, 60, 100, 150] as const;
   const performSave = useCallback(() => {
@@ -1295,6 +1585,7 @@ export const DeilandScene: React.FC<{
       foodCount:     fc,
       culturePoints: cp,
       culture:       cul,
+      symbolTree:    symbolTreeSaveRef.current ?? null,
       civLevel:      civLevelVal,
       treeCount:     trees.length,
     });
@@ -1383,6 +1674,66 @@ export const DeilandScene: React.FC<{
     setStoneCooldown(8);
   };
 
+  // Organic-material gathering cooldown (for non-tree biomes)
+  useEffect(() => {
+    if (organicCooldown <= 0) return;
+    const t = setTimeout(() => setOrganicCooldown(s => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [organicCooldown]);
+
+  const handleGatherOrganic = () => {
+    if (organicCooldown > 0) return;
+    setInventory(inv => ({ ...inv, wood: inv.wood + 2 }));
+    setOrganicCooldown(8);
+  };
+
+  // Symbol-tree passive growth + water cooldown (1s tick)
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSymbolTree(st => {
+        if (!st || st.stage >= SYM_STAGE_MAX) return st;
+        const waterCooldown = Math.max(0, st.waterCooldown - 1);
+        const growthTimer   = st.growthTimer + 1;
+        if (growthTimer >= SYM_STAGE_DUR) {
+          return { ...st, stage: st.stage + 1, growthTimer: 0, waterCooldown };
+        }
+        return { ...st, growthTimer, waterCooldown };
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, []); // mount-only: setSymbolTree is stable
+
+  // Symbol-tree stage-up rewards
+  const prevSymStageRef = useRef<number>(symbolTree?.stage ?? -1);
+  useEffect(() => {
+    const s = symbolTree?.stage;
+    if (s === undefined || s === prevSymStageRef.current) return;
+    prevSymStageRef.current = s;
+    if (s === 2) setCulturePoints(p => p + 5);
+    if (s === 4) { setCulturePoints(p => p + 10); setInventory(inv => ({ ...inv, fruit: inv.fruit + 2 })); }
+    if (s === 6) setCulturePoints(p => p + 15);
+  }, [symbolTree?.stage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSymbolWater = () => {
+    setSymbolTree(st => {
+      if (!st || st.waterCooldown > 0 || st.stage >= SYM_STAGE_MAX) return st;
+      return { ...st, growthTimer: Math.min(SYM_STAGE_DUR - 1, st.growthTimer + SYM_WATER_BOOST), waterCooldown: SYM_WATER_CD };
+    });
+  };
+
+  const handleSymbolFertilize = () => {
+    if (inventory.fruit < 1) return;
+    setInventory(inv => ({ ...inv, fruit: inv.fruit - 1 }));
+    setSymbolTree(st => {
+      if (!st || st.stage >= SYM_STAGE_MAX) return st;
+      const rawTimer = st.growthTimer + SYM_FERT_BOOST;
+      if (rawTimer >= SYM_STAGE_DUR) {
+        return { ...st, stage: Math.min(SYM_STAGE_MAX, st.stage + 1), growthTimer: 0 };
+      }
+      return { ...st, growthTimer: rawTimer };
+    });
+  };
+
   const investCulture = (cat: CultureCategory) => {
     const level = culture[cat];
     if (level >= 5) return;
@@ -1401,6 +1752,9 @@ export const DeilandScene: React.FC<{
   const buildLabels: Record<BuildingType, string> = {
     hut: '🏠 小屋', farm: '🌾 農地', workshop: '⚒️ 工房', shrine: '⛩️ 祠',
   };
+  const biomeRecipes = getBiomeRecipes(body.biome);
+  const woodAlias    = getBiomeWoodAlias(body.biome);
+  const symLabel     = getSymbolTreeLabel(body.biome);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -1489,7 +1843,7 @@ export const DeilandScene: React.FC<{
         fontSize: 14, display: 'flex', gap: 12,
         userSelect: 'none', pointerEvents: 'none',
       }}>
-        <span>🪵 {inventory.wood}</span>
+        <span>{woodAlias.emoji} {inventory.wood}</span>
         <span>🪨 {inventory.stone}</span>
         <span>🍎 {inventory.fruit}</span>
         <span>🍞 {foodCount}</span>
@@ -1587,7 +1941,7 @@ export const DeilandScene: React.FC<{
           {/* Building buttons */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
             {(['hut', 'farm', 'workshop', 'shrine'] as BuildingType[]).map(type => {
-              const r = BUILD_RECIPES[type];
+              const r = biomeRecipes[type];
               const canAfford = inventory.wood >= r.wood && inventory.stone >= r.stone;
               return (
                 <button key={type}
@@ -1603,7 +1957,7 @@ export const DeilandScene: React.FC<{
                   }}
                 >
                   <div>{buildLabels[type]}</div>
-                  {r.wood  > 0 && <div style={{ fontSize: 11 }}>🪵 {r.wood}</div>}
+                  {r.wood  > 0 && <div style={{ fontSize: 11 }}>{woodAlias.emoji} {r.wood}</div>}
                   {r.stone > 0 && <div style={{ fontSize: 11 }}>🪨 {r.stone}</div>}
                 </button>
               );
@@ -1721,7 +2075,55 @@ export const DeilandScene: React.FC<{
           style={{ background: culturePanelOpen ? 'rgba(30,40,110,0.95)' : 'rgba(18,22,70,0.88)', color: '#fff', border: `1px solid ${culturePanelOpen ? '#7080e0' : '#5060c0'}`, borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'sans-serif' }}>
           🎭{population > 0 ? ` +${Math.max(1, Math.floor(population / 2))}` : ' 文化'}
         </button>
+
+        {/* Organic-material gather (non-tree biomes only) */}
+        {!buildMode && !biomeHasTrees(body.biome) && (
+          <button onClick={handleGatherOrganic} disabled={organicCooldown > 0}
+            style={{ background: organicCooldown > 0 ? 'rgba(40,40,40,0.7)' : 'rgba(50,40,10,0.88)', color: organicCooldown > 0 ? '#777' : '#fff', border: `1px solid ${organicCooldown > 0 ? '#555' : '#c0a030'}`, borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: organicCooldown > 0 ? 'not-allowed' : 'pointer', fontFamily: 'sans-serif' }}>
+            {woodAlias.emoji}{organicCooldown > 0 ? ` ${organicCooldown}s` : ` ${woodAlias.name}採取`}
+          </button>
+        )}
+
+        {/* Plant seed from fruit */}
+        {!buildMode && inventory.fruit >= 1 && (
+          <button onClick={() => {
+            if (inventory.fruit < 1) return;
+            setInventory(inv => ({ ...inv, fruit: inv.fruit - 1 }));
+            plantCallbackRef.current?.();
+          }}
+            style={{ background: 'rgba(20,60,15,0.88)', color: '#fff', border: '1px solid #4aaa30', borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🌱 種を植える (-1🍎)
+          </button>
+        )}
+
+        {/* Symbol tree */}
+        {!buildMode && (symbolTree ? (
+          <button onClick={() => setSymbolTreeOpen(true)}
+            style={{ background: symbolTree.stage >= 7 ? 'rgba(80,60,0,0.95)' : 'rgba(20,40,10,0.88)', color: symbolTree.stage >= 7 ? '#ffd700' : '#fff', border: `1px solid ${symbolTree.stage >= 7 ? '#ffd700' : '#70cc40'}`, borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            {symLabel.emoji} {symLabel.name} Lv.{symbolTree.stage}
+          </button>
+        ) : (inventory.fruit >= 2 && (
+          <button onClick={() => {
+            setInventory(inv => ({ ...inv, fruit: inv.fruit - 2 }));
+            setSymbolTree({ stage: 0, growthTimer: 0, waterCooldown: 0 });
+          }}
+            style={{ background: 'rgba(40,20,0,0.88)', color: '#d0b060', border: '1px solid #a07020', borderRadius: 22, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🌱 シンボルツリーを植える (-2🍎)
+          </button>
+        )))}
       </div>
+
+      {/* Symbol-tree cultivation modal */}
+      {symbolTreeOpen && symbolTree && (
+        <SymbolTreeModal
+          tree={symbolTree}
+          biome={body.biome}
+          fruitCount={inventory.fruit}
+          onClose={() => setSymbolTreeOpen(false)}
+          onWater={handleSymbolWater}
+          onFertilize={handleSymbolFertilize}
+        />
+      )}
     </div>
   );
 };
