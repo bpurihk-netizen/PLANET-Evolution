@@ -10,6 +10,7 @@ interface DeilandHUDProps {
   joystickRef:   React.MutableRefObject<JoystickState>;
   cameraYawRef:  React.MutableRefObject<number>;
   jumpRef:       React.MutableRefObject<boolean>;
+  tapNavRef:     React.MutableRefObject<{ x: number; y: number } | null>;
   onExit:        () => void;
 }
 
@@ -39,7 +40,7 @@ async function requestGyroPermission(): Promise<boolean> {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export const DeilandHUD: React.FC<DeilandHUDProps> = ({
-  planetName, joystickRef, cameraYawRef, jumpRef, onExit,
+  planetName, joystickRef, cameraYawRef, jumpRef, tapNavRef, onExit,
 }) => {
   const [knobOffset, setKnobOffset] = useState({ x: 0, y: 0 });
   const [isActive, setIsActive]     = useState(false);
@@ -50,6 +51,8 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
   const padCenterRef   = useRef({ x: 85, y: window.innerHeight - 90 });
   // Camera swipe state (right-side touch)
   const camTouchRef    = useRef<{ id: number; lastX: number } | null>(null);
+  // Tap-nav: track touch start for quick-tap detection (< 22 px movement = navigate tap)
+  const tapStartRef    = useRef<{ id: number; x: number; y: number } | null>(null);
 
   // ── Dead-zone + normalise ────────────────────────────────────────────────────
   const writeJoystick = useCallback((rawX: number, rawY: number) => {
@@ -69,6 +72,7 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
         // ── Left zone → joystick ────────────────────────────────────────────
         activeTouch.current = t.identifier;
         padCenterRef.current = { x: t.clientX, y: t.clientY };
+        tapStartRef.current  = { id: t.identifier, x: t.clientX, y: t.clientY };
         setIsActive(true);
         setKnobOffset({ x: 0, y: 0 });
         joystickRef.current = { x: 0, y: 0 };
@@ -115,6 +119,15 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
       if (t.identifier === activeTouch.current) {
+        // Detect quick tap (< 22 px from start) → trigger tap-navigation
+        if (tapStartRef.current && t.identifier === tapStartRef.current.id) {
+          const dx = t.clientX - tapStartRef.current.x;
+          const dy = t.clientY - tapStartRef.current.y;
+          if (Math.sqrt(dx * dx + dy * dy) < 22) {
+            tapNavRef.current = { x: tapStartRef.current.x, y: tapStartRef.current.y };
+          }
+          tapStartRef.current = null;
+        }
         activeTouch.current = null;
         setIsActive(false);
         setKnobOffset({ x: 0, y: 0 });
@@ -125,7 +138,7 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
         setCamSwipeActive(false);
       }
     }
-  }, [joystickRef]);
+  }, [joystickRef, tapNavRef]);
 
   // ── DeviceOrientation ────────────────────────────────────────────────────────
   const toggleGyro = useCallback(async () => {

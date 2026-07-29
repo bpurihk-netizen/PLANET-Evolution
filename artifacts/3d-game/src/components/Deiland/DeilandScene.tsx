@@ -270,6 +270,38 @@ const DustBurst: React.FC<{
   );
 };
 
+// ── Auto-navigate target ──────────────────────────────────────────────────────
+interface AutoMoveTarget { theta: number; phi: number; interact: boolean }
+
+/** Pulsing nav-target ring rendered at the tap destination */
+const NavMarker: React.FC<{
+  targetRef: React.MutableRefObject<AutoMoveTarget | null>;
+}> = ({ targetRef }) => {
+  const ringRef = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const tgt  = targetRef.current;
+    const mesh = ringRef.current;
+    if (!mesh) return;
+    if (!tgt) { mesh.visible = false; return; }
+    const n = new THREE.Vector3(
+      Math.sin(tgt.theta) * Math.cos(tgt.phi),
+      Math.cos(tgt.theta),
+      Math.sin(tgt.theta) * Math.sin(tgt.phi),
+    ).normalize();
+    mesh.position.copy(n.clone().multiplyScalar(PLANET_RADIUS + 0.08));
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+    const pulse = 0.80 + 0.20 * Math.sin(clock.elapsedTime * 5.0);
+    mesh.scale.set(pulse, 1.0, pulse);
+    mesh.visible = true;
+  });
+  return (
+    <mesh ref={ringRef} visible={false} renderOrder={2}>
+      <ringGeometry args={[0.14, 0.28, 20]} />
+      <meshBasicMaterial color="#50e8ff" transparent opacity={0.82} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
+};
+
 interface DeilandWorldProps {
   body:               CelestialBody;
   joystickRef:        React.MutableRefObject<{ x: number; y: number }>;
@@ -305,6 +337,9 @@ interface DeilandWorldProps {
   setNearbyWaterPlotId:   (id: string | null) => void;
   setNearbyHarvestFarmId: (id: string | null) => void;
   setFoodCount:           React.Dispatch<React.SetStateAction<number>>;
+  // Auto-navigation
+  tapNavRef:     React.MutableRefObject<{ x: number; y: number } | null>;
+  setAutoMoving: (v: boolean) => void;
 }
 
 function DeilandWorld({
@@ -319,8 +354,9 @@ function DeilandWorld({
   seedCallbackRef, waterCallbackRef, harvestFarmCallbackRef,
   setNearbyFarmBuilding, setNearbyWaterPlotId, setNearbyHarvestFarmId,
   setFoodCount,
+  tapNavRef, setAutoMoving,
 }: DeilandWorldProps) {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
 
   const thetaRef    = useRef(0.35);
   const phiRef      = useRef(0);
@@ -359,6 +395,10 @@ function DeilandWorld({
   const dustTriggerRef    = useRef(false);
   const dustLandingPosRef = useRef(new THREE.Vector3());
   const dustLandingUpRef  = useRef(new THREE.Vector3(0, 1, 0));
+
+  // Auto-navigation
+  const autoMoveTargetRef     = useRef<AutoMoveTarget | null>(null);
+  const autoInteractPendingRef = useRef(false);
 
   // Joystick inertia — velocity decays after finger lifts (gives "weight" to movement)
   const joyVelRef = useRef({ x: 0, y: 0 });
@@ -514,6 +554,17 @@ function DeilandWorld({
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
+  // Desktop click → tap-navigate (mobile taps come via tapNavRef from DeilandHUD)
+  useEffect(() => {
+    const handler = (e: PointerEvent) => {
+      // Only primary mouse button; ignore if a HUD DOM element was clicked
+      if (e.button !== 0) return;
+      tapNavRef.current = { x: e.clientX, y: e.clientY };
+    };
+    gl.domElement.addEventListener('pointerdown', handler);
+    return () => gl.domElement.removeEventListener('pointerdown', handler);
+  }, [gl, tapNavRef]);
+
   useFrame((state, dt) => {
     const elapsed = state.clock.elapsedTime;
 
@@ -563,6 +614,33 @@ function DeilandWorld({
       }
     }
 
+    // ── Process tap-navigate (screen coords → spherical target) ───────────────
+    if (tapNavRef.current !== null) {
+      if (ease > 0.95 && isGroundedRef.current) {
+        const { x: sx, y: sy } = tapNavRef.current;
+        const ndcX =  (sx / window.innerWidth)  * 2 - 1;
+        const ndcY = -(sy / window.innerHeight) * 2 + 1;
+        const ray = new THREE.Raycaster();
+        ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+        const sphere  = new THREE.Sphere(new THREE.Vector3(0, 0, 0), PLANET_RADIUS + 0.01);
+        const hitPt   = new THREE.Vector3();
+        if (ray.ray.intersectSphere(sphere, hitPt)) {
+          const n      = hitPt.clone().normalize();
+          const tTheta = Math.acos(Math.max(-1, Math.min(1, n.y)));
+          const tPhi   = Math.atan2(n.z, n.x);
+          // detect if tap is near any interactable
+          let interact = false;
+          const TAP_R  = 1.0;
+          treeDataRef.current.forEach(t => { if (hitPt.distanceTo(t.pos) < TAP_R) interact = true; });
+          buildings.forEach(b => { if (hitPt.distanceTo(b.pos) < 1.3) interact = true; });
+          farmPlotsRef.current.forEach(p => { if (hitPt.distanceTo(p.pos) < TAP_R) interact = true; });
+          autoMoveTargetRef.current = { theta: tTheta, phi: tPhi, interact };
+          setAutoMoving(true);
+        }
+      }
+      tapNavRef.current = null; // consume regardless
+    }
+
     // Input — joystick inertia (accelerates toward input, decays after release)
     const joy  = joystickRef.current;
     const jMag = Math.sqrt(joy.x * joy.x + joy.y * joy.y);
@@ -605,20 +683,56 @@ function DeilandWorld({
     // Air control — reduced steering and speed while airborne
     const airControl = isGroundedRef.current ? 1.0 : 0.28;
 
-    // Character movement (dashing/sprinting applies only when grounded)
-    if (ease > 0.95) {
-      facingRef.current += mx * TURN_SPEED * dt * airControl;
-      if (Math.abs(my) > 0.01) {
-        const dashMult  = isDashingRef.current ? 1.8 : 1.0;
-        const speedMult = (1 + sp * 0.7) * dashMult * airControl;
-        const dAngle = my * MOVE_SPEED * speedMult * dt / PLANET_RADIUS;
-        thetaRef.current += Math.cos(facingRef.current) * dAngle;
-        phiRef.current   += Math.sin(facingRef.current) * dAngle /
-                            Math.max(Math.abs(Math.sin(thetaRef.current)), 0.05);
-        thetaRef.current  = Math.max(0.12, Math.min(Math.PI - 0.12, thetaRef.current));
-      }
+    // ── Cancel auto-nav on joystick input or Escape ────────────────────────
+    if (autoMoveTargetRef.current && (jMag > 0.12 || keys.has('Escape'))) {
+      autoMoveTargetRef.current = null;
+      setAutoMoving(false);
     }
-    if (isMoving) walkTimeRef.current += dt * (1 + sp * 0.5); // walk timer also speeds up
+
+    const isAutoNav = !!autoMoveTargetRef.current && ease > 0.95 && isGroundedRef.current;
+
+    if (isAutoNav && autoMoveTargetRef.current) {
+      // ── Auto-nav: steer + move toward target on the sphere surface ────────
+      const { theta: tθ, phi: tφ, interact } = autoMoveTargetRef.current;
+      const sinT   = Math.max(Math.abs(Math.sin(thetaRef.current)), 0.05);
+      const dθ     = tθ - thetaRef.current;
+      const rawDφ  = tφ - phiRef.current;
+      const dφ     = ((rawDφ + Math.PI * 3) % (Math.PI * 2)) - Math.PI; // normalise to [-π, π]
+      const dφSc   = dφ * sinT;
+      const dist   = Math.sqrt(dθ * dθ + dφSc * dφSc);
+
+      const ARRIVE_DIST = interact ? 0.10 : 0.045;
+      if (dist < ARRIVE_DIST) {
+        // Arrived — schedule context-action trigger (proximity refs updated later this frame)
+        if (interact) autoInteractPendingRef.current = true;
+        autoMoveTargetRef.current = null;
+        setAutoMoving(false);
+      } else {
+        const facing     = Math.atan2(dφSc, dθ);
+        facingRef.current = facing;
+        const slowFactor  = Math.min(1.0, dist / 0.20);
+        const dAngle      = MOVE_SPEED * slowFactor * dt / PLANET_RADIUS;
+        thetaRef.current += Math.cos(facing) * dAngle;
+        phiRef.current   += Math.sin(facing) * dAngle / sinT;
+        thetaRef.current  = Math.max(0.12, Math.min(Math.PI - 0.12, thetaRef.current));
+        walkTimeRef.current += dt * slowFactor;
+      }
+    } else {
+      // Character movement (dashing/sprinting applies only when grounded)
+      if (ease > 0.95) {
+        facingRef.current += mx * TURN_SPEED * dt * airControl;
+        if (Math.abs(my) > 0.01) {
+          const dashMult  = isDashingRef.current ? 1.8 : 1.0;
+          const speedMult = (1 + sp * 0.7) * dashMult * airControl;
+          const dAngle = my * MOVE_SPEED * speedMult * dt / PLANET_RADIUS;
+          thetaRef.current += Math.cos(facingRef.current) * dAngle;
+          phiRef.current   += Math.sin(facingRef.current) * dAngle /
+                              Math.max(Math.abs(Math.sin(thetaRef.current)), 0.05);
+          thetaRef.current  = Math.max(0.12, Math.min(Math.PI - 0.12, thetaRef.current));
+        }
+      }
+      if (isMoving) walkTimeRef.current += dt * (1 + sp * 0.5); // walk timer also speeds up
+    }
 
     // World positions
     const θ = thetaRef.current, φ = phiRef.current;
@@ -864,6 +978,21 @@ function DeilandWorld({
       nearbyHarvestFarmIdRef.current = nearHarvestFarmId;
       setNearbyHarvestFarmId(nearHarvestFarmId);
     }
+
+    // ── Auto-interact on arrival (runs after proximity refs are updated) ────
+    if (autoInteractPendingRef.current) {
+      autoInteractPendingRef.current = false;
+      if (nearbyHarvestRef.current)
+        harvestCallbackRef.current?.(nearbyHarvestRef.current);
+      else if (nearbyYoungTreeRef.current)
+        cutCallbackRef.current?.(nearbyYoungTreeRef.current);
+      else if (nearbyHarvestFarmIdRef.current)
+        harvestFarmCallbackRef.current?.(nearbyHarvestFarmIdRef.current);
+      else if (nearbyWaterPlotIdRef.current)
+        waterCallbackRef.current?.(nearbyWaterPlotIdRef.current);
+      else if (nearbyFarmBuildingRef.current)
+        seedCallbackRef.current?.();
+    }
   });
 
   const colors = getBiomeCharColors(body.biome);
@@ -881,6 +1010,9 @@ function DeilandWorld({
       <DeilandSky biome={body.biome} dayTimeRef={dayTimeRef} />
 
       <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} cultureLevel={cultureLevel} />
+
+      {/* ── Auto-nav target ring ──────────────────────────────────── */}
+      <NavMarker targetRef={autoMoveTargetRef} />
 
       {/* ── NPC citizens ─────────────────────────────────────────── */}
       <DeilandNPCs population={population} biome={body.biome} />
@@ -1050,8 +1182,11 @@ export const DeilandScene: React.FC<{
   joystickRef:  React.MutableRefObject<{ x: number; y: number }>;
   cameraYawRef: React.MutableRefObject<number>;
   jumpRef:      React.MutableRefObject<boolean>;
-}> = ({ body, joystickRef, cameraYawRef, jumpRef }) => {
+  tapNavRef:    React.MutableRefObject<{ x: number; y: number } | null>;
+}> = ({ body, joystickRef, cameraYawRef, jumpRef, tapNavRef }) => {
   const [isTpsMode, setIsTpsMode] = useState(true);
+  const [isAutoMoving, setIsAutoMoving] = useState(false);
+  const setAutoMoving = useCallback((v: boolean) => setIsAutoMoving(v), []);
   const [inventory, setInventory]             = useState<Inventory>({ wood: 0, stone: 5, fruit: 0 });
   const [buildings, setBuildings]             = useState<BuildingInstance[]>([]);
   const [buildMode, setBuildMode]             = useState<BuildingType | null>(null);
@@ -1164,6 +1299,7 @@ export const DeilandScene: React.FC<{
         <DeilandWorld
           body={body} joystickRef={joystickRef}
           cameraYawRef={cameraYawRef} isTpsMode={isTpsMode} jumpRef={jumpRef}
+          tapNavRef={tapNavRef} setAutoMoving={setAutoMoving}
           plantCallbackRef={plantCallbackRef}
           harvestCallbackRef={harvestCallbackRef}
           cutCallbackRef={cutCallbackRef}
@@ -1188,6 +1324,26 @@ export const DeilandScene: React.FC<{
           setFoodCount={setFoodCount}
         />
       </Canvas>
+
+      {/* ── Auto-nav status banner ───────────────────────────────── */}
+      {isAutoMoving && (
+        <div
+          style={{
+            position: 'absolute', bottom: 160, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 15, pointerEvents: 'auto', cursor: 'pointer',
+            background: 'rgba(0,0,0,0.68)', borderRadius: 20,
+            padding: '6px 16px', color: '#80e8ff',
+            fontFamily: 'sans-serif', fontSize: 13, whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', gap: 6,
+            boxShadow: '0 0 10px rgba(80,200,255,0.35)',
+            border: '1px solid rgba(80,200,255,0.30)',
+          }}
+          onClick={() => setIsAutoMoving(false)}
+        >
+          <span style={{ animation: 'pulse 1s infinite' }}>🚶</span>
+          移動中… タップでキャンセル
+        </div>
+      )}
 
       {/* ── Civ gauge (top-left) ─────────────────────────────────── */}
       <div style={{
