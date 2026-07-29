@@ -294,6 +294,9 @@ function DeilandWorld({
   const nearbyWaterPlotIdRef   = useRef<string | null>(null);
   const nearbyHarvestFarmIdRef = useRef<string | null>(null);
 
+  // Joystick inertia — velocity decays after finger lifts (gives "weight" to movement)
+  const joyVelRef = useRef({ x: 0, y: 0 });
+
   // Ghost-building preview position refs (updated each frame during build mode)
   const ghostPosRef  = useRef(new THREE.Vector3());
   const ghostUpRef   = useRef(new THREE.Vector3(0, 1, 0));
@@ -433,10 +436,22 @@ function DeilandWorld({
     const d = descentRef.current;
     const ease = d * d * (3 - 2 * d);
 
-    // Input
+    // Input — joystick inertia (accelerates toward input, decays after release)
     const keys = keysRef.current;
     const joy  = joystickRef.current;
-    let mx = joy.x, my = joy.y;
+    const jMag = Math.sqrt(joy.x * joy.x + joy.y * joy.y);
+    if (jMag > 0.01) {
+      // Lerp velocity toward joystick target (12 units/s convergence)
+      const t = Math.min(1, 12.0 * dt);
+      joyVelRef.current.x += (joy.x - joyVelRef.current.x) * t;
+      joyVelRef.current.y += (joy.y - joyVelRef.current.y) * t;
+    } else {
+      // Inertia decay after finger lifts (8 units/s — brief coast feeling)
+      const decay = Math.max(0, 1 - 8.0 * dt);
+      joyVelRef.current.x *= decay;
+      joyVelRef.current.y *= decay;
+    }
+    let mx = joyVelRef.current.x, my = joyVelRef.current.y;
     if (keys.has('KeyA') || keys.has('ArrowLeft'))  mx -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
     if (keys.has('KeyW') || keys.has('ArrowUp'))    my += 1;
