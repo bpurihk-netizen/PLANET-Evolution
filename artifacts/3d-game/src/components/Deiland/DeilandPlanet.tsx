@@ -67,6 +67,30 @@ const AnimatedBuilding: React.FC<{
 
 export const PLANET_RADIUS = 4;
 
+/**
+ * Compute the Deiland planet rendering radius from the body's real diameter.
+ * Earth (12,756 km) → 4 units. Clamped to [1.0, 6.0] so tiny moons and
+ * giant planets stay playable.
+ */
+export function getPlanetRadius(diameterKm: number): number {
+  const EARTH_DIAMETER_KM = 12_756;
+  return Math.min(6.0, Math.max(1.0, 4 * (diameterKm / EARTH_DIAMETER_KM)));
+}
+
+/**
+ * Infer a BiomeType from a body's physical properties.
+ * Used as a fallback; prefer body.biome which is explicitly authored.
+ */
+export function inferBiome(surfaceTempAvgC: number, hasAtmosphere: boolean, gravityG: number): import('../../data/celestialBodies').BiomeType {
+  if (!hasAtmosphere && gravityG < 0.05) return 'AIRLESS';
+  if (surfaceTempAvgC > 350) return 'VOLCANIC';
+  if (surfaceTempAvgC > 150) return 'TOXIC';
+  if (surfaceTempAvgC < -80) return 'FROZEN_ROCK';
+  if (surfaceTempAvgC < -10) return 'ICE';
+  if (surfaceTempAvgC > 45) return 'DESERT';
+  return 'TEMPERATE';
+}
+
 function valueNoise(x: number, y: number, z: number): number {
   const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
   const xf = x - xi, yf = y - yi, zf = z - zi;
@@ -352,14 +376,16 @@ interface DeilandPlanetProps {
   seed:          number;
   buildings?:    BuildingInstance[];
   cultureLevel?: number;
+  /** Override planet rendering radius (default: PLANET_RADIUS = 4). */
+  radius?:       number;
 }
 
-export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildings = [], cultureLevel = 0 }) => {
+export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildings = [], cultureLevel = 0, radius = PLANET_RADIUS }) => {
   const palette = useMemo(() => getBiomePalette(body.biome), [body.biome]);
 
   const { geometry, treeCount, flowerCount } = useMemo(() => {
     const { deep, shallow, beach, low, mid, peak, waterLevel } = palette;
-    const base = new THREE.IcosahedronGeometry(PLANET_RADIUS, 4);
+    const base = new THREE.IcosahedronGeometry(radius, 4);
     const geo = base.toNonIndexed();
     base.dispose();
 
@@ -375,7 +401,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
       const heights = ns.map(n => (fbm(n.x * 1.8, n.y * 1.8, n.z * 1.8, seed) - 0.5) * 0.5);
 
       ns.forEach((n, j) => {
-        const r = PLANET_RADIUS + heights[j];
+        const r = radius + heights[j];
         newPositions.push(n.x * r, n.y * r, n.z * r);
       });
 
@@ -400,7 +426,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
     geo.computeVertexNormals();
 
     return { geometry: geo, treeCount: palette.treeN, flowerCount: palette.flowerN };
-  }, [seed, palette]);
+  }, [seed, palette, radius]);
 
   const objects = useMemo(() => {
     const rng = (n: number) => Math.abs(Math.sin(seed * 9.7 + n * 1234.567)) % 1;
@@ -417,7 +443,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
       const n     = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
       const h     = (fbm(n.x * 1.8, n.y * 1.8, n.z * 1.8, seed) - 0.5) * 0.5;
       if (h < waterLevel + 0.06) continue;
-      trees.push({ pos: n.clone().multiplyScalar(PLANET_RADIUS + h + 0.05), up: n.clone(), scale: 0.5 + rng(i * 3 + 2) * 0.9 });
+      trees.push({ pos: n.clone().multiplyScalar(radius + h + 0.05), up: n.clone(), scale: 0.5 + rng(i * 3 + 2) * 0.9 });
     }
 
     for (let i = 0; i < 20; i++) {
@@ -425,7 +451,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
       const phi   = rng(i * 7 + 101) * Math.PI * 2;
       const n     = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
       const h     = (fbm(n.x * 1.8, n.y * 1.8, n.z * 1.8, seed) - 0.5) * 0.5;
-      rocks.push({ pos: n.clone().multiplyScalar(PLANET_RADIUS + Math.max(h, waterLevel) + 0.04), up: n.clone(), scale: 0.4 + rng(i * 7 + 102) * 1.2, rotY: rng(i * 7 + 103) * Math.PI * 2 });
+      rocks.push({ pos: n.clone().multiplyScalar(radius + Math.max(h, waterLevel) + 0.04), up: n.clone(), scale: 0.4 + rng(i * 7 + 102) * 1.2, rotY: rng(i * 7 + 103) * Math.PI * 2 });
     }
 
     const flowerColors = ['#ff6b6b','#ffd93d','#ff9f43','#a29bfe','#fd79a8','#55efc4','#74b9ff'];
@@ -435,11 +461,11 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
       const n     = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
       const h     = (fbm(n.x * 1.8, n.y * 1.8, n.z * 1.8, seed) - 0.5) * 0.5;
       if (h < waterLevel + 0.08) continue;
-      flowers.push({ pos: n.clone().multiplyScalar(PLANET_RADIUS + h + 0.04), up: n.clone(), color: flowerColors[Math.floor(rng(i * 11 + 202) * flowerColors.length)] });
+      flowers.push({ pos: n.clone().multiplyScalar(radius + h + 0.04), up: n.clone(), color: flowerColors[Math.floor(rng(i * 11 + 202) * flowerColors.length)] });
     }
 
     return { trees, rocks, flowers, kind };
-  }, [seed, palette, treeCount, flowerCount]);
+  }, [seed, palette, treeCount, flowerCount, radius]);
 
   return (
     <group>
@@ -452,7 +478,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
         const rng2 = (n: number) => Math.abs(Math.sin(seed * 3.3 + n * 77.7)) % 1;
         const theta = 0.4 + rng2(i) * 1.2;
         const phi   = rng2(i + 10) * Math.PI * 2;
-        const r     = PLANET_RADIUS + 0.9 + rng2(i + 20) * 0.3;
+        const r     = radius + 0.9 + rng2(i + 20) * 0.3;
         const x = r * Math.sin(theta) * Math.cos(phi);
         const y = r * Math.cos(theta);
         const z = r * Math.sin(theta) * Math.sin(phi);

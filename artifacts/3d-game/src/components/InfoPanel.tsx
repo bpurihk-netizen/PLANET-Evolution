@@ -1,11 +1,18 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { CelestialBody } from '../data/celestialBodies';
+import { CelestialBody, BodyType } from '../data/celestialBodies';
 import { SolarSystemState } from '../hooks/useSolarSystem';
 import { StampRallyState } from '../hooks/useStampRally';
 import { BODY_STAMP_TRIGGERS, pickQuiz, QuizQuestion } from '../data/stampData';
 import { useNoaaSpaceWeather } from '../hooks/useNoaaSpaceWeather';
 import { cn } from '@/lib/utils';
 import { X, Footprints, Swords, ChevronLeft, ChevronDown, HelpCircle, CheckCircle, XCircle, Layers, Thermometer } from 'lucide-react';
+
+// ── Deiland eligibility ────────────────────────────────────────────────────────
+/** All rocky planets, dwarf planets, and moons support Deiland surface exploration. */
+const DEILAND_CAPABLE_TYPES: readonly BodyType[] = ['ROCKY', 'MOON', 'DWARF_PLANET'];
+function isDeilandCapable(body: CelestialBody): boolean {
+  return DEILAND_CAPABLE_TYPES.includes(body.type);
+}
 
 // ── Moon phase & rise/set utilities ──────────────────────────────────────────
 function getMoonPhaseInfo(now: Date): { phaseJa: string; emoji: string } {
@@ -508,7 +515,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stampRally, onStamp
                   : 'カッシーニ 赤外線地形を表示'}
               </button>
             )}
-            {body.canLand && state.currentSystemId === 'solar-system' && (
+            {isDeilandCapable(body) && state.currentSystemId === 'solar-system' && (
               <>
                 <button
                   onClick={() => state.activateDeiland(body.id)}

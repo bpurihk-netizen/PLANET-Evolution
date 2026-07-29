@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { DeilandPlanet, PLANET_RADIUS } from './DeilandPlanet';
+import { DeilandPlanet, getPlanetRadius } from './DeilandPlanet';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
 import { BuildingInstance, BuildingType, BUILD_RECIPES } from './DeilandBuildings';
 import {
@@ -281,7 +281,8 @@ interface AutoMoveTarget { theta: number; phi: number; interact: boolean }
 /** Pulsing nav-target ring rendered at the tap destination */
 const NavMarker: React.FC<{
   targetRef: React.MutableRefObject<AutoMoveTarget | null>;
-}> = ({ targetRef }) => {
+  radius: number;
+}> = ({ targetRef, radius }) => {
   const ringRef = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     const tgt  = targetRef.current;
@@ -293,7 +294,7 @@ const NavMarker: React.FC<{
       Math.cos(tgt.theta),
       Math.sin(tgt.theta) * Math.sin(tgt.phi),
     ).normalize();
-    mesh.position.copy(n.clone().multiplyScalar(PLANET_RADIUS + 0.08));
+    mesh.position.copy(n.clone().multiplyScalar(radius + 0.08));
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
     const pulse = 0.80 + 0.20 * Math.sin(clock.elapsedTime * 5.0);
     mesh.scale.set(pulse, 1.0, pulse);
@@ -351,6 +352,8 @@ interface DeilandWorldProps {
   // Initial data from save
   initialTrees: TreeInstance[];
   initialFarms: FarmPlot[];
+  /** Planet rendering radius computed from body.diameterKm — varies per planet */
+  planetRadius: number;
 }
 
 function DeilandWorld({
@@ -368,7 +371,10 @@ function DeilandWorld({
   tapNavRef, setAutoMoving,
   treeDataForSaveRef, farmDataForSaveRef,
   initialTrees, initialFarms,
+  planetRadius,
 }: DeilandWorldProps) {
+  /** Local alias for brevity — equals getPlanetRadius(body.diameterKm) */
+  const R = planetRadius;
   const { camera, gl } = useThree();
 
   const thetaRef    = useRef(0.35);
@@ -456,7 +462,7 @@ function DeilandWorld({
         ...treeDataRef.current,
         {
           id:          `tree-${++plantCounterRef.current}`,
-          pos:         up.clone().multiplyScalar(PLANET_RADIUS + 0.05),
+          pos:         up.clone().multiplyScalar(R + 0.05),
           up:          up.clone(),
           growthStage: 0,
           growthTimer: 0,
@@ -541,7 +547,7 @@ function DeilandWorld({
         ...farmPlotsRef.current,
         {
           id:          `farm-${++farmPlotCounterRef.current}`,
-          pos:         up.clone().multiplyScalar(PLANET_RADIUS + 0.04),
+          pos:         up.clone().multiplyScalar(R + 0.04),
           up:          up.clone(),
           growthStage: 1,
           growthTimer: 0,
@@ -579,7 +585,7 @@ function DeilandWorld({
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
-    camera.position.set(0, PLANET_RADIUS * 6, PLANET_RADIUS * 2);
+    camera.position.set(0, R * 6, R * 2);
     camera.lookAt(0, 0, 0);
   }, [camera]);
 
@@ -645,7 +651,7 @@ function DeilandWorld({
         const upLand = new THREE.Vector3(
           Math.sin(θl) * Math.cos(φl), Math.cos(θl), Math.sin(θl) * Math.sin(φl),
         ).normalize();
-        dustLandingPosRef.current.copy(upLand.clone().multiplyScalar(PLANET_RADIUS + CHAR_OFFSET - 0.02));
+        dustLandingPosRef.current.copy(upLand.clone().multiplyScalar(R + CHAR_OFFSET - 0.02));
         dustLandingUpRef.current.copy(upLand);
         dustTriggerRef.current = true;
       }
@@ -659,7 +665,7 @@ function DeilandWorld({
         const ndcY = -(sy / window.innerHeight) * 2 + 1;
         const ray = new THREE.Raycaster();
         ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
-        const sphere  = new THREE.Sphere(new THREE.Vector3(0, 0, 0), PLANET_RADIUS + 0.01);
+        const sphere  = new THREE.Sphere(new THREE.Vector3(0, 0, 0), R + 0.01);
         const hitPt   = new THREE.Vector3();
         if (ray.ray.intersectSphere(sphere, hitPt)) {
           const n      = hitPt.clone().normalize();
@@ -748,7 +754,7 @@ function DeilandWorld({
         const facing     = Math.atan2(dφSc, dθ);
         facingRef.current = facing;
         const slowFactor  = Math.min(1.0, dist / 0.20);
-        const dAngle      = MOVE_SPEED * slowFactor * dt / PLANET_RADIUS;
+        const dAngle      = MOVE_SPEED * slowFactor * dt / R;
         thetaRef.current += Math.cos(facing) * dAngle;
         phiRef.current   += Math.sin(facing) * dAngle / sinT;
         thetaRef.current  = Math.max(0.12, Math.min(Math.PI - 0.12, thetaRef.current));
@@ -761,7 +767,7 @@ function DeilandWorld({
         if (Math.abs(my) > 0.01) {
           const dashMult  = isDashingRef.current ? 1.8 : 1.0;
           const speedMult = (1 + sp * 0.7) * dashMult * airControl;
-          const dAngle = my * MOVE_SPEED * speedMult * dt / PLANET_RADIUS;
+          const dAngle = my * MOVE_SPEED * speedMult * dt / R;
           thetaRef.current += Math.cos(facingRef.current) * dAngle;
           phiRef.current   += Math.sin(facingRef.current) * dAngle /
                               Math.max(Math.abs(Math.sin(thetaRef.current)), 0.05);
@@ -776,7 +782,7 @@ function DeilandWorld({
     const up = new THREE.Vector3(
       Math.sin(θ) * Math.cos(φ), Math.cos(θ), Math.sin(θ) * Math.sin(φ)
     );
-    const charPos = up.clone().multiplyScalar(PLANET_RADIUS + CHAR_OFFSET + radialOffRef.current);
+    const charPos = up.clone().multiplyScalar(R + CHAR_OFFSET + radialOffRef.current);
 
     // Forward direction
     const northT = new THREE.Vector3(
@@ -892,8 +898,8 @@ function DeilandWorld({
       const CAM_DIST = 3.0;
       camSurface  = charPos.clone().add(armDir.multiplyScalar(CAM_DIST));
       // Ground clipping — keep camera above planet surface
-      if (camSurface.length() < PLANET_RADIUS + 0.55)
-        camSurface.setLength(PLANET_RADIUS + 0.55);
+      if (camSurface.length() < R + 0.55)
+        camSurface.setLength(R + 0.55);
       lookSurface = charPos.clone().add(up.clone().multiplyScalar(0.35));
     } else {
       // Top-down overview — directly above character
@@ -901,7 +907,7 @@ function DeilandWorld({
       lookSurface = charPos.clone().add(up.clone().multiplyScalar(0.15));
     }
 
-    const camSpace     = new THREE.Vector3(0, PLANET_RADIUS * 6, PLANET_RADIUS * 2);
+    const camSpace     = new THREE.Vector3(0, R * 6, R * 2);
     const lookSpace    = new THREE.Vector3(0, 0, 0);
     const targetCamPos = new THREE.Vector3().lerpVectors(camSpace, camSurface, ease);
     const targetLook   = new THREE.Vector3().lerpVectors(lookSpace, lookSurface, ease);
@@ -916,7 +922,7 @@ function DeilandWorld({
     if (buildMode) {
       const ghostSurface = charPos.clone().add(forward.clone().multiplyScalar(1.6));
       const ghostUp = ghostSurface.clone().normalize();
-      ghostPosRef.current.copy(ghostUp.clone().multiplyScalar(PLANET_RADIUS + 0.06));
+      ghostPosRef.current.copy(ghostUp.clone().multiplyScalar(R + 0.06));
       ghostUpRef.current.copy(ghostUp);
       ghostQuatRef.current.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ghostUp);
     }
@@ -1046,10 +1052,10 @@ function DeilandWorld({
     <>
       <DeilandSky biome={body.biome} dayTimeRef={dayTimeRef} />
 
-      <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} cultureLevel={cultureLevel} />
+      <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} cultureLevel={cultureLevel} radius={R} />
 
       {/* ── Auto-nav target ring ──────────────────────────────────── */}
-      <NavMarker targetRef={autoMoveTargetRef} />
+      <NavMarker targetRef={autoMoveTargetRef} radius={R} />
 
       {/* ── NPC citizens ─────────────────────────────────────────── */}
       <DeilandNPCs population={population} biome={body.biome} />
@@ -1298,6 +1304,9 @@ export const DeilandScene: React.FC<{
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const initialFarms = useMemo(() => initialSave?.farms.map(deserializeFarm) ?? [], []);
 
+  // Planet-specific rendering radius — Earth=4 units, smaller bodies proportionally less
+  const planetRadius = useMemo(() => getPlanetRadius(body.diameterKm), [body.diameterKm]);
+
   // Derived
   const populationCap = 20 + Math.floor(foodCount / 5); // food extends cap beyond 20
   const population    = Math.min(buildings.length * 2, populationCap, 30);
@@ -1389,7 +1398,7 @@ export const DeilandScene: React.FC<{
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas
         shadows
-        camera={{ fov: 55, near: 0.05, far: 300, position: [0, PLANET_RADIUS * 6, PLANET_RADIUS * 2] }}
+        camera={{ fov: 55, near: 0.05, far: 300, position: [0, planetRadius * 6, planetRadius * 2] }}
         gl={{ antialias: true }}
         style={{ width: '100%', height: '100%', background: '#050510' }}
       >
@@ -1423,6 +1432,7 @@ export const DeilandScene: React.FC<{
           farmDataForSaveRef={farmDataForSaveRef}
           initialTrees={initialTrees}
           initialFarms={initialFarms}
+          planetRadius={planetRadius}
         />
       </Canvas>
 
