@@ -8,10 +8,11 @@ interface DeilandProps {
 }
 
 export const Deiland: React.FC<DeilandProps> = ({ state }) => {
-  const joystickRef  = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const cameraYawRef = useRef(0);     // shared between scene (read) and HUD (write via swipe)
-  const jumpRef      = useRef(false); // HUD button sets true; scene consumes each frame
-  const tapNavRef    = useRef<{ x: number; y: number } | null>(null); // HUD tap → scene raycast
+  const joystickRef    = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const cameraYawRef   = useRef(0);     // shared between scene (read) and HUD (write via swipe)
+  const cameraPitchRef = useRef(0);     // pitch offset in degrees; HUD swipe Y writes, DeilandWorld reads
+  const jumpRef        = useRef(false); // HUD button sets true; scene consumes each frame
+  const tapNavRef      = useRef<{ x: number; y: number } | null>(null); // HUD tap → scene raycast
 
   // Stable identity — deps are primitives so useCallback only recreates when body actually changes.
   // Must be declared before the early return to satisfy the rules of hooks.
@@ -36,6 +37,7 @@ export const Deiland: React.FC<DeilandProps> = ({ state }) => {
       <div className="absolute inset-0">
         <DeilandScene
           body={body} joystickRef={joystickRef} cameraYawRef={cameraYawRef}
+          cameraPitchRef={cameraPitchRef}
           jumpRef={jumpRef} tapNavRef={tapNavRef}
           onStatsUpdate={onStatsUpdate}
           initialSave={initialSave}
@@ -47,6 +49,7 @@ export const Deiland: React.FC<DeilandProps> = ({ state }) => {
         planetName={body.nameJa}
         joystickRef={joystickRef}
         cameraYawRef={cameraYawRef}
+        cameraPitchRef={cameraPitchRef}
         jumpRef={jumpRef}
         tapNavRef={tapNavRef}
         onExit={state.exitDeiland}

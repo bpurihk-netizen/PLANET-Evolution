@@ -6,12 +6,13 @@ interface JoystickState {
 }
 
 interface DeilandHUDProps {
-  planetName:    string;
-  joystickRef:   React.MutableRefObject<JoystickState>;
-  cameraYawRef:  React.MutableRefObject<number>;
-  jumpRef:       React.MutableRefObject<boolean>;
-  tapNavRef:     React.MutableRefObject<{ x: number; y: number } | null>;
-  onExit:        () => void;
+  planetName:      string;
+  joystickRef:     React.MutableRefObject<JoystickState>;
+  cameraYawRef:    React.MutableRefObject<number>;
+  cameraPitchRef:  React.MutableRefObject<number>;
+  jumpRef:         React.MutableRefObject<boolean>;
+  tapNavRef:       React.MutableRefObject<{ x: number; y: number } | null>;
+  onExit:          () => void;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -19,6 +20,9 @@ const OUTER_RADIUS    = 65;   // outer ring radius px  (130px diameter > 120px r
 const KNOB_RADIUS     = 22;   // knob radius px
 const DEAD_ZONE       = 0.18; // normalised dead zone
 const CAM_SWIPE_SENS  = 0.006; // radians per pixel of horizontal swipe
+const CAM_PITCH_SENS  = 0.20;  // degrees per pixel of vertical swipe
+const CAM_PITCH_MIN   = -22;   // degrees below base elevation (look more horizontal)
+const CAM_PITCH_MAX   =  45;   // degrees above base elevation (bird's eye)
 
 /** Apply dead zone + remap so full range [0,1] is reachable above dead zone. */
 function applyDeadZone(raw: number, dz: number): number {
@@ -40,7 +44,7 @@ async function requestGyroPermission(): Promise<boolean> {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export const DeilandHUD: React.FC<DeilandHUDProps> = ({
-  planetName, joystickRef, cameraYawRef, jumpRef, tapNavRef, onExit,
+  planetName, joystickRef, cameraYawRef, cameraPitchRef, jumpRef, tapNavRef, onExit,
 }) => {
   const [knobOffset, setKnobOffset] = useState({ x: 0, y: 0 });
   const [isActive, setIsActive]     = useState(false);
@@ -49,8 +53,8 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
 
   const activeTouch    = useRef<number | null>(null);
   const padCenterRef   = useRef({ x: 85, y: window.innerHeight - 90 });
-  // Camera swipe state (right-side touch)
-  const camTouchRef    = useRef<{ id: number; lastX: number } | null>(null);
+  // Camera swipe state (right-side touch) — tracks both axes for yaw + pitch
+  const camTouchRef    = useRef<{ id: number; lastX: number; lastY: number } | null>(null);
   // Tap-nav: track touch start for quick-tap detection (< 22 px movement = navigate tap)
   const tapStartRef    = useRef<{ id: number; x: number; y: number } | null>(null);
 
@@ -78,8 +82,8 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
         joystickRef.current = { x: 0, y: 0 };
         e.preventDefault();
       } else if (t.clientX >= window.innerWidth * 0.55 && camTouchRef.current === null) {
-        // ── Right zone → camera swipe ───────────────────────────────────────
-        camTouchRef.current = { id: t.identifier, lastX: t.clientX };
+        // ── Right zone → camera swipe (yaw + pitch) ─────────────────────────
+        camTouchRef.current = { id: t.identifier, lastX: t.clientX, lastY: t.clientY };
         setCamSwipeActive(true);
         e.preventDefault();
       }
@@ -104,12 +108,17 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
         e.preventDefault();
       }
 
-      // Camera swipe move
+      // Camera swipe move — horizontal = yaw, vertical = pitch
       if (camTouchRef.current && t.identifier === camTouchRef.current.id) {
         const dx = t.clientX - camTouchRef.current.lastX;
-        // Left swipe → rotate camera right (decrease yaw); right swipe → rotate left
+        const dy = t.clientY - camTouchRef.current.lastY;
         cameraYawRef.current -= dx * CAM_SWIPE_SENS;
+        // Swipe down (positive dy) → raise camera; swipe up → lower camera
+        cameraPitchRef.current = Math.max(
+          CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, cameraPitchRef.current + dy * CAM_PITCH_SENS),
+        );
         camTouchRef.current.lastX = t.clientX;
+        camTouchRef.current.lastY = t.clientY;
         e.preventDefault();
       }
     }
@@ -270,12 +279,12 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
         ↑
       </button>
 
-      {/* ── Gyro toggle ──────────────────────────────────────────────── */}
+      {/* ── Gyro toggle — placed above the secondary strip, well clear of joystick ── */}
       <button
         className="absolute pointer-events-auto"
         onClick={toggleGyro}
         style={{
-          bottom: 96, left: 14,
+          bottom: 180, left: 10,
           background:   gyroMode ? 'rgba(60,120,220,0.75)' : 'rgba(0,0,0,0.45)',
           border:       `1px solid ${gyroMode ? 'rgba(120,180,255,0.8)' : 'rgba(255,255,255,0.2)'}`,
           borderRadius: 20, padding: '4px 10px',

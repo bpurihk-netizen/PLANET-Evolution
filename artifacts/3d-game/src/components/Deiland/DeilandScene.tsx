@@ -354,6 +354,8 @@ interface DeilandWorldProps {
   initialFarms: FarmPlot[];
   /** Planet rendering radius computed from body.diameterKm — varies per planet */
   planetRadius: number;
+  /** Camera pitch offset in degrees (+up / -down) written by HUD swipe */
+  cameraPitchRef: React.MutableRefObject<number>;
 }
 
 function DeilandWorld({
@@ -372,6 +374,7 @@ function DeilandWorld({
   treeDataForSaveRef, farmDataForSaveRef,
   initialTrees, initialFarms,
   planetRadius,
+  cameraPitchRef,
 }: DeilandWorldProps) {
   /** Local alias for brevity — equals getPlanetRadius(body.diameterKm) */
   const R = planetRadius;
@@ -890,12 +893,13 @@ function DeilandWorld({
       const backDir = forward.clone().negate();
       const yawQuat = new THREE.Quaternion().setFromAxisAngle(up, cameraYawRef.current);
       const armHoriz = backDir.clone().applyQuaternion(yawQuat);
-      // Elevate 25° upward around the horizontal-arm's right axis
-      const armRight = new THREE.Vector3().crossVectors(armHoriz, up).normalize();
-      const elevQuat = new THREE.Quaternion().setFromAxisAngle(armRight, -Math.PI * 25 / 180);
-      const armDir   = armHoriz.clone().applyQuaternion(elevQuat).normalize();
+      // Elevation: 42° base + pitch offset from swipe (clamped 15°–82°)
+      const armRight  = new THREE.Vector3().crossVectors(armHoriz, up).normalize();
+      const elevDeg   = Math.max(15, Math.min(82, 42 + cameraPitchRef.current));
+      const elevQuat  = new THREE.Quaternion().setFromAxisAngle(armRight, -elevDeg * Math.PI / 180);
+      const armDir    = armHoriz.clone().applyQuaternion(elevQuat).normalize();
 
-      const CAM_DIST = 3.0;
+      const CAM_DIST = 4.5;
       camSurface  = charPos.clone().add(armDir.multiplyScalar(CAM_DIST));
       // Ground clipping — keep camera above planet surface
       if (camSurface.length() < R + 0.55)
@@ -1221,15 +1225,19 @@ const EnvGauges: React.FC<{
 };
 
 export const DeilandScene: React.FC<{
-  body:            CelestialBody;
-  joystickRef:     React.MutableRefObject<{ x: number; y: number }>;
-  cameraYawRef:    React.MutableRefObject<number>;
-  jumpRef:         React.MutableRefObject<boolean>;
-  tapNavRef:       React.MutableRefObject<{ x: number; y: number } | null>;
-  onStatsUpdate?:  (civLevel: number, foodCount: number, scienceLevel: number) => void;
-  initialSave?:    DeilandPlanetSave;
-  onSaveDeiland?:  (save: DeilandPlanetSave) => void;
-}> = ({ body, joystickRef, cameraYawRef, jumpRef, tapNavRef, onStatsUpdate, initialSave, onSaveDeiland }) => {
+  body:             CelestialBody;
+  joystickRef:      React.MutableRefObject<{ x: number; y: number }>;
+  cameraYawRef:     React.MutableRefObject<number>;
+  cameraPitchRef?:  React.MutableRefObject<number>;
+  jumpRef:          React.MutableRefObject<boolean>;
+  tapNavRef:        React.MutableRefObject<{ x: number; y: number } | null>;
+  onStatsUpdate?:   (civLevel: number, foodCount: number, scienceLevel: number) => void;
+  initialSave?:     DeilandPlanetSave;
+  onSaveDeiland?:   (save: DeilandPlanetSave) => void;
+}> = ({ body, joystickRef, cameraYawRef, cameraPitchRef: cameraPitchProp, jumpRef, tapNavRef, onStatsUpdate, initialSave, onSaveDeiland }) => {
+  // Fallback so the component is usable without a parent-provided pitch ref
+  const _localPitchRef = React.useRef(0);
+  const cameraPitchRef = cameraPitchProp ?? _localPitchRef;
   const [isTpsMode, setIsTpsMode] = useState(true);
   const [isAutoMoving, setIsAutoMoving] = useState(false);
   const setAutoMoving = useCallback((v: boolean) => setIsAutoMoving(v), []);
@@ -1433,6 +1441,7 @@ export const DeilandScene: React.FC<{
           initialTrees={initialTrees}
           initialFarms={initialFarms}
           planetRadius={planetRadius}
+          cameraPitchRef={cameraPitchRef}
         />
       </Canvas>
 
@@ -1621,8 +1630,8 @@ export const DeilandScene: React.FC<{
 
         return (
           <>
-            {/* Primary context button (large, glowing) */}
-            {!buildMode && (
+            {/* Primary context button — hidden while build menu is open to prevent overlap */}
+            {!buildMode && !buildMenuOpen && (
               <div style={{ position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 12 }}>
                 <button
                   onClick={ctx.onClick}
