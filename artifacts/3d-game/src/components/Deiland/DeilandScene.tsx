@@ -9,6 +9,11 @@ import {
   getHarvestYield, STAGE_DURATION,
 } from './DeilandTrees';
 import { DeilandNPCs } from './DeilandNPCs';
+import {
+  DeilandFarmsRenderer, FarmPlot,
+  FARM_STAGE_DURATION, WATER_SPEED_MULT, WATER_DECAY_RATE,
+  FARM_WATER_MAX, FARM_FOOD_YIELD,
+} from './DeilandFarms';
 
 type Inventory = { wood: number; stone: number; fruit: number };
 
@@ -220,6 +225,14 @@ interface DeilandWorldProps {
   // NPC / culture
   population:   number;
   cultureLevel: number;
+  // Farming
+  seedCallbackRef:        React.MutableRefObject<(() => void) | null>;
+  waterCallbackRef:       React.MutableRefObject<((id: string) => void) | null>;
+  harvestFarmCallbackRef: React.MutableRefObject<((id: string) => void) | null>;
+  setNearbyFarmBuilding:  (v: boolean) => void;
+  setNearbyWaterPlotId:   (id: string | null) => void;
+  setNearbyHarvestFarmId: (id: string | null) => void;
+  setFoodCount:           React.Dispatch<React.SetStateAction<number>>;
 }
 
 function DeilandWorld({
@@ -229,6 +242,9 @@ function DeilandWorld({
   buildings, setBuildings,
   buildMode, confirmBuildCallbackRef, onBuildComplete,
   population, cultureLevel,
+  seedCallbackRef, waterCallbackRef, harvestFarmCallbackRef,
+  setNearbyFarmBuilding, setNearbyWaterPlotId, setNearbyHarvestFarmId,
+  setFoodCount,
 }: DeilandWorldProps) {
   const { camera } = useThree();
 
@@ -248,6 +264,13 @@ function DeilandWorld({
   const [treeVersion, setTreeVersion] = useState(0); // bump to trigger re-renders
   const nearbyHarvestRef = useRef<string | null>(null);
   const plantCounterRef  = useRef(0);
+  // Farming
+  const farmPlotsRef          = useRef<FarmPlot[]>([]);
+  const [farmVersion, setFarmVersion] = useState(0);
+  const farmPlotCounterRef    = useRef(0);
+  const nearbyFarmBuildingRef  = useRef(false);
+  const nearbyWaterPlotIdRef   = useRef<string | null>(null);
+  const nearbyHarvestFarmIdRef = useRef<string | null>(null);
 
   // Ghost-building preview position refs (updated each frame during build mode)
   const ghostPosRef  = useRef(new THREE.Vector3());
@@ -313,6 +336,51 @@ function DeilandWorld({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildMode, setBuildings, setInventory, onBuildComplete]);
+
+  // Register farm callbacks
+  useEffect(() => {
+    seedCallbackRef.current = () => {
+      if (!nearbyFarmBuildingRef.current) return;
+      const θ = thetaRef.current, φ = phiRef.current;
+      const up = new THREE.Vector3(
+        Math.sin(θ) * Math.cos(φ), Math.cos(θ), Math.sin(θ) * Math.sin(φ),
+      ).normalize();
+      farmPlotsRef.current = [
+        ...farmPlotsRef.current,
+        {
+          id:          `farm-${++farmPlotCounterRef.current}`,
+          pos:         up.clone().multiplyScalar(PLANET_RADIUS + 0.04),
+          up:          up.clone(),
+          growthStage: 1,
+          growthTimer: 0,
+          waterLevel:  0,
+          biome:       body.biome,
+        },
+      ];
+      setFarmVersion(v => v + 1);
+    };
+
+    waterCallbackRef.current = (id: string) => {
+      const plot = farmPlotsRef.current.find(p => p.id === id);
+      if (!plot) return;
+      plot.waterLevel = Math.min(FARM_WATER_MAX, plot.waterLevel + 1);
+      setFarmVersion(v => v + 1);
+    };
+
+    harvestFarmCallbackRef.current = (id: string) => {
+      const plot = farmPlotsRef.current.find(p => p.id === id);
+      if (!plot || plot.growthStage < 4) return;
+      // Reset plot to bare (ready for re-seeding), don't remove it
+      plot.growthStage = 0;
+      plot.growthTimer = 0;
+      plot.waterLevel  = 0;
+      nearbyHarvestFarmIdRef.current = null;
+      setNearbyHarvestFarmId(null);
+      setFarmVersion(v => v + 1);
+      setFoodCount(prev => prev + FARM_FOOD_YIELD);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body.biome, setFoodCount, setNearbyHarvestFarmId]);
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
@@ -516,6 +584,57 @@ function DeilandWorld({
       nearbyHarvestRef.current = nearestId;
       setNearbyHarvestId(nearestId);
     }
+
+    // ── Farm growth ────────────────────────────────────────────────────────
+    let farmChanged = false;
+    farmPlotsRef.current.forEach(plot => {
+      if (plot.growthStage >= 1 && plot.growthStage < 4) {
+        if (plot.waterLevel > 0) {
+          plot.waterLevel = Math.max(0, plot.waterLevel - WATER_DECAY_RATE * dt);
+        }
+        const speed = plot.waterLevel > 0.05 ? WATER_SPEED_MULT : 1.0;
+        plot.growthTimer += dt * speed;
+        if (plot.growthTimer >= FARM_STAGE_DURATION) {
+          plot.growthTimer -= FARM_STAGE_DURATION;
+          plot.growthStage = Math.min(4, plot.growthStage + 1);
+          farmChanged = true;
+        }
+      }
+    });
+    if (farmChanged) setFarmVersion(v => v + 1);
+
+    // ── Farm proximity ─────────────────────────────────────────────────────
+    let nearFarm = false;
+    buildings.forEach(b => {
+      if (b.type === 'farm' && charPos.distanceTo(b.pos) < 1.8) nearFarm = true;
+    });
+    if (nearFarm !== nearbyFarmBuildingRef.current) {
+      nearbyFarmBuildingRef.current = nearFarm;
+      setNearbyFarmBuilding(nearFarm);
+    }
+
+    let nearWaterId: string | null = null;
+    let nearWaterDist = 1.1;
+    let nearHarvestFarmId: string | null = null;
+    let nearHarvestFarmDist = 1.1;
+    farmPlotsRef.current.forEach(plot => {
+      const dist = charPos.distanceTo(plot.pos);
+      if (plot.growthStage >= 1 && plot.growthStage < 4 &&
+          plot.waterLevel < FARM_WATER_MAX - 0.1 && dist < nearWaterDist) {
+        nearWaterId = plot.id; nearWaterDist = dist;
+      }
+      if (plot.growthStage >= 4 && dist < nearHarvestFarmDist) {
+        nearHarvestFarmId = plot.id; nearHarvestFarmDist = dist;
+      }
+    });
+    if (nearWaterId !== nearbyWaterPlotIdRef.current) {
+      nearbyWaterPlotIdRef.current = nearWaterId;
+      setNearbyWaterPlotId(nearWaterId);
+    }
+    if (nearHarvestFarmId !== nearbyHarvestFarmIdRef.current) {
+      nearbyHarvestFarmIdRef.current = nearHarvestFarmId;
+      setNearbyHarvestFarmId(nearHarvestFarmId);
+    }
   });
 
   const colors = getBiomeCharColors(body.biome);
@@ -541,6 +660,9 @@ function DeilandWorld({
       {buildMode && (
         <GhostBuildingWrapper type={buildMode} posRef={ghostPosRef} quatRef={ghostQuatRef} />
       )}
+
+      {/* ── Farm plots ───────────────────────────────────────────── */}
+      <DeilandFarmsRenderer farmPlotsRef={farmPlotsRef} version={farmVersion} />
 
       {/* ── Growing trees */}
       {treeDataRef.current.map(tree => {
@@ -641,18 +763,28 @@ export const DeilandScene: React.FC<{
   const [stoneCooldown, setStoneCooldown]     = useState(0);
   const [nearbyHarvestId, setNearbyHarvestId] = useState<string | null>(null);
 
+  // Farming
+  const [foodCount, setFoodCount]                         = useState(0);
+  const [nearbyFarmBuilding, setNearbyFarmBuilding]       = useState(false);
+  const [nearbyWaterPlotId, setNearbyWaterPlotId]         = useState<string | null>(null);
+  const [nearbyHarvestFarmId, setNearbyHarvestFarmId]     = useState<string | null>(null);
+
   // Culture system
   const [culturePoints, setCulturePoints] = useState(0);
   const [culture, setCulture]             = useState<Culture>({ music: 0, art: 0, science: 0 });
   const [culturePanelOpen, setCulturePanelOpen] = useState(false);
 
   // Derived
-  const population   = Math.min(20, buildings.length * 2);
-  const cultureLevel = culture.music + culture.art + culture.science;
+  const populationCap = 20 + Math.floor(foodCount / 5); // food extends cap beyond 20
+  const population    = Math.min(buildings.length * 2, populationCap, 30);
+  const cultureLevel  = culture.music + culture.art + culture.science;
 
   const plantCallbackRef        = useRef<(() => void) | null>(null);
   const harvestCallbackRef      = useRef<((id: string) => void) | null>(null);
   const confirmBuildCallbackRef = useRef<(() => void) | null>(null);
+  const seedCallbackRef         = useRef<(() => void) | null>(null);
+  const waterCallbackRef        = useRef<((id: string) => void) | null>(null);
+  const harvestFarmCallbackRef  = useRef<((id: string) => void) | null>(null);
 
   // Civilisation gauge
   const civPoints = buildings.reduce((s, b) => s + BUILD_RECIPES[b.type].civPoints, 0);
@@ -722,6 +854,13 @@ export const DeilandScene: React.FC<{
           onBuildComplete={() => setBuildMode(null)}
           population={population}
           cultureLevel={cultureLevel}
+          seedCallbackRef={seedCallbackRef}
+          waterCallbackRef={waterCallbackRef}
+          harvestFarmCallbackRef={harvestFarmCallbackRef}
+          setNearbyFarmBuilding={setNearbyFarmBuilding}
+          setNearbyWaterPlotId={setNearbyWaterPlotId}
+          setNearbyHarvestFarmId={setNearbyHarvestFarmId}
+          setFoodCount={setFoodCount}
         />
       </Canvas>
 
@@ -752,6 +891,7 @@ export const DeilandScene: React.FC<{
         <span>🪵 {inventory.wood}</span>
         <span>🪨 {inventory.stone}</span>
         <span>🍎 {inventory.fruit}</span>
+        <span>🍞 {foodCount}</span>
       </div>
 
       {/* ── Culture panel ────────────────────────────────────────── */}
@@ -867,6 +1007,25 @@ export const DeilandScene: React.FC<{
           <button onClick={() => harvestCallbackRef.current?.(nearbyHarvestId)}
             style={{ background: 'rgba(100,60,10,0.88)', color: '#fff', border: '1px solid #d4a44a', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
             🍎 収穫
+          </button>
+        )}
+        {/* ── Farm buttons ────────────────────────────────────────── */}
+        {nearbyFarmBuilding && !buildMode && (
+          <button onClick={() => seedCallbackRef.current?.()}
+            style={{ background: 'rgba(60,90,10,0.88)', color: '#fff', border: '1px solid #aadd44', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🌾 種まき
+          </button>
+        )}
+        {nearbyWaterPlotId && !buildMode && (
+          <button onClick={() => waterCallbackRef.current?.(nearbyWaterPlotId)}
+            style={{ background: 'rgba(10,50,120,0.88)', color: '#fff', border: '1px solid #4488ff', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            💧 水やり
+          </button>
+        )}
+        {nearbyHarvestFarmId && !buildMode && (
+          <button onClick={() => harvestFarmCallbackRef.current?.(nearbyHarvestFarmId)}
+            style={{ background: 'rgba(80,50,10,0.88)', color: '#fff', border: '1px solid #ddaa44', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🧺 作物収穫 +{FARM_FOOD_YIELD}🍞
           </button>
         )}
         {/* Mine stone */}
