@@ -29,6 +29,13 @@ const DESCENT_DURATION = 3.5;
 const ACTION_DURATION  = 0.55;   // seconds for one action swing
 const DAY_SPEED        = 1 / 180; // 3-minute full day cycle
 
+// ── Jump & Dash constants ──────────────────────────────────────────────────────
+const JUMP_INIT_VEL     = 1.6;  // radial m/s at g=1.0
+const JUMP_GRAVITY_MULT = 4.0;  // gravity acceleration coefficient (×body.gravityG)
+const DASH_HOLD_TIME    = 0.08; // seconds joystick must stay > DASH_THRESHOLD
+const DASH_THRESHOLD    = 0.85; // joystick magnitude to arm dash
+const DUST_BURST_DUR    = 0.42; // seconds for landing dust ring
+
 // ── Biome → character outfit colours ──────────────────────────────────────────
 function getBiomeCharColors(biome: BiomeType) {
   switch (biome) {
@@ -225,11 +232,50 @@ const GhostBuildingWrapper: React.FC<{
   );
 };
 
+// ── Landing dust ring ─────────────────────────────────────────────────────────
+const DustBurst: React.FC<{
+  triggerRef: React.MutableRefObject<boolean>;
+  posRef:     React.MutableRefObject<THREE.Vector3>;
+  upRef:      React.MutableRefObject<THREE.Vector3>;
+}> = ({ triggerRef, posRef, upRef }) => {
+  const ringRef  = useRef<THREE.Mesh>(null);
+  const timerRef = useRef(0);
+
+  useFrame((_, dt) => {
+    if (triggerRef.current) { timerRef.current = DUST_BURST_DUR; triggerRef.current = false; }
+    const mesh = ringRef.current;
+    if (!mesh) return;
+    if (timerRef.current > 0) {
+      timerRef.current -= dt;
+      const t  = 1 - timerRef.current / DUST_BURST_DUR;
+      const s  = 0.06 + t * 0.72;
+      const op = Math.max(0, 0.80 * (1 - t * 1.6));
+      mesh.position.copy(posRef.current);
+      mesh.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0), upRef.current.clone().normalize(),
+      );
+      mesh.scale.set(s, s, s);
+      (mesh.material as THREE.MeshBasicMaterial).opacity = op;
+      mesh.visible = op > 0.005;
+    } else {
+      mesh.visible = false;
+    }
+  });
+
+  return (
+    <mesh ref={ringRef} visible={false} renderOrder={1}>
+      <ringGeometry args={[0.12, 0.50, 20]} />
+      <meshBasicMaterial color="#c8b080" transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
+};
+
 interface DeilandWorldProps {
   body:               CelestialBody;
   joystickRef:        React.MutableRefObject<{ x: number; y: number }>;
   cameraYawRef:       React.MutableRefObject<number>;
   isTpsMode:          boolean;
+  jumpRef:            React.MutableRefObject<boolean>;
   // tree system
   plantCallbackRef:   React.MutableRefObject<(() => void) | null>;
   harvestCallbackRef: React.MutableRefObject<((id: string) => void) | null>;
@@ -262,7 +308,7 @@ interface DeilandWorldProps {
 }
 
 function DeilandWorld({
-  body, joystickRef, cameraYawRef, isTpsMode,
+  body, joystickRef, cameraYawRef, isTpsMode, jumpRef,
   plantCallbackRef, harvestCallbackRef,
   setInventory, setNearbyHarvestId,
   buildings, setBuildings,
@@ -300,6 +346,19 @@ function DeilandWorld({
   const nearbyFarmBuildingRef  = useRef(false);
   const nearbyWaterPlotIdRef   = useRef<string | null>(null);
   const nearbyHarvestFarmIdRef = useRef<string | null>(null);
+
+  // Jump physics
+  const radialOffRef   = useRef(0);               // height above surface (0 = grounded)
+  const radialVelRef   = useRef(0);               // radial velocity (+ = rising)
+  const isGroundedRef  = useRef(true);
+  const spaceWasHeld   = useRef(false);           // for "just pressed" Space detection
+  // Dash
+  const dashHoldRef    = useRef(0);               // time with jMag > DASH_THRESHOLD
+  const isDashingRef   = useRef(false);
+  // Landing dust
+  const dustTriggerRef    = useRef(false);
+  const dustLandingPosRef = useRef(new THREE.Vector3());
+  const dustLandingUpRef  = useRef(new THREE.Vector3(0, 1, 0));
 
   // Joystick inertia — velocity decays after finger lifts (gives "weight" to movement)
   const joyVelRef = useRef({ x: 0, y: 0 });
@@ -473,6 +532,37 @@ function DeilandWorld({
     if (keys.has('KeyQ')) cameraYawRef.current += dt * 1.4;
     if (keys.has('KeyE')) cameraYawRef.current -= dt * 1.4;
 
+    // ── Jump input (HUD button OR Space key, "just-pressed" for Space) ─────────
+    const spaceDown = keys.has('Space');
+    const spaceJustPressed = spaceDown && !spaceWasHeld.current;
+    spaceWasHeld.current = spaceDown;
+    if ((jumpRef.current || spaceJustPressed) && isGroundedRef.current && ease > 0.95) {
+      const gForJump = Math.max(0.38, Math.min(3.0, (body.gravityG ?? 1.0)));
+      radialVelRef.current = JUMP_INIT_VEL / Math.sqrt(gForJump);
+      isGroundedRef.current = false;
+    }
+    jumpRef.current = false; // consume every frame
+
+    // ── Jump physics ─────────────────────────────────────────────────────────────
+    if (!isGroundedRef.current) {
+      const gForJump = Math.max(0.38, Math.min(3.0, (body.gravityG ?? 1.0)));
+      radialVelRef.current -= JUMP_GRAVITY_MULT * gForJump * dt;
+      radialOffRef.current += radialVelRef.current * dt;
+      if (radialOffRef.current <= 0) {
+        radialOffRef.current = 0;
+        radialVelRef.current = 0;
+        isGroundedRef.current = true;
+        // Landing dust — store surface-normal at landing spot
+        const θl = thetaRef.current, φl = phiRef.current;
+        const upLand = new THREE.Vector3(
+          Math.sin(θl) * Math.cos(φl), Math.cos(θl), Math.sin(θl) * Math.sin(φl),
+        ).normalize();
+        dustLandingPosRef.current.copy(upLand.clone().multiplyScalar(PLANET_RADIUS + CHAR_OFFSET - 0.02));
+        dustLandingUpRef.current.copy(upLand);
+        dustTriggerRef.current = true;
+      }
+    }
+
     // Input — joystick inertia (accelerates toward input, decays after release)
     const joy  = joystickRef.current;
     const jMag = Math.sqrt(joy.x * joy.x + joy.y * joy.y);
@@ -496,17 +586,31 @@ function DeilandWorld({
     my = Math.max(-1, Math.min(1, my));
     const isMoving = (Math.abs(mx) > 0.05 || Math.abs(my) > 0.05) && ease > 0.95;
 
+    // Dash detection — sustained jMag > DASH_THRESHOLD while grounded
+    if (jMag >= DASH_THRESHOLD && isGroundedRef.current && ease > 0.95) {
+      dashHoldRef.current += dt;
+      if (dashHoldRef.current >= DASH_HOLD_TIME) isDashingRef.current = true;
+    } else {
+      if (jMag < 0.55) { dashHoldRef.current = 0; isDashingRef.current = false; }
+    }
+    // Also cancel dash on keyboard if no held key
+    if (!isMoving && !isDashingRef.current) dashHoldRef.current = 0;
+
     // Sprint smoothing (fast when |my| > 0.75)
     const wantSprint = Math.abs(my) > 0.75 && isMoving;
     sprintRef.current += (wantSprint ? 1 : -1) * dt * 5;
     sprintRef.current  = Math.max(0, Math.min(1, sprintRef.current));
     const sp = sprintRef.current;
 
-    // Character movement (sprinting moves faster)
+    // Air control — reduced steering and speed while airborne
+    const airControl = isGroundedRef.current ? 1.0 : 0.28;
+
+    // Character movement (dashing/sprinting applies only when grounded)
     if (ease > 0.95) {
-      facingRef.current += mx * TURN_SPEED * dt;
+      facingRef.current += mx * TURN_SPEED * dt * airControl;
       if (Math.abs(my) > 0.01) {
-        const speedMult = 1 + sp * 0.7;
+        const dashMult  = isDashingRef.current ? 1.8 : 1.0;
+        const speedMult = (1 + sp * 0.7) * dashMult * airControl;
         const dAngle = my * MOVE_SPEED * speedMult * dt / PLANET_RADIUS;
         thetaRef.current += Math.cos(facingRef.current) * dAngle;
         phiRef.current   += Math.sin(facingRef.current) * dAngle /
@@ -521,7 +625,7 @@ function DeilandWorld({
     const up = new THREE.Vector3(
       Math.sin(θ) * Math.cos(φ), Math.cos(θ), Math.sin(θ) * Math.sin(φ)
     );
-    const charPos = up.clone().multiplyScalar(PLANET_RADIUS + CHAR_OFFSET);
+    const charPos = up.clone().multiplyScalar(PLANET_RADIUS + CHAR_OFFSET + radialOffRef.current);
 
     // Forward direction
     const northT = new THREE.Vector3(
@@ -587,6 +691,20 @@ function DeilandWorld({
       if (c[3]) { c[3].position.y = 0.08 + bob; (c[3] as THREE.Group).rotation.x = isMoving ? legL : 0; }
       if (c[4]) { c[4].position.y = 0.22 + bob; (c[4] as THREE.Group).rotation.x = isMoving ? armR : 0; }
       if (c[5]) { c[5].position.y = 0.22 + bob; (c[5] as THREE.Group).rotation.x = isMoving ? armL : 0; }
+
+      // ── Jump pose override (airborne only) ───────────────────────────────
+      if (!isGroundedRef.current) {
+        const airBlend = Math.min(1.0, radialOffRef.current / 0.10);
+        // Rising: legs tuck, arms forward-up  /  Falling: legs spread, arms back
+        const rising = radialVelRef.current > 0;
+        const legAng = rising ? -0.50 * airBlend :  0.30 * airBlend;
+        const armAng = rising ?  0.60 * airBlend : -0.35 * airBlend;
+        if (c[2]) (c[2] as THREE.Group).rotation.x = legAng;
+        if (c[3]) (c[3] as THREE.Group).rotation.x = legAng;
+        if (c[4]) (c[4] as THREE.Group).rotation.x = armAng;
+        if (c[5]) (c[5] as THREE.Group).rotation.x = armAng;
+        if (c[0]) c[0].position.y = 0.22 + radialOffRef.current * 0.04;
+      }
 
       // ── Action animation (right-arm chopping swing) ───────────────────────
       if (actionTimerRef.current > 0) {
@@ -858,6 +976,9 @@ function DeilandWorld({
         </group>
 
       </group>
+      {/* ── Landing dust burst ───────────────────────────────────── */}
+      <DustBurst triggerRef={dustTriggerRef} posRef={dustLandingPosRef} upRef={dustLandingUpRef} />
+
       {/* ────────────────────────────────────────────────────────── */}
     </>
   );
@@ -928,7 +1049,8 @@ export const DeilandScene: React.FC<{
   body:         CelestialBody;
   joystickRef:  React.MutableRefObject<{ x: number; y: number }>;
   cameraYawRef: React.MutableRefObject<number>;
-}> = ({ body, joystickRef, cameraYawRef }) => {
+  jumpRef:      React.MutableRefObject<boolean>;
+}> = ({ body, joystickRef, cameraYawRef, jumpRef }) => {
   const [isTpsMode, setIsTpsMode] = useState(true);
   const [inventory, setInventory]             = useState<Inventory>({ wood: 0, stone: 5, fruit: 0 });
   const [buildings, setBuildings]             = useState<BuildingInstance[]>([]);
@@ -1041,7 +1163,7 @@ export const DeilandScene: React.FC<{
       >
         <DeilandWorld
           body={body} joystickRef={joystickRef}
-          cameraYawRef={cameraYawRef} isTpsMode={isTpsMode}
+          cameraYawRef={cameraYawRef} isTpsMode={isTpsMode} jumpRef={jumpRef}
           plantCallbackRef={plantCallbackRef}
           harvestCallbackRef={harvestCallbackRef}
           cutCallbackRef={cutCallbackRef}

@@ -9,6 +9,7 @@ interface DeilandHUDProps {
   planetName:    string;
   joystickRef:   React.MutableRefObject<JoystickState>;
   cameraYawRef:  React.MutableRefObject<number>;
+  jumpRef:       React.MutableRefObject<boolean>;
   onExit:        () => void;
 }
 
@@ -38,7 +39,7 @@ async function requestGyroPermission(): Promise<boolean> {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export const DeilandHUD: React.FC<DeilandHUDProps> = ({
-  planetName, joystickRef, cameraYawRef, onExit,
+  planetName, joystickRef, cameraYawRef, jumpRef, onExit,
 }) => {
   const [knobOffset, setKnobOffset] = useState({ x: 0, y: 0 });
   const [isActive, setIsActive]     = useState(false);
@@ -235,6 +236,26 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
           }}
         />
       )}
+
+      {/* ── Jump button (bottom-right) ───────────────────────────────── */}
+      <button
+        className="absolute pointer-events-auto select-none"
+        onPointerDown={e => { e.preventDefault(); jumpRef.current = true; }}
+        style={{
+          bottom: 110, right: 22,
+          width: 68, height: 68,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle at 35% 30%, rgba(160,220,255,0.92), rgba(60,130,230,0.80))',
+          border: '2px solid rgba(140,200,255,0.85)',
+          boxShadow: '0 0 18px rgba(80,160,255,0.45), 0 3px 12px rgba(0,0,0,0.55)',
+          color: '#fff', fontSize: 26, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', userSelect: 'none',
+          backdropFilter: 'blur(4px)',
+        }}
+      >
+        ↑
+      </button>
 
       {/* ── Gyro toggle ──────────────────────────────────────────────── */}
       <button

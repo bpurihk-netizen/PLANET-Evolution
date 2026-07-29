@@ -9,7 +9,8 @@ interface DeilandProps {
 
 export const Deiland: React.FC<DeilandProps> = ({ state }) => {
   const joystickRef  = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const cameraYawRef = useRef(0); // shared between scene (read) and HUD (write via swipe)
+  const cameraYawRef = useRef(0);  // shared between scene (read) and HUD (write via swipe)
+  const jumpRef      = useRef(false); // HUD button sets true; scene consumes each frame
   const body = state.deilandBody;
 
   if (!body) return null;
@@ -18,13 +19,14 @@ export const Deiland: React.FC<DeilandProps> = ({ state }) => {
     <div className="absolute inset-0 z-50 bg-[#050510]">
       {/* 3-D scene */}
       <div className="absolute inset-0">
-        <DeilandScene body={body} joystickRef={joystickRef} cameraYawRef={cameraYawRef} />
+        <DeilandScene body={body} joystickRef={joystickRef} cameraYawRef={cameraYawRef} jumpRef={jumpRef} />
       </div>
-      {/* DOM overlay (joystick, exit button, camera swipe) */}
+      {/* DOM overlay (joystick, exit button, camera swipe, jump button) */}
       <DeilandHUD
         planetName={body.nameJa}
         joystickRef={joystickRef}
         cameraYawRef={cameraYawRef}
+        jumpRef={jumpRef}
         onExit={state.exitDeiland}
       />
     </div>
