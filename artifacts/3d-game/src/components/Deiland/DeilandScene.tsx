@@ -1628,9 +1628,9 @@ export const DeilandScene: React.FC<{
 
       {/* ── Context action layer ──────────────────────────────────── */}
       {(() => {
-        // Determine highest-priority context action
+        // Determine highest-priority context action — null means nothing nearby, button hidden
         type CtxAction = { emoji: string; label: string; bg: string; border: string; glow: string; onClick: () => void };
-        let ctx: CtxAction;
+        let ctx: CtxAction | null = null;
         if (nearbyHarvestId) {
           ctx = { emoji: '🍎', label: '収穫', bg: 'rgba(130,70,10,0.94)', border: '#e8b455', glow: '#e8b45555',
             onClick: () => harvestCallbackRef.current?.(nearbyHarvestId) };
@@ -1646,15 +1646,14 @@ export const DeilandScene: React.FC<{
         } else if (nearbyFarmBuilding) {
           ctx = { emoji: '🌾', label: '種まき', bg: 'rgba(65,95,10,0.94)', border: '#b8e040', glow: '#b8e04055',
             onClick: () => seedCallbackRef.current?.() };
-        } else {
-          ctx = { emoji: '🌱', label: '植える', bg: 'rgba(22,85,32,0.94)', border: '#5acd7a', glow: '#5acd7a55',
-            onClick: () => plantCallbackRef.current?.() };
         }
+        // 「植える」は近くに植えられる場所があるときのみ表示（nearbyPlantSpot など将来拡張可）
+        // 現在は「近くの具体的なオブジェクト」がない場合はボタン非表示
 
         return (
           <>
-            {/* Primary context button — hidden while build menu is open to prevent overlap */}
-            {!buildMode && !buildMenuOpen && (
+            {/* Primary context button — only shown when a nearby action exists */}
+            {!buildMode && !buildMenuOpen && ctx && (
               <div style={{ position: 'absolute', bottom: 210, left: '50%', transform: 'translateX(-50%)', zIndex: 12 }}>
                 <button
                   onClick={ctx.onClick}
