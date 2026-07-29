@@ -3,11 +3,13 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DeilandPlanet, PLANET_RADIUS } from './DeilandPlanet';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
-import { BuildingInstance, BuildingType } from './DeilandBuildings';
+import { BuildingInstance, BuildingType, BUILD_RECIPES } from './DeilandBuildings';
 import {
   TreeInstance, GrowingTree,
   getHarvestYield, STAGE_DURATION,
 } from './DeilandTrees';
+
+type Inventory = { wood: number; stone: number; fruit: number };
 
 const CHAR_OFFSET      = 0.15;
 const MOVE_SPEED       = 0.55;
@@ -165,29 +167,58 @@ const DeilandSky: React.FC<{
   );
 };
 
-// ── Sphere surface position helper ───────────────────────────────────────────
-function makeBuildingAt(id: string, type: BuildingType, theta: number, phi: number): BuildingInstance {
-  const up = new THREE.Vector3(
-    Math.sin(theta) * Math.cos(phi),
-    Math.cos(theta),
-    Math.sin(theta) * Math.sin(phi),
-  ).normalize();
-  return { id, type, pos: up.clone().multiplyScalar(PLANET_RADIUS + 0.06), up };
-}
+/** Semi-transparent box preview that follows the character in build mode */
+const GhostBuildingWrapper: React.FC<{
+  type:    BuildingType;
+  posRef:  React.MutableRefObject<THREE.Vector3>;
+  quatRef: React.MutableRefObject<THREE.Quaternion>;
+}> = ({ type, posRef, quatRef }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (groupRef.current) {
+      groupRef.current.position.copy(posRef.current);
+      groupRef.current.quaternion.copy(quatRef.current);
+    }
+  });
+  const ghostSizes: Record<BuildingType, [number, number, number]> = {
+    hut:      [0.65, 0.60, 0.55],
+    farm:     [0.75, 0.25, 0.75],
+    workshop: [0.82, 0.65, 0.66],
+    shrine:   [0.92, 0.85, 0.92],
+  };
+  const [w, h, d] = ghostSizes[type];
+  return (
+    <group ref={groupRef}>
+      <mesh position={[0, h / 2, 0]}>
+        <boxGeometry args={[w + 0.06, h + 0.06, d + 0.06]} />
+        <meshLambertMaterial color="#60c8ff" transparent opacity={0.38} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+};
 
 interface DeilandWorldProps {
   body:               CelestialBody;
   joystickRef:        React.MutableRefObject<{ x: number; y: number }>;
+  // tree system
   plantCallbackRef:   React.MutableRefObject<(() => void) | null>;
   harvestCallbackRef: React.MutableRefObject<((id: string) => void) | null>;
-  setInventory:       React.Dispatch<React.SetStateAction<{ wood: number; fruit: number }>>;
+  setInventory:       React.Dispatch<React.SetStateAction<Inventory>>;
   setNearbyHarvestId: (id: string | null) => void;
+  // building system
+  buildings:               BuildingInstance[];
+  setBuildings:            React.Dispatch<React.SetStateAction<BuildingInstance[]>>;
+  buildMode:               BuildingType | null;
+  confirmBuildCallbackRef: React.MutableRefObject<(() => void) | null>;
+  onBuildComplete:         () => void;
 }
 
 function DeilandWorld({
   body, joystickRef,
   plantCallbackRef, harvestCallbackRef,
   setInventory, setNearbyHarvestId,
+  buildings, setBuildings,
+  buildMode, confirmBuildCallbackRef, onBuildComplete,
 }: DeilandWorldProps) {
   const { camera } = useThree();
 
@@ -208,14 +239,10 @@ function DeilandWorld({
   const nearbyHarvestRef = useRef<string | null>(null);
   const plantCounterRef  = useRef(0);
 
-  // Demo buildings — placed near spawn so all 4 types are visible.
-  // Task #86 (building construction) will replace this with gameplay-driven state.
-  const buildings = useMemo<BuildingInstance[]>(() => [
-    makeBuildingAt('demo-hut',      'hut',      0.27,  0.38),
-    makeBuildingAt('demo-farm',     'farm',     0.44,  0.22),
-    makeBuildingAt('demo-workshop', 'workshop', 0.25, -0.34),
-    makeBuildingAt('demo-shrine',   'shrine',   0.37,  0.58),
-  ], []);
+  // Ghost-building preview position refs (updated each frame during build mode)
+  const ghostPosRef  = useRef(new THREE.Vector3());
+  const ghostUpRef   = useRef(new THREE.Vector3(0, 1, 0));
+  const ghostQuatRef = useRef(new THREE.Quaternion());
 
   // Register plant / harvest callbacks so the outer HUD can call them
   useEffect(() => {
@@ -247,10 +274,35 @@ function DeilandWorld({
       setNearbyHarvestId(null);
       setTreeVersion(v => v + 1);
       const yld = getHarvestYield(tree.biome);
-      setInventory(inv => ({ wood: inv.wood + yld.wood, fruit: inv.fruit + yld.fruit }));
+      setInventory(inv => ({ ...inv, wood: inv.wood + yld.wood, fruit: inv.fruit + yld.fruit }));
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body.biome, setInventory, setNearbyHarvestId]);
+
+  // Register confirm-build callback so the outer HUD button can trigger placement
+  useEffect(() => {
+    confirmBuildCallbackRef.current = () => {
+      if (!buildMode) return;
+      const recipe = BUILD_RECIPES[buildMode];
+      setBuildings(prev => [
+        ...prev,
+        {
+          id:         `building-${Date.now()}`,
+          type:       buildMode,
+          pos:        ghostPosRef.current.clone(),
+          up:         ghostUpRef.current.clone(),
+          buildTimer: 0,
+        },
+      ]);
+      setInventory(inv => ({
+        ...inv,
+        wood:  inv.wood  - recipe.wood,
+        stone: inv.stone - recipe.stone,
+      }));
+      onBuildComplete();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildMode, setBuildings, setInventory, onBuildComplete]);
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
@@ -418,6 +470,15 @@ function DeilandWorld({
     camera.position.lerp(targetCamPos, 0.08);
     camera.lookAt(targetLook);
 
+    // ── Ghost-building position (follows character forward) ────────────────────
+    if (buildMode) {
+      const ghostSurface = charPos.clone().add(forward.clone().multiplyScalar(1.6));
+      const ghostUp = ghostSurface.clone().normalize();
+      ghostPosRef.current.copy(ghostUp.clone().multiplyScalar(PLANET_RADIUS + 0.06));
+      ghostUpRef.current.copy(ghostUp);
+      ghostQuatRef.current.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ghostUp);
+    }
+
     // ── Tree growth ────────────────────────────────────────────────────────────
     let treeChanged = false;
     treeDataRef.current.forEach(tree => {
@@ -462,6 +523,11 @@ function DeilandWorld({
       <DeilandSky biome={body.biome} dayTimeRef={dayTimeRef} />
 
       <DeilandPlanet body={body} seed={body.id.charCodeAt(0) + body.id.length + 1} buildings={buildings} />
+
+      {/* ── Build-mode ghost ──────────────────────────────────────── */}
+      {buildMode && (
+        <GhostBuildingWrapper type={buildMode} posRef={ghostPosRef} quatRef={ghostQuatRef} />
+      )}
 
       {/* ── Growing trees */}
       {treeDataRef.current.map(tree => {
@@ -555,10 +621,41 @@ export const DeilandScene: React.FC<{
   body: CelestialBody;
   joystickRef: React.MutableRefObject<{ x: number; y: number }>;
 }> = ({ body, joystickRef }) => {
-  const [inventory, setInventory]             = useState({ wood: 0, fruit: 0 });
+  const [inventory, setInventory]             = useState<Inventory>({ wood: 0, stone: 5, fruit: 0 });
+  const [buildings, setBuildings]             = useState<BuildingInstance[]>([]);
+  const [buildMode, setBuildMode]             = useState<BuildingType | null>(null);
+  const [buildMenuOpen, setBuildMenuOpen]     = useState(false);
+  const [stoneCooldown, setStoneCooldown]     = useState(0);
   const [nearbyHarvestId, setNearbyHarvestId] = useState<string | null>(null);
-  const plantCallbackRef   = useRef<(() => void) | null>(null);
-  const harvestCallbackRef = useRef<((id: string) => void) | null>(null);
+
+  const plantCallbackRef        = useRef<(() => void) | null>(null);
+  const harvestCallbackRef      = useRef<((id: string) => void) | null>(null);
+  const confirmBuildCallbackRef = useRef<(() => void) | null>(null);
+
+  // Civilisation gauge
+  const civPoints = buildings.reduce((s, b) => s + BUILD_RECIPES[b.type].civPoints, 0);
+  const CIV_STEPS = [0, 10, 30, 60, 100, 150] as const;
+  const civLevel  = Math.max(1, CIV_STEPS.filter(t => civPoints >= t).length);
+  const prevPts   = CIV_STEPS[civLevel - 1] ?? 0;
+  const nextPts   = civLevel < CIV_STEPS.length ? CIV_STEPS[civLevel] : prevPts + 50;
+  const civBar    = Math.min(1, (civPoints - prevPts) / Math.max(1, nextPts - prevPts));
+
+  // Stone-gathering cooldown countdown
+  useEffect(() => {
+    if (stoneCooldown <= 0) return;
+    const t = setTimeout(() => setStoneCooldown(s => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [stoneCooldown]);
+
+  const handleGatherStone = () => {
+    if (stoneCooldown > 0) return;
+    setInventory(inv => ({ ...inv, stone: inv.stone + 3 }));
+    setStoneCooldown(8);
+  };
+
+  const buildLabels: Record<BuildingType, string> = {
+    hut: '🏠 小屋', farm: '🌾 農地', workshop: '⚒️ 工房', shrine: '⛩️ 祠',
+  };
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -572,48 +669,134 @@ export const DeilandScene: React.FC<{
           body={body} joystickRef={joystickRef}
           plantCallbackRef={plantCallbackRef}
           harvestCallbackRef={harvestCallbackRef}
+          confirmBuildCallbackRef={confirmBuildCallbackRef}
           setInventory={setInventory}
           setNearbyHarvestId={setNearbyHarvestId}
+          buildings={buildings} setBuildings={setBuildings}
+          buildMode={buildMode}
+          onBuildComplete={() => setBuildMode(null)}
         />
       </Canvas>
 
-      {/* ── Inventory HUD ─────────────────────────────────────── */}
+      {/* ── Civ gauge (top-left) ─────────────────────────────────── */}
+      <div style={{
+        position: 'absolute', top: 12, left: 12, zIndex: 10,
+        background: 'rgba(0,0,0,0.55)', borderRadius: 8,
+        padding: '6px 12px', color: '#fff', fontFamily: 'sans-serif',
+        fontSize: 13, minWidth: 128, userSelect: 'none', pointerEvents: 'none',
+      }}>
+        <div style={{ fontSize: 11, color: '#ccc', marginBottom: 2 }}>文明 Lv.{civLevel}</div>
+        <div style={{ background: '#333', borderRadius: 3, height: 6, overflow: 'hidden' }}>
+          <div style={{ background: '#f0c840', height: '100%', width: `${Math.round(civBar * 100)}%`, transition: 'width 0.5s ease' }} />
+        </div>
+        <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{civPoints} pt</div>
+      </div>
+
+      {/* ── Inventory HUD (top-right) ────────────────────────────── */}
       <div style={{
         position: 'absolute', top: 12, right: 12, zIndex: 10,
         background: 'rgba(0,0,0,0.55)', borderRadius: 8,
         padding: '6px 14px', color: '#fff', fontFamily: 'sans-serif',
-        fontSize: 14, display: 'flex', gap: 16,
+        fontSize: 14, display: 'flex', gap: 12,
         userSelect: 'none', pointerEvents: 'none',
       }}>
         <span>🪵 {inventory.wood}</span>
+        <span>🪨 {inventory.stone}</span>
         <span>🍎 {inventory.fruit}</span>
       </div>
 
-      {/* ── Action buttons ────────────────────────────────────── */}
+      {/* ── Build menu (pops above action row) ───────────────────── */}
+      {buildMenuOpen && !buildMode && (
+        <div style={{
+          position: 'absolute', bottom: 150, left: '50%',
+          transform: 'translateX(-50%)', zIndex: 20,
+          display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center',
+          maxWidth: 400,
+        }}>
+          {(['hut', 'farm', 'workshop', 'shrine'] as BuildingType[]).map(type => {
+            const r = BUILD_RECIPES[type];
+            const canAfford = inventory.wood >= r.wood && inventory.stone >= r.stone;
+            return (
+              <button key={type}
+                disabled={!canAfford}
+                onClick={() => { setBuildMode(type); setBuildMenuOpen(false); }}
+                style={{
+                  background:   canAfford ? 'rgba(30,60,20,0.93)' : 'rgba(35,35,35,0.72)',
+                  color:        canAfford ? '#fff' : '#777',
+                  border:       `1px solid ${canAfford ? '#6abb5a' : '#555'}`,
+                  borderRadius: 10, padding: '8px 12px', fontSize: 13,
+                  cursor:       canAfford ? 'pointer' : 'not-allowed',
+                  fontFamily:   'sans-serif', textAlign: 'center', minWidth: 76,
+                }}
+              >
+                <div>{buildLabels[type]}</div>
+                {r.wood  > 0 && <div style={{ fontSize: 11 }}>🪵 {r.wood}</div>}
+                {r.stone > 0 && <div style={{ fontSize: 11 }}>🪨 {r.stone}</div>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Build mode hint (centre of screen) ───────────────────── */}
+      {buildMode && (
+        <div style={{
+          position: 'absolute', top: '46%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(0,0,0,0.52)', color: '#90d8ff',
+          fontFamily: 'sans-serif', fontSize: 14,
+          padding: '7px 18px', borderRadius: 8, zIndex: 10,
+          pointerEvents: 'none', userSelect: 'none', whiteSpace: 'nowrap',
+        }}>
+          {buildLabels[buildMode]} — 設置場所に移動して「確定」
+        </div>
+      )}
+
+      {/* ── Action buttons (bottom centre) ───────────────────────── */}
       <div style={{
         position: 'absolute', bottom: 96, left: '50%',
         transform: 'translateX(-50%)',
-        display: 'flex', gap: 10, zIndex: 10,
+        display: 'flex', gap: 7, zIndex: 10,
+        flexWrap: 'wrap', justifyContent: 'center', maxWidth: 380,
       }}>
-        <button
-          onClick={() => plantCallbackRef.current?.()}
-          style={{
-            background: 'rgba(20,80,30,0.88)', color: '#fff',
-            border: '1px solid #4aab6a', borderRadius: 22,
-            padding: '9px 20px', fontSize: 15, cursor: 'pointer',
-            fontFamily: 'sans-serif',
-          }}
-        >🌱 植える</button>
-        {nearbyHarvestId && (
-          <button
-            onClick={() => harvestCallbackRef.current?.(nearbyHarvestId)}
-            style={{
-              background: 'rgba(100,60,10,0.88)', color: '#fff',
-              border: '1px solid #d4a44a', borderRadius: 22,
-              padding: '9px 20px', fontSize: 15, cursor: 'pointer',
-              fontFamily: 'sans-serif',
-            }}
-          >🍎 収穫</button>
+        {/* Plant tree (hidden in build mode) */}
+        {!buildMode && (
+          <button onClick={() => plantCallbackRef.current?.()}
+            style={{ background: 'rgba(20,80,30,0.88)', color: '#fff', border: '1px solid #4aab6a', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🌱 植える
+          </button>
+        )}
+        {/* Harvest tree (conditional) */}
+        {nearbyHarvestId && !buildMode && (
+          <button onClick={() => harvestCallbackRef.current?.(nearbyHarvestId)}
+            style={{ background: 'rgba(100,60,10,0.88)', color: '#fff', border: '1px solid #d4a44a', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🍎 収穫
+          </button>
+        )}
+        {/* Mine stone */}
+        {!buildMode && (
+          <button onClick={handleGatherStone} disabled={stoneCooldown > 0}
+            style={{ background: stoneCooldown > 0 ? 'rgba(40,40,40,0.6)' : 'rgba(60,50,20,0.88)', color: stoneCooldown > 0 ? '#777' : '#fff', border: `1px solid ${stoneCooldown > 0 ? '#555' : '#a09040'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: stoneCooldown > 0 ? 'not-allowed' : 'pointer', fontFamily: 'sans-serif' }}>
+            ⛏️ 採掘{stoneCooldown > 0 ? ` (${stoneCooldown}s)` : ''}
+          </button>
+        )}
+        {/* Build mode: cancel + confirm  /  normal mode: build menu toggle */}
+        {buildMode ? (
+          <>
+            <button onClick={() => setBuildMode(null)}
+              style={{ background: 'rgba(80,20,20,0.88)', color: '#fff', border: '1px solid #c05050', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+              ✕ キャンセル
+            </button>
+            <button onClick={() => confirmBuildCallbackRef.current?.()}
+              style={{ background: 'rgba(20,80,60,0.88)', color: '#fff', border: '1px solid #40c090', borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+              ✅ 確定
+            </button>
+          </>
+        ) : (
+          <button onClick={() => setBuildMenuOpen(o => !o)}
+            style={{ background: buildMenuOpen ? 'rgba(60,80,20,0.95)' : 'rgba(40,60,10,0.88)', color: '#fff', border: `1px solid ${buildMenuOpen ? '#aacc44' : '#88aa33'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+            🏗️ 建設{buildMenuOpen ? ' ▲' : ' ▼'}
+          </button>
         )}
       </div>
     </div>

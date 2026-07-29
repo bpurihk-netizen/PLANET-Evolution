@@ -2,7 +2,31 @@ import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CelestialBody, BiomeType } from '../../data/celestialBodies';
-import { BuildingInstance, BuildingMesh } from './DeilandBuildings';
+import { BuildingInstance, BuildingMesh, BUILD_ANIM_DUR } from './DeilandBuildings';
+
+/** Wraps BuildingMesh with a scale-Y build-in animation driven by building.buildTimer */
+const AnimatedBuilding: React.FC<{
+  building: BuildingInstance;
+  biome:    BiomeType;
+  phase:    number;
+}> = ({ building, biome, phase }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (building.buildTimer < BUILD_ANIM_DUR) {
+      building.buildTimer = Math.min(BUILD_ANIM_DUR, building.buildTimer + dt);
+    }
+    if (groupRef.current) {
+      const t  = Math.min(1, building.buildTimer / BUILD_ANIM_DUR);
+      const sy = 1 - Math.pow(1 - t, 3); // easeOut cubic
+      groupRef.current.scale.set(1, Math.max(0.001, sy), 1);
+    }
+  });
+  return (
+    <group ref={groupRef} scale={[1, 0.001, 1]}>
+      <BuildingMesh type={building.type} biome={biome} phase={phase} />
+    </group>
+  );
+};
 
 export const PLANET_RADIUS = 4;
 
@@ -442,7 +466,7 @@ export const DeilandPlanet: React.FC<DeilandPlanetProps> = ({ body, seed, buildi
         const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.up);
         return (
           <group key={b.id} position={b.pos} quaternion={q}>
-            <BuildingMesh type={b.type} biome={body.biome} phase={i * 1.57} />
+            <AnimatedBuilding building={b} biome={body.biome} phase={i * 1.57} />
           </group>
         );
       })}

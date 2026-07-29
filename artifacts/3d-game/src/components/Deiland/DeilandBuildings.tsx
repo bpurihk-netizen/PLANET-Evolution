@@ -18,13 +18,31 @@ import { BiomeType } from '../../data/celestialBodies';
 export type BuildingType = 'hut' | 'farm' | 'workshop' | 'shrine';
 
 export interface BuildingInstance {
-  id: string;
-  type: BuildingType;
+  id:         string;
+  type:       BuildingType;
   /** World-space position on planet surface */
-  pos: THREE.Vector3;
+  pos:        THREE.Vector3;
   /** Surface normal (for orientation) */
-  up: THREE.Vector3;
+  up:         THREE.Vector3;
+  /** Seconds since placed; 0 = brand-new (animating in); ≥ BUILD_ANIM_DUR = fully built */
+  buildTimer: number;
 }
+
+/** Duration of the scale-in build animation (seconds) */
+export const BUILD_ANIM_DUR = 0.8;
+
+export interface BuildRecipe {
+  wood:      number;
+  stone:     number;
+  civPoints: number;
+}
+
+export const BUILD_RECIPES: Record<BuildingType, BuildRecipe> = {
+  hut:      { wood: 5, stone: 3, civPoints: 10 },
+  farm:     { wood: 2, stone: 0, civPoints:  8 },
+  workshop: { wood: 8, stone: 5, civPoints: 20 },
+  shrine:   { wood: 3, stone: 6, civPoints: 15 },
+};
 
 // ── Biome → material colour palette ──────────────────────────────────────────
 interface BiomeBuildingColors {
