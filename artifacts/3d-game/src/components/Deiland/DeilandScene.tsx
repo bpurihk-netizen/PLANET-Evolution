@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DeilandPlanet, PLANET_RADIUS } from './DeilandPlanet';
@@ -42,6 +42,23 @@ function getBiomeCharColors(biome: BiomeType) {
     case 'GAS':       return { body: '#8060a0', pants: '#503070', hat: '#302050', shoe: '#201030' };
     case 'METHANE':   return { body: '#c07030', pants: '#804020', hat: '#503010', shoe: '#301808' };
     default:          return { body: '#707080', pants: '#404050', hat: '#303040', shoe: '#202028' };
+  }
+}
+
+// ── Biome → initial environment values ───────────────────────────────────────
+function getBiomeEnvDefaults(biome: BiomeType): { temp: number; co2: number; water: number } {
+  switch (biome) {
+    case 'TEMPERATE':   return { temp: 22,  co2: 400, water: 60 };
+    case 'OCEAN':       return { temp: 18,  co2: 380, water: 90 };
+    case 'DESERT':      return { temp: 45,  co2: 450, water: 10 };
+    case 'ICE':         return { temp: -25, co2: 300, water: 30 };
+    case 'VOLCANIC':    return { temp: 80,  co2: 900, water: 5  };
+    case 'TOXIC':       return { temp: 65,  co2: 950, water: 15 };
+    case 'AIRLESS':     return { temp: 10,  co2: 100, water: 0  };
+    case 'GAS':         return { temp: 30,  co2: 700, water: 40 };
+    case 'METHANE':     return { temp: -20, co2: 600, water: 20 };
+    case 'FROZEN_ROCK': return { temp: -60, co2: 200, water: 10 };
+    default:            return { temp: 20,  co2: 400, water: 50 };
   }
 }
 
@@ -225,6 +242,10 @@ interface DeilandWorldProps {
   // NPC / culture
   population:   number;
   cultureLevel: number;
+  // Environment
+  envMultiplierRef:  React.MutableRefObject<number>;
+  onTreePlanted:     () => void;
+  onBuildingPlaced:  () => void;
   // Farming
   seedCallbackRef:        React.MutableRefObject<(() => void) | null>;
   waterCallbackRef:       React.MutableRefObject<((id: string) => void) | null>;
@@ -242,6 +263,7 @@ function DeilandWorld({
   buildings, setBuildings,
   buildMode, confirmBuildCallbackRef, onBuildComplete,
   population, cultureLevel,
+  envMultiplierRef, onTreePlanted, onBuildingPlaced,
   seedCallbackRef, waterCallbackRef, harvestFarmCallbackRef,
   setNearbyFarmBuilding, setNearbyWaterPlotId, setNearbyHarvestFarmId,
   setFoodCount,
@@ -297,6 +319,7 @@ function DeilandWorld({
         },
       ];
       setTreeVersion(v => v + 1);
+      onTreePlanted(); // notify env system
     };
 
     harvestCallbackRef.current = (id: string) => {
@@ -333,9 +356,10 @@ function DeilandWorld({
         stone: inv.stone - recipe.stone,
       }));
       onBuildComplete();
+      onBuildingPlaced(); // notify env system
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildMode, setBuildings, setInventory, onBuildComplete]);
+  }, [buildMode, setBuildings, setInventory, onBuildComplete, onBuildingPlaced]);
 
   // Register farm callbacks
   useEffect(() => {
@@ -558,10 +582,11 @@ function DeilandWorld({
     }
 
     // ── Tree growth ────────────────────────────────────────────────────────────
+    const envMult = envMultiplierRef.current;
     let treeChanged = false;
     treeDataRef.current.forEach(tree => {
       if (tree.growthStage < 4) {
-        tree.growthTimer += dt;
+        tree.growthTimer += dt * envMult;
         if (tree.growthTimer >= STAGE_DURATION) {
           tree.growthTimer -= STAGE_DURATION;
           tree.growthStage = Math.min(4, tree.growthStage + 1);
@@ -592,7 +617,7 @@ function DeilandWorld({
         if (plot.waterLevel > 0) {
           plot.waterLevel = Math.max(0, plot.waterLevel - WATER_DECAY_RATE * dt);
         }
-        const speed = plot.waterLevel > 0.05 ? WATER_SPEED_MULT : 1.0;
+        const speed = (plot.waterLevel > 0.05 ? WATER_SPEED_MULT : 1.0) * envMult;
         plot.growthTimer += dt * speed;
         if (plot.growthTimer >= FARM_STAGE_DURATION) {
           plot.growthTimer -= FARM_STAGE_DURATION;
@@ -752,6 +777,67 @@ function DeilandWorld({
   );
 }
 
+// ── Environment gauge HUD panel ───────────────────────────────────────────────
+const EnvGauges: React.FC<{
+  temp: number; co2: number; water: number; isGood: boolean;
+}> = ({ temp, co2, water, isGood }) => {
+  // Normalize for bar rendering
+  const tempNorm  = Math.max(0, Math.min(1, (temp + 80) / 180));   // -80 → +100 range
+  const co2Norm   = Math.max(0, Math.min(1, co2 / 1000));          // 0 → 1000 ppm
+  const waterNorm = Math.max(0, Math.min(1, water / 100));
+
+  const tempColor  = temp > 50 ? '#ff5020' : temp < -40 ? '#60c8ff' : '#60d860';
+  const co2Color   = co2 > 700 ? '#ff6030' : co2 > 450 ? '#f0c840' : '#60d860';
+  const waterColor = water < 10 ? '#e08020' : '#40a8ff';
+
+  const isTempWarn = temp > 50 || temp < -50;
+  const isCO2Warn  = co2 > 700;
+
+  return (
+    <div style={{
+      position: 'absolute', top: 76, left: 12, zIndex: 10,
+      background: 'rgba(0,0,0,0.55)', borderRadius: 8,
+      padding: '6px 12px', color: '#fff', fontFamily: 'sans-serif',
+      fontSize: 11, minWidth: 148, userSelect: 'none', pointerEvents: 'none',
+    }}>
+      {/* Good-env bonus indicator */}
+      {isGood && (
+        <div style={{ color: '#7eff90', fontSize: 10, marginBottom: 3, letterSpacing: 0.5 }}>
+          🌿 環境良好 成長速度 ×1.5
+        </div>
+      )}
+      {/* Temperature */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+        <span style={{ width: 14 }}>🌡️</span>
+        <div style={{ flex: 1, background: '#333', borderRadius: 2, height: 5, overflow: 'hidden' }}>
+          <div style={{ background: tempColor, height: '100%', width: `${Math.round(tempNorm * 100)}%` }} />
+        </div>
+        <span style={{ width: 44, textAlign: 'right', color: isTempWarn ? '#ff7040' : '#ccc' }}>
+          {temp > 0 ? '+' : ''}{Math.round(temp)}℃{isTempWarn ? ' ⚠' : ''}
+        </span>
+      </div>
+      {/* CO2 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+        <span style={{ width: 14 }}>🌿</span>
+        <div style={{ flex: 1, background: '#333', borderRadius: 2, height: 5, overflow: 'hidden' }}>
+          <div style={{ background: co2Color, height: '100%', width: `${Math.round(co2Norm * 100)}%` }} />
+        </div>
+        <span style={{ width: 44, textAlign: 'right', color: isCO2Warn ? '#ff9040' : '#ccc' }}>
+          {Math.round(co2)}ppm{isCO2Warn ? ' ⚠' : ''}
+        </span>
+      </div>
+      {/* Water */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ width: 14 }}>💧</span>
+        <div style={{ flex: 1, background: '#333', borderRadius: 2, height: 5, overflow: 'hidden' }}>
+          <div style={{ background: waterColor, height: '100%', width: `${Math.round(waterNorm * 100)}%` }} />
+        </div>
+        <span style={{ width: 44, textAlign: 'right', color: '#ccc' }}>{Math.round(water)}%</span>
+      </div>
+    </div>
+  );
+};
+
 export const DeilandScene: React.FC<{
   body: CelestialBody;
   joystickRef: React.MutableRefObject<{ x: number; y: number }>;
@@ -778,6 +864,27 @@ export const DeilandScene: React.FC<{
   const populationCap = 20 + Math.floor(foodCount / 5); // food extends cap beyond 20
   const population    = Math.min(buildings.length * 2, populationCap, 30);
   const cultureLevel  = culture.music + culture.art + culture.science;
+
+  // Environment indicators (derived from biome, mutated by player actions)
+  const envDefaults = useMemo(() => getBiomeEnvDefaults(body.biome), [body.biome]);
+  const [envTemp,  setEnvTemp]  = useState(envDefaults.temp);
+  const [envCO2,   setEnvCO2]   = useState(envDefaults.co2);
+  const [envWater, setEnvWater] = useState(envDefaults.water);
+
+  // Derived: good environment → growth speed ×1.5
+  const envIsGood = envCO2 < 450 && envWater >= 25 && envWater <= 85;
+  const envMultiplierRef = useRef(envIsGood ? 1.5 : 1.0);
+  useEffect(() => { envMultiplierRef.current = envIsGood ? 1.5 : 1.0; }, [envIsGood]);
+
+  const onTreePlanted = useCallback(() => {
+    setEnvCO2(v => Math.max(0, v - 0.5));
+    setEnvWater(v => Math.min(100, v + 0.3));
+  }, []);
+
+  const onBuildingPlaced = useCallback(() => {
+    setEnvTemp(v => v + 0.3);
+    setEnvCO2(v => v + 1.2);
+  }, []);
 
   const plantCallbackRef        = useRef<(() => void) | null>(null);
   const harvestCallbackRef      = useRef<((id: string) => void) | null>(null);
@@ -854,6 +961,9 @@ export const DeilandScene: React.FC<{
           onBuildComplete={() => setBuildMode(null)}
           population={population}
           cultureLevel={cultureLevel}
+          envMultiplierRef={envMultiplierRef}
+          onTreePlanted={onTreePlanted}
+          onBuildingPlaced={onBuildingPlaced}
           seedCallbackRef={seedCallbackRef}
           waterCallbackRef={waterCallbackRef}
           harvestFarmCallbackRef={harvestFarmCallbackRef}
@@ -893,6 +1003,20 @@ export const DeilandScene: React.FC<{
         <span>🍎 {inventory.fruit}</span>
         <span>🍞 {foodCount}</span>
       </div>
+
+      {/* ── Environment gauges (below civ gauge, top-left) ──────── */}
+      <EnvGauges temp={envTemp} co2={envCO2} water={envWater} isGood={envIsGood} />
+
+      {/* ── Extreme-temperature overlay ───────────────────────────── */}
+      {(envTemp > 50 || envTemp < -50) && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
+          background: envTemp > 50
+            ? 'rgba(200,50,0,0.12)'
+            : 'rgba(50,120,210,0.14)',
+          mixBlendMode: 'overlay',
+        }} />
+      )}
 
       {/* ── Culture panel ────────────────────────────────────────── */}
       {culturePanelOpen && (
