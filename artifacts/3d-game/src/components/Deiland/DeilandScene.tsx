@@ -770,7 +770,7 @@ function DeilandWorld({
         if (Math.abs(my) > 0.01) {
           const dashMult  = isDashingRef.current ? 1.8 : 1.0;
           const speedMult = (1 + sp * 0.7) * dashMult * airControl;
-          const dAngle = my * MOVE_SPEED * speedMult * dt / R;
+          const dAngle = -my * MOVE_SPEED * speedMult * dt / R;
           thetaRef.current += Math.cos(facingRef.current) * dAngle;
           phiRef.current   += Math.sin(facingRef.current) * dAngle /
                               Math.max(Math.abs(Math.sin(thetaRef.current)), 0.05);
@@ -800,7 +800,7 @@ function DeilandWorld({
     if (charRef.current) {
       charRef.current.position.copy(charPos);
       const right = new THREE.Vector3().crossVectors(forward, up).normalize();
-      const m = new THREE.Matrix4().makeBasis(right, up, forward);
+      const m = new THREE.Matrix4().makeBasis(right, up, forward.clone().negate());
       charRef.current.quaternion.setFromRotationMatrix(m);
 
       const wt = walkTimeRef.current;
