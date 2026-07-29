@@ -114,8 +114,9 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
         const dy = t.clientY - camTouchRef.current.lastY;
         cameraYawRef.current -= dx * CAM_SWIPE_SENS;
         // Swipe down (positive dy) → raise camera; swipe up → lower camera
+        // Swipe UP (negative dy) → raise camera; swipe DOWN → lower camera
         cameraPitchRef.current = Math.max(
-          CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, cameraPitchRef.current + dy * CAM_PITCH_SENS),
+          CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, cameraPitchRef.current - dy * CAM_PITCH_SENS),
         );
         camTouchRef.current.lastX = t.clientX;
         camTouchRef.current.lastY = t.clientY;
@@ -190,20 +191,15 @@ export const DeilandHUD: React.FC<DeilandHUDProps> = ({
       onTouchEnd={handleTouchEnd as any}
       style={{ touchAction: 'none', pointerEvents: 'auto' }}
     >
-      {/* ── Top bar ──────────────────────────────────────────────────── */}
-      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-6 pb-3 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
-        <div className="flex flex-col">
-          <span className="text-white/50 text-[10px] font-mono tracking-widest">NOW EXPLORING</span>
-          <span className="text-white font-bold text-lg tracking-wide">{planetName}</span>
-        </div>
-        <div className="text-white/40 text-xs font-mono hidden sm:block">
-          WASD / 矢印キー で移動 ｜ Q/E カメラ回転
-        </div>
+      {/* ── Desktop hint (hidden on mobile) ────────────────────────── */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 text-white/30 text-[10px] font-mono tracking-widest pointer-events-none hidden sm:block">
+        WASD / 矢印キー で移動 ｜ Q/E カメラ回転
       </div>
 
-      {/* ── Exit button ──────────────────────────────────────────────── */}
+      {/* ── Exit button — top-right, clear of inventory ──────────────── */}
       <button
-        className="absolute top-6 right-4 px-4 py-2 bg-black/60 hover:bg-black/80 border border-white/20 rounded-full text-white text-sm font-bold backdrop-blur-md active:scale-95 transition-transform pointer-events-auto"
+        className="absolute px-4 py-2 bg-black/60 hover:bg-black/80 border border-white/20 rounded-full text-white text-sm font-bold backdrop-blur-md active:scale-95 transition-transform pointer-events-auto"
+        style={{ top: 12, right: 12 }}
         onClick={onExit}
       >
         ← 宇宙へ戻る

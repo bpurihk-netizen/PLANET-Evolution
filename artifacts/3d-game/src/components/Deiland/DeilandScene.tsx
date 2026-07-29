@@ -1481,9 +1481,9 @@ export const DeilandScene: React.FC<{
         </div>
       </div>
 
-      {/* ── Inventory HUD (top-right) ────────────────────────────── */}
+      {/* ── Inventory HUD (top-right, below exit button) ──────────── */}
       <div style={{
-        position: 'absolute', top: 12, right: 12, zIndex: 10,
+        position: 'absolute', top: 56, right: 12, zIndex: 10,
         background: 'rgba(0,0,0,0.55)', borderRadius: 8,
         padding: '6px 14px', color: '#fff', fontFamily: 'sans-serif',
         fontSize: 14, display: 'flex', gap: 12,
@@ -1632,7 +1632,7 @@ export const DeilandScene: React.FC<{
           <>
             {/* Primary context button — hidden while build menu is open to prevent overlap */}
             {!buildMode && !buildMenuOpen && (
-              <div style={{ position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 12 }}>
+              <div style={{ position: 'absolute', bottom: 210, left: '50%', transform: 'translateX(-50%)', zIndex: 12 }}>
                 <button
                   onClick={ctx.onClick}
                   style={{
@@ -1653,7 +1653,7 @@ export const DeilandScene: React.FC<{
 
             {/* Build-mode confirm/cancel (replaces context button) */}
             {buildMode && (
-              <div style={{ position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 12, display: 'flex', gap: 10 }}>
+              <div style={{ position: 'absolute', bottom: 210, left: '50%', transform: 'translateX(-50%)', zIndex: 12, display: 'flex', gap: 10 }}>
                 <button onClick={() => setBuildMode(null)}
                   style={{ background: 'rgba(90,22,22,0.94)', color: '#fff', border: '2px solid #c85858', borderRadius: 26, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'sans-serif', boxShadow: '0 0 10px #c8585855' }}>
                   ✕ キャンセル
