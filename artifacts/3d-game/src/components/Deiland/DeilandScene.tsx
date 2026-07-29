@@ -228,6 +228,8 @@ const GhostBuildingWrapper: React.FC<{
 interface DeilandWorldProps {
   body:               CelestialBody;
   joystickRef:        React.MutableRefObject<{ x: number; y: number }>;
+  cameraYawRef:       React.MutableRefObject<number>;
+  isTpsMode:          boolean;
   // tree system
   plantCallbackRef:   React.MutableRefObject<(() => void) | null>;
   harvestCallbackRef: React.MutableRefObject<((id: string) => void) | null>;
@@ -257,7 +259,7 @@ interface DeilandWorldProps {
 }
 
 function DeilandWorld({
-  body, joystickRef,
+  body, joystickRef, cameraYawRef, isTpsMode,
   plantCallbackRef, harvestCallbackRef,
   setInventory, setNearbyHarvestId,
   buildings, setBuildings,
@@ -436,8 +438,12 @@ function DeilandWorld({
     const d = descentRef.current;
     const ease = d * d * (3 - 2 * d);
 
-    // Input — joystick inertia (accelerates toward input, decays after release)
+    // Camera yaw from keyboard Q / E
     const keys = keysRef.current;
+    if (keys.has('KeyQ')) cameraYawRef.current += dt * 1.4;
+    if (keys.has('KeyE')) cameraYawRef.current -= dt * 1.4;
+
+    // Input — joystick inertia (accelerates toward input, decays after release)
     const joy  = joystickRef.current;
     const jMag = Math.sqrt(joy.x * joy.x + joy.y * joy.y);
     if (jMag > 0.01) {
@@ -570,16 +576,36 @@ function DeilandWorld({
       });
     }
 
-    // Camera
-    const back = forward.clone().negate();
-    const camSurface = charPos.clone()
-      .add(up.clone().multiplyScalar(1.1))
-      .add(back.multiplyScalar(3.2));
-    const camSpace = new THREE.Vector3(0, PLANET_RADIUS * 6, PLANET_RADIUS * 2);
+    // ── Camera (TPS / top-down) ──────────────────────────────────────────────
+    let camSurface: THREE.Vector3;
+    let lookSurface: THREE.Vector3;
+
+    if (isTpsMode) {
+      // Arm base = behind character, rotated by cameraYaw around planet normal
+      const backDir = forward.clone().negate();
+      const yawQuat = new THREE.Quaternion().setFromAxisAngle(up, cameraYawRef.current);
+      const armHoriz = backDir.clone().applyQuaternion(yawQuat);
+      // Elevate 25° upward around the horizontal-arm's right axis
+      const armRight = new THREE.Vector3().crossVectors(armHoriz, up).normalize();
+      const elevQuat = new THREE.Quaternion().setFromAxisAngle(armRight, -Math.PI * 25 / 180);
+      const armDir   = armHoriz.clone().applyQuaternion(elevQuat).normalize();
+
+      const CAM_DIST = 3.0;
+      camSurface  = charPos.clone().add(armDir.multiplyScalar(CAM_DIST));
+      // Ground clipping — keep camera above planet surface
+      if (camSurface.length() < PLANET_RADIUS + 0.55)
+        camSurface.setLength(PLANET_RADIUS + 0.55);
+      lookSurface = charPos.clone().add(up.clone().multiplyScalar(0.35));
+    } else {
+      // Top-down overview — directly above character
+      camSurface  = charPos.clone().add(up.clone().multiplyScalar(5.5));
+      lookSurface = charPos.clone().add(up.clone().multiplyScalar(0.15));
+    }
+
+    const camSpace     = new THREE.Vector3(0, PLANET_RADIUS * 6, PLANET_RADIUS * 2);
+    const lookSpace    = new THREE.Vector3(0, 0, 0);
     const targetCamPos = new THREE.Vector3().lerpVectors(camSpace, camSurface, ease);
-    const lookSurface = charPos.clone().add(up.clone().multiplyScalar(0.25));
-    const lookSpace   = new THREE.Vector3(0, 0, 0);
-    const targetLook  = new THREE.Vector3().lerpVectors(lookSpace, lookSurface, ease);
+    const targetLook   = new THREE.Vector3().lerpVectors(lookSpace, lookSurface, ease);
 
     const worldUp  = new THREE.Vector3(0, 1, 0);
     const targetUp = worldUp.clone().lerp(up, ease);
@@ -854,9 +880,11 @@ const EnvGauges: React.FC<{
 };
 
 export const DeilandScene: React.FC<{
-  body: CelestialBody;
-  joystickRef: React.MutableRefObject<{ x: number; y: number }>;
-}> = ({ body, joystickRef }) => {
+  body:         CelestialBody;
+  joystickRef:  React.MutableRefObject<{ x: number; y: number }>;
+  cameraYawRef: React.MutableRefObject<number>;
+}> = ({ body, joystickRef, cameraYawRef }) => {
+  const [isTpsMode, setIsTpsMode] = useState(true);
   const [inventory, setInventory]             = useState<Inventory>({ wood: 0, stone: 5, fruit: 0 });
   const [buildings, setBuildings]             = useState<BuildingInstance[]>([]);
   const [buildMode, setBuildMode]             = useState<BuildingType | null>(null);
@@ -966,6 +994,7 @@ export const DeilandScene: React.FC<{
       >
         <DeilandWorld
           body={body} joystickRef={joystickRef}
+          cameraYawRef={cameraYawRef} isTpsMode={isTpsMode}
           plantCallbackRef={plantCallbackRef}
           harvestCallbackRef={harvestCallbackRef}
           confirmBuildCallbackRef={confirmBuildCallbackRef}
@@ -1188,6 +1217,11 @@ export const DeilandScene: React.FC<{
           </>
         ) : (
           <>
+            {/* View toggle: TPS ↔ top-down */}
+            <button onClick={() => setIsTpsMode(m => !m)}
+              style={{ background: isTpsMode ? 'rgba(10,40,80,0.88)' : 'rgba(40,20,80,0.88)', color: '#fff', border: `1px solid ${isTpsMode ? '#4488cc' : '#8844cc'}`, borderRadius: 22, padding: '8px 14px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
+              {isTpsMode ? '👁 TPS' : '🗺 俯瞰'}
+            </button>
             <button onClick={() => setBuildMenuOpen(o => !o)}
               style={{ background: buildMenuOpen ? 'rgba(60,80,20,0.95)' : 'rgba(40,60,10,0.88)', color: '#fff', border: `1px solid ${buildMenuOpen ? '#aacc44' : '#88aa33'}`, borderRadius: 22, padding: '8px 16px', fontSize: 14, cursor: 'pointer', fontFamily: 'sans-serif' }}>
               🏗️ 建設{buildMenuOpen ? ' ▲' : ' ▼'}
