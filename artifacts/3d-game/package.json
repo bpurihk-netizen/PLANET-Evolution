@@ -75,8 +75,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@capacitor/android": "^7.4.3",
-    "@capacitor/core": "^7.4.3",
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/core": "^6.2.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@react-three/postprocessing": "^3.0.4",
@@ -85,6 +85,6 @@
     "three": "^0.185.1"
   },
   "optionalDependencies": {
-    "@capacitor/cli": "^7.4.3"
+    "@capacitor/cli": "^6.2.1"
   }
 }
